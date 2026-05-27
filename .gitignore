@@ -1,0 +1,38 @@
+# ==============================================================================
+# HYBRID QUANTUM SOLVER: Master Git Ignore Manifest
+# ==============================================================================
+
+# 1. Python Compilation & Package Build Artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# 2. Local Execution Telemetry & HPC Logs
+# (We ignore the output data, but keep the log folder structure)
+logs/*.log
+logs/*.out
+logs/*.err
+benchmark_results.csv
+
+# 3. Generated Visualization Assets
+*.png
+*.pdf
+
+# 4. Sphinx Documentation Builds
+docs/build/
+
+# 5. OS & Editor Trailing Artifacts
+.DS_Store
+*~
+*.swp
+.vscode/
+.idea/
+
+# 6. Virtual Environments (If created locally in the future)
+venv/
+env/
+.venv/
