@@ -36,3 +36,7 @@ docs/build/
 venv/
 env/
 .venv/
+
+# 7. Environment Variables & Secrets
+.env
+*.env
