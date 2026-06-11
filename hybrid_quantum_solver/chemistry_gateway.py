@@ -6,7 +6,7 @@ molecular integrals, parsing them directly into the hybrid orchestrator.
 """
 
 import numpy as np
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any, Optional
 
 # Ensure PySCF is installed in your local development or qBraid environment
 try:

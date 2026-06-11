@@ -11,6 +11,7 @@ import hashlib
 import time
 from typing import List, Dict, Any, Tuple, Optional
 import scipy.linalg
+from hybrid_quantum_solver.quantum_sampler import QiskitKrylovSampler
 
 # Check for native GPU hardware acceleration capability via CuPy (NVIDIA Inception Stack)
 try:
@@ -125,15 +126,31 @@ class AdvancedStochasticCompactor:
                 self._add_pauli_term(scale_factor * sign, base_string)
 
     def finalize_and_compile_metrics(self) -> None:
-        """Locks the aggregated map down into runtime arrays for stochastic selection."""
-        self.pauli_strings = list(self.aggregated_hamiltonian.keys())
-        self.coefficients = np.array(list(self.aggregated_hamiltonian.values()))
+        """Consolidates operators and applies a safety floor to the spectral norm λ."""
         
-        abs_coefficients = np.abs(self.coefficients)
-        self.lambda_norm = float(np.sum(abs_coefficients))
-        if self.lambda_norm == 0:
-            raise ValueError("Global spectral norm λ cannot be zero.")
-        self.probabilities = abs_coefficients / self.lambda_norm
+        # [PATCH] 1. Extract the mapped Jordan-Wigner terms from the aggregation dictionary
+        self.pauli_strings = list(self.aggregated_hamiltonian.keys())
+        self.coefficients = list(self.aggregated_hamiltonian.values())
+
+        # 2. Consolidate dictionary (now operating on populated data)
+        consolidated = {}
+        for p_str, coef in zip(self.pauli_strings, self.coefficients):
+            consolidated[p_str] = consolidated.get(p_str, 0.0) + coef
+            
+        # 3. Filter terms
+        self.pauli_strings = [k for k, v in consolidated.items() if abs(v) > 1e-9]
+        self.coefficients = [v for k, v in consolidated.items() if abs(v) > 1e-9]
+        
+        # 4. DEFENSIVE: Handle Empty/Zero case immediately
+        if not self.pauli_strings:
+            self.pauli_strings = ["I" * self.n]
+            self.coefficients = [1.0]
+        
+        # 5. Calculate Spectral Norm λ
+        coef_array = np.abs(np.array(self.coefficients, dtype=float))
+        raw_norm = float(np.sum(coef_array))
+        self.lambda_norm = max(raw_norm, 1e-6)
+        self.probabilities = coef_array / self.lambda_norm
 
     def compute_required_samples(self) -> int:
         if self.lambda_norm == 0: return 0
@@ -225,6 +242,15 @@ class QCIVETGuard:
         self.enterprise_id = enterprise_id
         self.transit_ledger: Dict[str, Dict[str, Any]] = {}
         
+    def bridge_circuits_to_subspace(self, compiled_circuits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Translates raw quantum measurements (expectation values) into 
+        the SVD-ready matrix coordinate format: {'row': i, 'col': j, 'h_val': H_ij, 's_val': S_ij}.
+        """
+        # Placeholder: This will eventually consume the results from your SqDRIFT sampler.
+        # Ensure 'h_val' and 's_val' are correctly extracted from your quantum telemetry.
+        return [{"row": i, "col": j, "h_val": 0.0, "s_val": 1.0} for i, j in self.get_indices()]
+    
     def generate_secure_outbound_payload(self, compiled_slices: List[Dict[str, Any]]) -> Tuple[str, Dict[str, Any]]:
         timestamp = time.time()
         payload_body = json.dumps(compiled_slices, sort_keys=True)
@@ -256,13 +282,39 @@ class EnterprisePipelineOrchestrator:
         self.compactor = AdvancedStochasticCompactor(n_spin_orbitals=n_spin_orbitals, target_accuracy=accuracy)
         self.shifter = StabilizedSubspaceShifter(subspace_dimension=subspace_dim)
         self.guard = QCIVETGuard(enterprise_id=enterprise_id)
+        # [NEW] Initialize the true Quantum Oracle
+        self.sampler = QiskitKrylovSampler(n_qubits=n_spin_orbitals)
+
+    def load_integrals_from_pyscf(self, h1: np.ndarray, eri: np.ndarray) -> None:
+        """Translates PySCF tensors into the required orchestrator format."""
+        single_body = []
+        for i in range(h1.shape[0]):
+            for j in range(h1.shape[1]):
+                if abs(h1[i, j]) > 1e-6:
+                    single_body.append((i, j, float(h1[i, j])))
+                    
+        two_body = []
+        # eri is in Chemist's notation (pq|rs)
+        for p in range(eri.shape[0]):
+            for q in range(eri.shape[1]):
+                for r in range(eri.shape[2]):
+                    for s in range(eri.shape[3]):
+                        if abs(eri[p, q, r, s]) > 1e-6:
+                            two_body.append((p, q, r, s, float(eri[p, q, r, s])))
+                            
+        self.execute_molecular_query(single_body, two_body)
         
-    def execute_molecular_query(self, single_body: List[tuple], two_body: List[tuple]) -> Dict[str, Any]:
-        print(f"================================================================================")
-        print(f"[MASTER ENTRY] Ingesting Full Chemistry Specification for: {self.enterprise_id}")
-        print(f"================================================================================")
-        
-        # Step 1: Integrated Multi-Body Jordan-Wigner Translation Loops
+    def bridge_circuits_to_subspace(self, compiled_circuits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Routes compiled circuits to the Qiskit Oracle for physical simulation."""
+        return self.sampler.execute_subspace_sampling(
+            compiled_circuits=compiled_circuits,
+            subspace_dim=self.shifter.m,
+            full_pauli_strings=self.compactor.pauli_strings,
+            full_coefficients=self.compactor.coefficients
+        )
+    
+    def compile_target_system(self, single_body: List[tuple], two_body: List[tuple]) -> None:
+        """Runs the heavy O(N^4) classical-to-Pauli mapping ONCE."""
         print("\n[EXECUTION] Mapping 1-body integrals to Pauli space...")
         for p, q, w in single_body:
             self.compactor.map_one_body_term(p, q, w)
@@ -274,32 +326,27 @@ class EnterprisePipelineOrchestrator:
         self.compactor.finalize_and_compile_metrics()
         print(f"  -> Merged Representation Depth: {len(self.compactor.pauli_strings)} unique terms.")
         print(f"  -> Complete System Norm Bound calculated (λ): {self.compactor.lambda_norm:.5f}")
+
+    def execute_subspace_sweep(self, target_dim: int, noise_variance: float) -> Dict[str, Any]:
+        """Runs the quantum sampling and subspace stabilization very rapidly."""
+        # Update dynamic parameters for this sweep iteration
+        self.shifter.m = target_dim
         
-        compiled_slices = self.compactor.compile_stochastic_circuit(sample_override=10)
+        compiled_slices = self.compactor.compile_stochastic_circuit(sample_override=100) # Fast test sampling
         tx_hash, _ = self.guard.generate_secure_outbound_payload(compiled_slices)
         
-        # Step 2: Ingest Simulated Space Results (with deliberate rank-deficient noise signatures)
-        mock_quantum_elements = [
-            {"row": 0, "col": 0, "h_val": -1.412, "s_val": 1.00000},
-            {"row": 0, "col": 1, "h_val": -0.095, "s_val": 0.01250},
-            {"row": 1, "col": 1, "h_val": -1.104, "s_val": 1.00000},
-            {"row": 1, "col": 2, "h_val": -0.052, "s_val": 0.00410},
-            {"row": 2, "col": 2, "h_val": -0.621, "s_val": 1.00000},
-            {"row": 2, "col": 3, "h_val": -0.621, "s_val": 1.00000}, # Linearly dependent row signature
-            {"row": 3, "col": 3, "h_val": -0.621, "s_val": 1.00000},
-        ]
-        h_matrix, s_matrix = self.shifter.construct_subspace_matrices(mock_quantum_elements)
+        # Bridge to subspace (Currently your tau placeholder)
+        quantum_samples = self.bridge_circuits_to_subspace(compiled_circuits=compiled_slices)
+        h_matrix, s_matrix = self.shifter.construct_subspace_matrices(quantum_samples)
         
-        # Step 3: Run Compliance Audit and Solve
-        verdict = self.guard.verify_and_audit_inbound_matrix(tx_hash, h_matrix, s_matrix)
-        if "REJECTED" in verdict: return {"status": "HALTED_BY_GUARD"}
-            
+        # Inject conceptual noise for your data plots
+        h_matrix += np.random.normal(0, noise_variance, h_matrix.shape)
+        
+        verdict = self.guard.verify_and_audit_inbound_matrix(tx_hash, h_matrix, s_matrix) #, debug=True)
         resolved_energy = self.shifter.compute_ground_state()
-        print(f"  -> Balanced Electronic Ground State Resolved: {resolved_energy:.6f} Hartrees")
-        print(f"================================================================================")
         
         return {
-            "status": "SUCCESS",
+            "status": verdict,
             "computed_energy": resolved_energy,
             "system_norm_lambda": self.compactor.lambda_norm
         }

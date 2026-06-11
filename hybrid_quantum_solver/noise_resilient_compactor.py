@@ -5,6 +5,9 @@ Features adaptive weight-regularized qDRIFT sampling and hardware noise profilin
 """
 
 import numpy as np
+import time
+import hashlib
+import json  # [PATCH] Added missing serialization library
 from typing import List, Dict, Any, Tuple, Optional
 
 class NoiseResilientStochasticCompactor:
