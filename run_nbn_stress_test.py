@@ -30,7 +30,8 @@ def get_smart_basis(atoms):
     return basis_map
 
 
-def load_and_compute_integrals(cif_filepath, spin_targets=[0, 1, 2]):
+def load_and_compute_integrals(cif_filepath, spin_targets=[0, 1, 2], cas_electrons=8, cas_orbitals=8):
+
     print(f"================================================================================")
     print(f"[CLASSICAL PRE-PROCESSING] Generating Hamiltonian for: {cif_filepath}")
     
@@ -66,7 +67,7 @@ def load_and_compute_integrals(cif_filepath, spin_targets=[0, 1, 2]):
     # This translates to exactly 16 spin-orbitals (16 qubits) - perfect for simulation!
     # [NEW] Active Space Truncation (CASCI)
     print("[CLASSICAL NODE] Truncating to CAS(8,8) Active Space...")
-    cas = mcscf.CASCI(final_mf, 8, 8)
+    cas = mcscf.CASCI(final_mf, cas_orbitals, cas_electrons)
     
     # Execute the classical active space solver to establish your exact baseline
     cas.kernel()
