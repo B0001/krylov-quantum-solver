@@ -4,7 +4,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Qiskit](https://img.shields.io/badge/Qiskit-1.0+-6133BD.svg)](https://qiskit.org/)
 [![PySCF](https://img.shields.io/badge/PySCF-2.4+-red.svg)](https://pyscf.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 
 ## Abstract
 The **Krylov Quantum Solver** is an enterprise-grade computational chemistry pipeline designed to bypass the classical Full Configuration Interaction (FCI) wall. It bridges high-performance classical tensor processing (e.g., PySCF on HPC clusters) with quantum algorithmic execution (Qiskit/QPU). 
