@@ -1,8 +1,22 @@
 #!/usr/bin/env python3
 """
-Fully Upgraded Enterprise Quantum-Classical Orchestrator Core Pipeline.
-Natively handles multi-body Jordan-Wigner Fermionic-to-Pauli mapping (1-body and 2-body ERIs)
-and executes SVD Canonical Subspace Stabilization on GPU/CPU nodes.
+================================================================================
+LEGACY / BROKEN -- DO NOT USE.  Retained only as a regression fixture.
+================================================================================
+``AdvancedStochasticCompactor`` (incomplete, spin-dropping Jordan-Wigner mapping),
+``StabilizedSubspaceShifter`` (fed by a near-identity "Krylov" basis), the
+asymmetric-Gaussian-on-H "noise" in ``execute_subspace_sweep``, and ``QCIVETGuard``
+(a SHA-256 stamp + symmetry check) do NOT reproduce reference energies and returned
+values hundreds of Ha below the true ground state. See REFACTOR_PLAN.md.
+
+The live, validated path is:
+    hybrid_quantum_solver.pipeline            (run_geometry / run_from_integrals)
+    hybrid_quantum_solver.molecular_hamiltonian
+    hybrid_quantum_solver.quantum_krylov_solver
+
+``tests/test_reference_energies.py`` imports ``AdvancedStochasticCompactor`` from here only
+to *pin* that the old mapping is wrong; nothing else should depend on this file.
+================================================================================
 """
 
 import numpy as np
@@ -127,29 +141,13 @@ class AdvancedStochasticCompactor:
 
     def finalize_and_compile_metrics(self) -> None:
         """Consolidates operators and applies a safety floor to the spectral norm λ."""
-        
-        # [PATCH] 1. Extract the mapped Jordan-Wigner terms from the aggregation dictionary
-        self.pauli_strings = list(self.aggregated_hamiltonian.keys())
-        self.coefficients = list(self.aggregated_hamiltonian.values())
-
-        # 2. Consolidate dictionary (now operating on populated data)
-        consolidated = {}
-        for p_str, coef in zip(self.pauli_strings, self.coefficients):
-            consolidated[p_str] = consolidated.get(p_str, 0.0) + coef
-            
-        # 3. Filter terms
-        self.pauli_strings = [k for k, v in consolidated.items() if abs(v) > 1e-9]
-        self.coefficients = [v for k, v in consolidated.items() if abs(v) > 1e-9]
-        
-        # 4. DEFENSIVE: Handle Empty/Zero case immediately
-        if not self.pauli_strings:
-            self.pauli_strings = ["I" * self.n]
-            self.coefficients = [1.0]
-        
-        # 5. Calculate Spectral Norm λ
+        filtered = {k: v for k, v in self.aggregated_hamiltonian.items() if abs(v) > 1e-9}
+        if not filtered:
+            filtered = {"I" * self.n: 1.0}
+        self.pauli_strings = list(filtered.keys())
+        self.coefficients = list(filtered.values())
         coef_array = np.abs(np.array(self.coefficients, dtype=float))
-        raw_norm = float(np.sum(coef_array))
-        self.lambda_norm = max(raw_norm, 1e-6)
+        self.lambda_norm = max(float(np.sum(coef_array)), 1e-6)
         self.probabilities = coef_array / self.lambda_norm
 
     def compute_required_samples(self) -> int:
@@ -242,15 +240,6 @@ class QCIVETGuard:
         self.enterprise_id = enterprise_id
         self.transit_ledger: Dict[str, Dict[str, Any]] = {}
         
-    def bridge_circuits_to_subspace(self, compiled_circuits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Translates raw quantum measurements (expectation values) into 
-        the SVD-ready matrix coordinate format: {'row': i, 'col': j, 'h_val': H_ij, 's_val': S_ij}.
-        """
-        # Placeholder: This will eventually consume the results from your SqDRIFT sampler.
-        # Ensure 'h_val' and 's_val' are correctly extracted from your quantum telemetry.
-        return [{"row": i, "col": j, "h_val": 0.0, "s_val": 1.0} for i, j in self.get_indices()]
-    
     def generate_secure_outbound_payload(self, compiled_slices: List[Dict[str, Any]]) -> Tuple[str, Dict[str, Any]]:
         timestamp = time.time()
         payload_body = json.dumps(compiled_slices, sort_keys=True)
@@ -287,22 +276,18 @@ class EnterprisePipelineOrchestrator:
 
     def load_integrals_from_pyscf(self, h1: np.ndarray, eri: np.ndarray) -> None:
         """Translates PySCF tensors into the required orchestrator format."""
-        single_body = []
-        for i in range(h1.shape[0]):
-            for j in range(h1.shape[1]):
-                if abs(h1[i, j]) > 1e-6:
-                    single_body.append((i, j, float(h1[i, j])))
-                    
-        two_body = []
-        # eri is in Chemist's notation (pq|rs)
-        for p in range(eri.shape[0]):
-            for q in range(eri.shape[1]):
-                for r in range(eri.shape[2]):
-                    for s in range(eri.shape[3]):
-                        if abs(eri[p, q, r, s]) > 1e-6:
-                            two_body.append((p, q, r, s, float(eri[p, q, r, s])))
-                            
-        self.execute_molecular_query(single_body, two_body)
+        mask1 = np.abs(h1) > 1e-6
+        i_idx, j_idx = np.where(mask1)
+        single_body = list(zip(i_idx.tolist(), j_idx.tolist(), h1[mask1].tolist()))
+
+        mask2 = np.abs(eri) > 1e-6
+        p_idx, q_idx, r_idx, s_idx = np.where(mask2)
+        two_body = list(zip(
+            p_idx.tolist(), q_idx.tolist(),
+            r_idx.tolist(), s_idx.tolist(),
+            eri[mask2].tolist(),
+        ))
+        self.compile_target_system(single_body, two_body)
         
     def bridge_circuits_to_subspace(self, compiled_circuits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Routes compiled circuits to the Qiskit Oracle for physical simulation."""
