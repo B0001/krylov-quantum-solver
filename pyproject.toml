@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "hybrid_quantum_solver"
 version = "0.1.0"
-description = "Enterprise-scale Sample-Based Krylov Quantum Diagonalization suite for strongly correlated molecular chemistry simulation."
+description = "Hybrid quantum-classical pipeline for molecular ground-state energies via real-time quantum Krylov subspace diagonalization, validated against FCI/CASCI and DMRG."
 readme = "README.md"
 requires-python = ">=3.9"
 classifiers = [
@@ -17,11 +17,14 @@ classifiers = [
 ]
 dependencies = [
     "numpy>=1.22.0",
-    "scipy>=1.8.0",
+    # scipy 1.16-1.17 crash the qiskit-nature import chain (vendored array_api_compat torch
+    # detection bug); 1.15.x is the verified-working range. See requirements.txt.
+    "scipy>=1.8.0,<1.16",
     "pandas>=3.0.3",
     "matplotlib>=3.10.9",
     "qiskit>=1.0",
     "qiskit-nature>=0.7",
+    "qiskit-aer>=0.13",
     "qiskit-ibm-runtime>=0.20",
     "pyscf>=2.0.0",
     "ase>=3.22",
@@ -29,10 +32,12 @@ dependencies = [
 
 [project.optional-dependencies]
 gpu = [
-    "cupy-cuda12x>=12.0.0", 
+    "cupy-cuda12x>=12.0.0",
 ]
-chemistry = [
-    "pyscf>=2.0.0",
+# Optional classical reference for active spaces beyond exact FCI's reach (benchmark_dmrg.py,
+# hybrid_quantum_solver.dmrg_reference). The code degrades to exact FCI when absent.
+dmrg = [
+    "block2>=0.5.3",
 ]
 test = [
     "pytest>=7.0.0",
