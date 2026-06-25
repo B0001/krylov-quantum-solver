@@ -1,7 +1,14 @@
 """
-Sprint 10: Quantum Krylov Oracle
-Executes qDRIFT compiled sequences into Qiskit circuits and measures 
-subspace expectation values for the generalized eigenvalue problem.
+================================================================================
+LEGACY / BROKEN -- DO NOT USE.  Superseded by quantum_krylov_solver.py.
+================================================================================
+``QiskitKrylovSampler`` builds its "Krylov basis" by starting from the empty vacuum
+|00..0> and appending one single-Pauli qDRIFT rotation with an infinitesimal angle per
+step, so all basis states are ~identical (overlap matrix rank ~1) and the energy collapses
+to ~0. The real-time Krylov solver in ``quantum_krylov_solver.py`` replaces it. Retained
+only so the legacy ``orchestrate_hybrid_pipeline.py`` fixture still imports. See
+REFACTOR_PLAN.md.
+================================================================================
 """
 
 import numpy as np

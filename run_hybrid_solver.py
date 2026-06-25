@@ -1,108 +1,97 @@
 #!/usr/bin/env python3
 """
-SqDRIFT Hybrid Orchestrator - Execution Entry Point
-Provides a generalized CLI for executing hybrid quantum-classical subspace projections.
-"""
+Krylov Quantum Solver -- command-line entry point.
 
-import click
-import time
+Pipeline:  CIF -> PySCF CASCI (classical)  ->  vetted Jordan-Wigner qubit Hamiltonian
+           ->  real-time quantum Krylov subspace diagonalisation.
+
+This replaces the previous entry point, which drove the broken
+``EnterprisePipelineOrchestrator`` (incorrect mapping, near-identity Krylov basis,
+asymmetric-Gaussian "noise", QCIVET stamp). See REFACTOR_PLAN.md.
+"""
+import argparse
 import csv
 import os
-import numpy as np
+import time
 
-# Import your pipeline modules
-from hybrid_quantum_solver.orchestrate_hybrid_pipeline import EnterprisePipelineOrchestrator
 from hybrid_quantum_solver.chemistry_gateway import load_and_compute_integrals
+from hybrid_quantum_solver.pipeline import run_from_integrals
 
-@click.command()
-@click.option('--input_file', '-i', required=True, type=click.Path(exists=True), 
-              help='Path to the molecular .cif structure file (e.g., data/NbN.cif).')
-@click.option('--active_space', '-a', default='8,8', show_default=True,
-              help='CASSCF active space formatted as "electrons,spatial_orbitals".')
-@click.option('--subspace_dim', '-d', default=16, type=int, show_default=True,
-              help='Krylov subspace projection dimension (M).')
-@click.option('--noise_variance', '-n', default=0.0, type=float, show_default=True,
-              help='Variance for Gaussian hardware noise injection.')
-@click.option('--output', '-o', default='sqdrift_telemetry.csv', show_default=True,
-              help='Output CSV filename for telemetry data.')
-def main(input_file, active_space, subspace_dim, noise_variance, output):
-    """
-    Executes a high-performance Hybrid Quantum-Classical Simulation using SqDRIFT.
-    """
-    click.secho("================================================================================", fg="blue", bold=True)
-    click.secho(f"[INIT] SqDRIFT Hybrid Orchestrator", fg="blue", bold=True)
-    click.secho("================================================================================", fg="blue", bold=True)
-    
-    # 1. Parse Active Space
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Run a hybrid quantum-classical ground-state estimate via real-time quantum Krylov.")
+    parser.add_argument("--input_file", "-i", required=True,
+                        help="Path to the molecular .cif structure file (e.g. data/.../NbN.cif).")
+    parser.add_argument("--active_space", "-a", default="8,8",
+                        help='CASCI active space as "electrons,orbitals" (default: 8,8).')
+    parser.add_argument("--krylov_dim", "-d", type=int, default=8,
+                        help="Krylov subspace dimension M (default: 8).")
+    parser.add_argument("--shots", "-s", type=int, default=None,
+                        help="If set, model finite-sampling shot noise (sigma ~ 1/sqrt(shots)). "
+                             "Omit for the exact statevector result.")
+    parser.add_argument("--seed", type=int, default=None, help="RNG seed for shot noise.")
+    parser.add_argument("--output", "-o", default="krylov_telemetry.csv",
+                        help="Output CSV filename for telemetry (default: krylov_telemetry.csv).")
+    args = parser.parse_args()
+
+    if not os.path.isfile(args.input_file):
+        parser.error(f"input_file does not exist: {args.input_file}")
     try:
-        cas_elec, cas_orb = map(int, active_space.split(','))
+        cas_elec, cas_orb = map(int, args.active_space.split(","))
     except ValueError:
-        raise click.BadParameter('active_space must be in the format "electrons,orbitals", e.g., "8,8"')
+        parser.error('active_space must be "electrons,orbitals", e.g. "8,8"')
 
-    click.echo(f"-> Target Structure:  {os.path.basename(input_file)}")
-    click.echo(f"-> Active Space:      CAS({cas_elec}, {cas_orb}) -> {cas_orb * 2} Qubits")
-    click.echo(f"-> Krylov Dimension:  {subspace_dim}")
-    click.echo(f"-> Hardware Noise:    {noise_variance}")
-    
-    # 2. Classical Pre-Processing (PySCF -> CASCI)
-    # *Note: Ensure your load_and_compute_integrals function is updated to accept cas_elec and cas_orb*
-    click.echo("\n[PHASE 1] Initializing Classical Node (PySCF Tensor Extraction)...")
-    h1, eri, n_orbitals, exact_classical_energy = load_and_compute_integrals(
-        input_file, 
-        cas_electrons=cas_elec, 
-        cas_orbitals=cas_orb
-    )
-    
-    enterprise_name = os.path.splitext(os.path.basename(input_file))[0]
-    
-    # 3. Hybrid Pipeline Orchestration
-    click.echo("\n[PHASE 2] Compiling Quantum Subspace...")
-    orchestrator = EnterprisePipelineOrchestrator(
-        enterprise_id=enterprise_name,
-        n_spin_orbitals=n_orbitals * 2, # Total qubits
-        subspace_dim=subspace_dim
-    )
-    
-    # Run O(N^4) Compilation exactly once
-    orchestrator.compile_target_system(h1, eri)
-    
-    # 4. Quantum Execution & SVD Shift
-    click.echo("\n[PHASE 3] Executing QPU Oracle & Stabilized Subspace Shift...")
-    start_time = time.time()
-    result = orchestrator.execute_subspace_sweep(target_dim=subspace_dim, noise_variance=noise_variance)
-    execution_time = time.time() - start_time
-    
-    computed_energy = result['computed_energy']
-    energy_delta = abs(computed_energy - exact_classical_energy)
-    
-    # 5. Telemetry Output
-    click.secho("\n================================================================================", fg="green", bold=True)
-    click.secho(f"[COMPLETE] Ground State Resolved: {computed_energy:.6f} Ha", fg="green", bold=True)
-    click.secho(f"           Classical Baseline:    {exact_classical_energy:.6f} Ha", fg="white")
-    click.secho(f"           Delta (Error):         {energy_delta:.6e} Ha", fg="white")
-    click.secho(f"           QCIVET Audit State:    {result.get('status')}", fg="yellow")
-    click.secho("================================================================================", fg="green", bold=True)
+    print("=" * 80)
+    print("[INIT] Krylov Quantum Solver")
+    print("=" * 80)
+    print(f"-> Structure:     {os.path.basename(args.input_file)}")
+    print(f"-> Active space:  CAS({cas_elec},{cas_orb})  ->  {cas_orb * 2} qubits")
+    print(f"-> Krylov dim M:  {args.krylov_dim}")
+    print(f"-> Shots:         {args.shots if args.shots else 'exact (noiseless)'}")
 
-    # Write Telemetry to CSV
-    file_exists = os.path.isfile(output)
-    with open(output, mode='a', newline='') as csv_file:
-        fieldnames = ['molecule', 'qubits', 'subspace_dim', 'noise_variance', 'computed_energy', 'delta', 'time_s', 'audit_state']
-        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
-        
+    print("\n[PHASE 1] Classical CASCI (PySCF)...")
+    h1, eri, n_orb, casci_total, e_core, nelecas = load_and_compute_integrals(
+        args.input_file, cas_electrons=cas_elec, cas_orbitals=cas_orb
+    )
+    print(f"   CASCI total energy (active-space FCI target): {casci_total:.6f} Ha "
+          f"| nelecas={nelecas}")
+
+    print("\n[PHASE 2] Quantum Krylov subspace diagonalisation...")
+    start = time.time()
+    result = run_from_integrals(
+        h1, eri, num_particles=nelecas, e_core=float(e_core),
+        krylov_dim=args.krylov_dim, shots=args.shots, seed=args.seed,
+        reference_energy=float(casci_total), track_convergence=True,
+    )
+    elapsed = time.time() - start
+
+    print("\n" + "=" * 80)
+    print(f"[RESULT] Ground-state estimate: {result.computed_energy:.6f} Ha")
+    print(f"         Hartree-Fock:          {result.hf_energy:.6f} Ha")
+    print(f"         CASCI (active FCI):     {casci_total:.6f} Ha")
+    print(f"         |error| vs CASCI:       {result.error_vs_reference:.3e} Ha")
+    print(f"         qubits={result.n_qubits} rank={result.rank} dt={result.dt:.4f} "
+          f"time={elapsed:.1f}s")
+    print("=" * 80)
+
+    file_exists = os.path.isfile(args.output)
+    with open(args.output, "a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=[
+            "molecule", "qubits", "krylov_dim", "rank", "shots",
+            "computed_energy", "hf_energy", "casci_total", "error_vs_casci", "time_s"])
         if not file_exists:
             writer.writeheader()
-            
         writer.writerow({
-            'molecule': enterprise_name,
-            'qubits': cas_orb * 2,
-            'subspace_dim': subspace_dim,
-            'noise_variance': noise_variance,
-            'computed_energy': computed_energy,
-            'delta': energy_delta,
-            'time_s': round(execution_time, 4),
-            'audit_state': result.get('status')
+            "molecule": os.path.splitext(os.path.basename(args.input_file))[0],
+            "qubits": result.n_qubits, "krylov_dim": result.krylov_dim,
+            "rank": result.rank, "shots": args.shots,
+            "computed_energy": result.computed_energy, "hf_energy": result.hf_energy,
+            "casci_total": casci_total, "error_vs_casci": result.error_vs_reference,
+            "time_s": round(elapsed, 3),
         })
-    click.echo(f"Telemetry appended to {output}")
+    print(f"Telemetry appended to {args.output}")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

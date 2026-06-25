@@ -1,132 +1,147 @@
 #!/usr/bin/env python3
 """
-Enterprise Chemistry Gateway Harness: chemistry_gateway.py
-Executes classical Hartree-Fock baseline calculations using PySCF to extract
-molecular integrals, parsing them directly into the hybrid orchestrator.
+Chemistry Gateway: chemistry_gateway.py
+Classical pre-processing layer — HF/CASCI integral extraction and tensor conversion.
 """
 
 import numpy as np
-from typing import List, Tuple, Dict, Any, Optional
+from typing import List, Tuple, Dict
+from ase.io import read as ase_read
 
-# Ensure PySCF is installed in your local development or qBraid environment
 try:
-    from pyscf import gto, scf, ao2mo
+    from pyscf import gto, scf, ao2mo, mcscf
     PYSCF_AVAILABLE = True
 except ImportError:
     PYSCF_AVAILABLE = False
 
-class PySCFDataGateway:
+# ==========================================
+# CIF → CASCI integral pipeline
+# ==========================================
+
+def _get_smart_basis(atoms) -> Dict[str, str]:
+    """ECP basis for heavy atoms (Z > 36), all-electron for light atoms."""
+    return {a.symbol: ('lanl2dz' if a.number > 36 else '6-31g*') for a in atoms}
+
+
+def load_and_compute_integrals(
+    cif_filepath: str,
+    spin_targets: List[int] = [0, 2, 4, 6],
+    cas_electrons: int = 8,
+    cas_orbitals: int = 8,
+) -> Tuple[np.ndarray, np.ndarray, int, float, float, Tuple[int, int]]:
     """
-    Enterprise Data Connector Engine.
-    Leverages PySCF classical preprocessing to compute one-body core integrals 
-    and two-body electronic repulsion integral (ERI) tensors, parsing them 
-    natively into your platform's quantum-classical pipeline format.
+    CIF → PySCF HF → CASCI.
+
+    Returns (h1, eri_4d, n_orbitals, casci_total_energy, e_core, nelecas), where
+    ``nelecas = (n_alpha, n_beta)`` is the active-space electron split needed to build the
+    Hartree-Fock reference for the qubit solver. Feed (h1, eri_4d, nelecas, e_core) into
+    ``molecular_hamiltonian.build_hamiltonian_from_integrals`` /
+    ``pipeline.run_from_integrals``; the active-space FCI target is ``casci_total_energy``.
+
+    NOTE (scientific caveat): for a crystalline CIF this builds a *finite molecular cluster*
+    from the unit-cell atoms with no periodic boundary conditions -- it is not a calculation
+    of the periodic solid. Treat materials results accordingly (see REFACTOR_PLAN.md, Phase 4).
     """
-    
-    def __init__(self, molecule_geometry: str, basis_set: str = "sto-3g", charge: int = 0, spin: int = 0):
-        """
-        Args:
-            molecule_geometry (str): Structural geometry string. 
-                                     e.g., "H 0 0 0; H 0 0 0.74"
-            basis_set (str): Atomic orbital basis configuration choice.
-        """
-        self.geometry = molecule_geometry
-        self.basis = basis_set
-        self.charge = charge
-        self.spin = spin
-        
-        self.mol: Optional[gto.Mole] = None
-        self.mf: Optional[scf.RHF] = None
-        
-    def execute_baseline_scf(self) -> float:
-        """
-        Runs a classical restricted Hartree-Fock (RHF) execution pathway.
-        
-        Returns:
-            float: The baseline classical reference energy in Hartrees.
-        """
-        if not PYSCF_AVAILABLE:
-            print("[GATEWAY WARNING] PySCF package not detected in current runtime environment.")
-            print("                  Defaulting to mock data generator for simulation profiling...")
-            return -1.117  # Standard simulated baseline reference value
-            
-        # Build the PySCF Molecular Structure instance
-        self.mol = gto.Mole()
-        self.mol.atom = self.geometry
-        self.mol.basis = self.basis
-        self.mol.charge = self.charge
-        self.mol.spin = self.spin
-        self.mol.build()
-        
-        # Execute Self-Consistent Field (SCF) calculation
-        self.mf = scf.RHF(self.mol)
-        self.mf.verbose = 0  # Suppress internal LAPACK verbose printing
-        scf_energy = self.mf.kernel()
-        
-        return float(scf_energy)
-        
-    def extract_and_parse_integrals(self) -> Tuple[List[Tuple[int, int, float]], List[Tuple[int, int, int, int, float]]]:
-        """
-        Extracts molecular electronic structure integrals from the SCF molecular orbital basis 
-        and unpacks them into explicit coordinates ready for Jordan-Wigner transformations.
-        
-        Returns:
-            Tuple[List, List]: Clean coordinate lists for (one_body_terms, two_body_terms).
-        """
-        if not PYSCF_AVAILABLE or self.mf is None:
-            # Mock injection data pass matching standard molecular catalog matrices
-            mock_1b = [(0, 0, -0.5123), (1, 1, -0.5123), (0, 2, -0.0451)]
-            mock_2b = [(0, 1, 0, 1, 0.6214), (0, 1, 2, 3, 0.1042)]
-            return mock_1b, mock_2b
-            
-        # Extract molecular orbital coefficients
-        mo_coeff = self.mf.mo_coeff
-        n_orbitals = mo_coeff.shape[1]
-        
-        # 1. Extract One-Body Integrals (Kinetic Energy + Core Attraction) in spatial MO basis
-        h_core_ao = self.mf.get_hcore()
-        h_core_mo = mo_coeff.T @ h_core_ao @ mo_coeff
-        
-        one_body_integrals = []
-        for p in range(n_orbitals):
-            for q in range(n_orbitals):
-                weight = float(h_core_mo[p, q])
-                if abs(weight) > 1e-9:
-                    # Ingest spatial coordinates directly; maps out symmetries
-                    one_body_integrals.append((p, q, weight))
-                    
-        # 2. Extract Two-Body Electronic Repulsion Integrals (ERIs)
-        # ao2mo transforms atomic orbitals integrals tensor out to molecular orbital space
-        eri_mo = ao2mo.kernel(self.mol, mo_coeff, compact=False)
-        eri_tensor = eri_mo.reshape(n_orbitals, n_orbitals, n_orbitals, n_orbitals)
-        
-        two_body_integrals = []
-        for p in range(n_orbitals):
-            for q in range(n_orbitals):
-                for r in range(n_orbitals):
-                    for s in range(n_orbitals):
-                        # Convert from standard chemistry notation index mapping to physicist notation
-                        weight = float(eri_tensor[p, q, r, s])
-                        if abs(weight) > 1e-9:
-                            two_body_integrals.append((p, q, r, s, weight))
-                            
-        return one_body_integrals, two_body_integrals
+    print(f"[CLASSICAL PRE-PROCESSING] Generating Hamiltonian for: {cif_filepath}")
+    atoms = ase_read(cif_filepath)
+    atom_str = "; ".join(
+        f"{a.symbol} {a.position[0]} {a.position[1]} {a.position[2]}" for a in atoms
+    )
+    basis_set = _get_smart_basis(atoms)
+    ecp_dict = {a.symbol: 'lanl2dz' for a in atoms if a.number > 36}
+
+    # Determine ground-state spin by trying each candidate.
+    mol_dummy = gto.M(atom=atom_str, basis=basis_set, ecp=ecp_dict, charge=0, spin=None)
+    total_electrons = sum(mol_dummy.nelec)
+    is_odd = total_electrons % 2 != 0
+    # A spin S requires n_beta = (N - S) / 2 >= 0, i.e. S <= total_electrons; otherwise PySCF
+    # asserts on a negative electron count. Filter on both parity and that magnitude bound so
+    # small molecules (e.g. H2, where S=4 is impossible) don't crash the scan.
+    valid_spins = [s for s in spin_targets
+                   if (s % 2 != 0) == is_odd and s <= total_electrons]
+    if not valid_spins:
+        valid_spins = [1 if is_odd else 0]
+
+    scf_energies = {}
+    for spin in valid_spins:
+        mol = gto.M(atom=atom_str, basis=basis_set, ecp=ecp_dict, charge=0, spin=spin)
+        mf = scf.UHF(mol) if mol.nelec[0] != mol.nelec[1] else scf.RHF(mol)
+        mf.max_cycle = 500
+        mf.level_shift = 0.3
+        mf.diis_space = 12
+        mf.conv_tol = 1e-8
+        mf.init_guess = 'atom'
+        scf_energies[spin] = mf.kernel()
+
+    ground_spin = min(scf_energies, key=scf_energies.get)
+    print(f"[SUCCESS] Classical baseline established. Ground state spin: {ground_spin}")
+
+    final_mol = gto.M(atom=atom_str, basis=basis_set, ecp=ecp_dict, charge=0, spin=ground_spin)
+    final_mf = scf.UHF(final_mol) if final_mol.nelec[0] != final_mol.nelec[1] else scf.RHF(final_mol)
+    final_mf.max_cycle = 500
+    final_mf.level_shift = 0.3
+    final_mf.diis_space = 12
+    final_mf.conv_tol = 1e-8
+    final_mf.init_guess = 'atom'
+    final_mf.kernel()
+
+    print(f"[CLASSICAL NODE] Truncating to CAS({cas_electrons},{cas_orbitals}) Active Space...")
+    cas = mcscf.CASCI(final_mf, cas_orbitals, cas_electrons)
+    cas.kernel()
+
+    h1, e_core = cas.get_h1eff()
+    eri_4d = ao2mo.restore(1, cas.get_h2eff(), cas_orbitals)
+
+    nelecas = cas.nelecas
+    if isinstance(nelecas, (int, np.integer)):
+        n_b = int(nelecas) // 2
+        nelecas = (int(nelecas) - n_b, n_b)
+    else:
+        nelecas = (int(nelecas[0]), int(nelecas[1]))
+
+    return h1, eri_4d, h1.shape[0], cas.e_tot, float(e_core), nelecas
+
+
+def translate_tensors_to_orchestrator(
+    h1: np.ndarray, eri: np.ndarray
+) -> Tuple[List[tuple], List[tuple]]:
+    """
+    Converts dense PySCF arrays to sparse tuple lists for the orchestrator.
+    Uses numpy masking instead of O(N^4) Python loops (~100-1000x faster for CAS ≥ 8).
+    """
+    mask1 = np.abs(h1) > 1e-6
+    i_idx, j_idx = np.where(mask1)
+    single_body = list(zip(i_idx.tolist(), j_idx.tolist(), h1[mask1].tolist()))
+
+    # ao2mo.restore(1, ...) unpacks PySCF's 8-fold-symmetric format to full (N,N,N,N).
+    eri_4d = ao2mo.restore(1, eri, h1.shape[0])
+    mask2 = np.abs(eri_4d) > 1e-6
+    p_idx, q_idx, r_idx, s_idx = np.where(mask2)
+    two_body = list(zip(
+        p_idx.tolist(), q_idx.tolist(),
+        r_idx.tolist(), s_idx.tolist(),
+        eri_4d[mask2].tolist(),
+    ))
+    return single_body, two_body
+
 
 # ==========================================
 # Gateway Diagnostic Test Harness
 # ==========================================
 if __name__ == "__main__":
-    print("Initializing Chemistry Gateway Integration Check...")
-    
-    # Target system: Hydrogen dimer molecule stretch coordinates
-    h2_geometry = "H 0.0 0.0 0.0; H 0.0 0.0 0.74"
-    
-    gateway = PySCFDataGateway(molecule_geometry=h2_geometry, basis_set="sto-3g")
-    baseline = gateway.execute_baseline_scf()
-    
-    print(f"-> Classical Reference Energy Computed: {baseline:.6f} Hartrees")
-    
-    one_b, two_b = gateway.extract_and_parse_integrals()
-    print(f"-> Successfully extracted {len(one_b)} One-Body core integrals.")
-    print(f"-> Successfully extracted {len(two_b)} Two-Body electronic repulsion integrals.")
+    import sys
+
+    if len(sys.argv) < 2:
+        print("Usage: python -m hybrid_quantum_solver.chemistry_gateway <path_to_cif> [cas_e,cas_o]")
+        sys.exit(1)
+
+    cif = sys.argv[1]
+    cas_e, cas_o = (map(int, sys.argv[2].split(",")) if len(sys.argv) > 2 else (8, 8))
+    h1, eri, n_orb, casci_total, e_core, nelecas = load_and_compute_integrals(
+        cif, cas_electrons=cas_e, cas_orbitals=cas_o
+    )
+    print(f"-> CASCI total energy:   {casci_total:.6f} Ha")
+    print(f"-> active orbitals:      {n_orb}  (nelecas={nelecas})")
+    print(f"-> core/offset energy:   {e_core:.6f} Ha")
+    print(f"-> h1 shape {h1.shape}, eri shape {eri.shape}")
     print("\nData translation pipeline checked. Asset ready to hook directly into EnterprisePipelineOrchestrator loops.")

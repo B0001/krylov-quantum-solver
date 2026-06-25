@@ -1,0 +1,22 @@
+# Runtime dependencies for the Krylov Quantum Solver.
+# (Referenced by README.md:  pip install -r requirements.txt)
+#
+# Verified working set: qiskit 2.4.2 + qiskit-nature 0.8.0 + pyscf 2.13.1.
+numpy>=1.22.0
+# scipy 1.16+ ships a _new_distributions import path that crashes (via its vendored
+# array_api_compat) when torch is absent, breaking the qiskit-nature import chain.
+# 1.15.x is the verified-working range.
+scipy>=1.8.0,<1.16
+pandas>=2.0
+matplotlib>=3.6
+
+# Quantum + electronic-structure stack
+qiskit>=1.0
+qiskit-nature>=0.7
+qiskit-aer>=0.13          # Aer simulator backend (trotter_krylov, hardware tests)
+qiskit-ibm-runtime>=0.20
+pyscf>=2.0.0
+ase>=3.22
+
+# Tests
+pytest>=7.0.0
