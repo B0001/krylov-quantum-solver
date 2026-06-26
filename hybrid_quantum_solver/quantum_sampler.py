@@ -77,7 +77,7 @@ class QiskitKrylovSampler:
                 basis_states.append(basis_states[-1])
                 
         # 4. Measure the Subspace Matrices (H_ij and S_ij)
-        print(f"[QUANTUM NODE] Measuring expectation values across O(M^2) tensor grid...")
+        print("[QUANTUM NODE] Measuring expectation values across O(M^2) tensor grid...")
         mapped_samples = []
         for i in range(subspace_dim):
             for j in range(subspace_dim):

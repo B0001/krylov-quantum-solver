@@ -23,7 +23,6 @@ import csv
 import math
 import os
 
-import numpy as np
 from pyscf import gto, scf, ao2mo
 
 from hybrid_quantum_solver.dmrg_reference import fci_energy, dmrg_energy, dmrg_available
@@ -60,7 +59,8 @@ def main():
     hdr = (f"{'n (CAS)':>9} {'qubits':>6} {'ndet':>16} {'HF':>12} "
            f"{f'DMRG(D={BOND_DIMS[0]})':>14} {f'DMRG(D={BOND_DIMS[-1]})':>14} "
            f"{'FCI':>12} {'|D-FCI|':>10} {'Ecorr/atom':>11}")
-    print(hdr); print("-" * len(hdr))
+    print(hdr)
+    print("-" * len(hdr))
 
     os.makedirs("data", exist_ok=True)
     rows = []
@@ -95,7 +95,8 @@ def main():
         })
         with open(OUTPUT, "w", newline="") as fh:
             w = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
-            w.writeheader(); w.writerows(rows)
+            w.writeheader()
+            w.writerows(rows)
 
     print("\nDMRG matches exact FCI to ~1e-9 Ha where FCI is tractable, then carries the reference")
     print("alone into CAS sizes (and qubit counts) no FCI or statevector simulation can reach.")

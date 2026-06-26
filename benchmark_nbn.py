@@ -167,7 +167,8 @@ def main():
 
     header = (f"{'CAS':>8} {'qubits':>6} {'ndet':>14} {'Krylov':>12} {'FCI/CASCI':>12} "
               f"{'DMRG':>12} {'|DMRG-FCI|':>11} {'corr>cap':>10}")
-    print(header); print("-" * len(header))
+    print(header)
+    print("-" * len(header))
 
     file_exists = os.path.exists(OUTPUT)
     for nelec, norb in ACTIVE_SPACES:
@@ -212,10 +213,11 @@ def main():
         with open(OUTPUT, "a", newline="") as fh:        # append so resumed rungs accumulate
             w = csv.DictWriter(fh, fieldnames=FIELDS)
             if not file_exists:
-                w.writeheader(); file_exists = True
+                w.writeheader()
+                file_exists = True
             w.writerow(row)
 
-    print(f"\n'corr>cap' = how much lower the active-space energy goes once the space grows past the")
+    print("\n'corr>cap' = how much lower the active-space energy goes once the space grows past the")
     print(f"CAS(8,8)/{KRYLOV_QUBIT_CAP}-qubit ceiling the statevector quantum solver is limited to --")
     print(f"i.e. the correlation it structurally cannot reach.  ->  {OUTPUT}")
 

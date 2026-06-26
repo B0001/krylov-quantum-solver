@@ -22,7 +22,6 @@ Run:  python study_be2.py   ->  prints the curve + binding energies, writes data
 import csv
 import os
 
-import numpy as np
 from pyscf import gto, scf, mcscf, ao2mo
 
 from hybrid_quantum_solver.molecular_hamiltonian import build_hamiltonian_from_integrals
@@ -60,7 +59,8 @@ def energies_at(R):
 def main():
     print(f"Be2 binding curve | basis {BASIS} | CAS({CAS_ELECTRONS},{CAS_ORBITALS}) = 16 qubits | quantum Krylov M={KRYLOV_DIM}")
     hdr = f"{'R(A)':>6} {'HF':>13} {'Krylov':>13} {'FCI':>13} {'DMRG':>13} {'E_corr(mHa)':>12}"
-    print(hdr); print("-" * len(hdr))
+    print(hdr)
+    print("-" * len(hdr))
 
     os.makedirs("data", exist_ok=True)
     rows = []
@@ -72,7 +72,8 @@ def main():
         rows.append(dict(R=R, hf=hf, krylov=kry, fci=fci, dmrg=dmrg, e_corr_mHa=ecorr))
         with open(OUTPUT, "w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
-            w.writeheader(); w.writerows(rows)
+            w.writeheader()
+            w.writerows(rows)
 
     asy = rows[-1]  # largest-R asymptote (approx. 2 x Be atom)
 
@@ -90,7 +91,7 @@ def main():
         bound = "BOUND" if De * HA2CM > 1.0 else "unbound (no well)"
         print(f"  {label:16s}: Re={Rmin:4.2f} A  De={De * 1e3:7.2f} mHa = {De * HA2CM:8.1f} cm^-1   [{bound}]")
 
-    print(f"\nExperiment: De ~ 929.7 cm^-1 at Re ~ 2.45 A (Merritt et al., Science 2009).")
+    print("\nExperiment: De ~ 929.7 cm^-1 at Re ~ 2.45 A (Merritt et al., Science 2009).")
     print("HF shows ~no well; the correlated methods (quantum Krylov / FCI / DMRG, mutually")
     print("agreeing) produce a bound well -- the correlation physics the Be2 puzzle hinged on.")
     print("Quantitative underbinding is expected (frozen-core CAS + double-zeta basis).")

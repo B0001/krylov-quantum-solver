@@ -42,7 +42,18 @@ dmrg = [
 test = [
     "pytest>=7.0.0",
 ]
+dev = [
+    "ruff>=0.5",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["hybrid_quantum_solver*"]
+
+[tool.ruff]
+# orchestrate_hybrid_pipeline.py is a quarantined "what-not-to-do" regression fixture (see
+# REFACTOR_PLAN.md); it is frozen and intentionally not reformatted.
+extend-exclude = ["hybrid_quantum_solver/orchestrate_hybrid_pipeline.py"]
+
+[tool.ruff.lint.per-file-ignores]
+"docs/source/conf.py" = ["E402"]   # Sphinx: imports follow sys.path setup, by convention

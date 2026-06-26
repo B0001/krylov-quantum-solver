@@ -36,7 +36,6 @@ import csv
 import os
 import sys
 import time
-import numpy as np
 
 from hybrid_quantum_solver.chemistry_gateway import load_and_compute_integrals
 from hybrid_quantum_solver.molecular_hamiltonian import build_hamiltonian_from_integrals

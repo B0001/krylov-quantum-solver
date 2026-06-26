@@ -135,7 +135,8 @@ def main():
         })
         with open(OUTPUT, "w", newline="") as fh:
             w = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
-            w.writeheader(); w.writerows(rows)
+            w.writeheader()
+            w.writerows(rows)
 
     print("\nWhere both run, |DMRG-FCI| ~ 1e-9 Ha (DMRG validated as the reference). Past the FCI")
     print("determinant cutoff DMRG carries the reference alone; quantum Krylov tracks it while the")
