@@ -24,7 +24,6 @@ import json
 import hashlib
 import time
 from typing import List, Dict, Any, Tuple, Optional
-import scipy.linalg
 from hybrid_quantum_solver.quantum_sampler import QiskitKrylovSampler
 
 # Check for native GPU hardware acceleration capability via CuPy (NVIDIA Inception Stack)

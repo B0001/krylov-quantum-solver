@@ -48,6 +48,34 @@ from scipy.sparse.linalg import eigsh, expm_multiply
 
 from hybrid_quantum_solver.molecular_hamiltonian import MolecularHamiltonian
 
+import math
+
+
+def expm_multiply_taylor(H, v, t, lambda_bound, theta: float = 0.9, order: int = 18):
+    """Backend-agnostic action of ``exp(-i t H) @ v`` via a scaled Taylor series.
+
+    Uses ONLY sparse mat-vec (``H.dot``) and vector axpy, so the identical code runs on
+    NumPy + scipy.sparse OR CuPy + cupyx.scipy.sparse arrays -- this is what lets the GPU
+    backend evolve statevectors without a CuPy ``expm_multiply`` (which cupyx does not provide).
+
+    ``lambda_bound`` must be an upper bound on ``||H||_2`` (the sum of |Pauli coefficients|
+    works: each Pauli has spectral norm 1). It sets the number of sub-steps ``s`` so each
+    Taylor block has spectral radius <= ``theta`` and the truncation at ``order`` terms is at
+    machine precision.  Validated on CPU against ``scipy.sparse.linalg.expm_multiply`` in
+    ``tests/test_gpu_backend.py``.
+    """
+    s = max(1, int(math.ceil(abs(t) * float(lambda_bound) / theta)))
+    c = -1j * t / s
+    w = v
+    for _ in range(s):
+        term = w
+        out = w
+        for k in range(1, order + 1):
+            term = H.dot(term) * (c / k)
+            out = out + term
+        w = out
+    return w
+
 
 def solve_generalized_eig(H, S, threshold: float = 1e-10, noise_floor: float = 0.0):
     """Thresholded canonical orthogonalisation for ``H c = E S c``; returns (energy, rank).
@@ -91,6 +119,7 @@ class QuantumKrylovSolver:
         threshold: float = 1e-10,
         noise_sigma: float = 0.0,
         seed: Optional[int] = None,
+        device: str = "cpu",
     ):
         """
         Args:
@@ -106,15 +135,38 @@ class QuantumKrylovSolver:
                 (unlike the original code's symmetry-breaking additive noise on H). A useful
                 scale is ``1/sqrt(shots)`` (see ``noise.shot_noise_sigma``).
             seed: RNG seed for the shot noise (reproducible studies).
+            device: ``"cpu"`` (default, scipy.sparse + scipy.expm_multiply -- the validated path
+                exercised by the test suite) or ``"gpu"`` (CuPy + cupyx.scipy.sparse, with the
+                CPU-validated ``expm_multiply_taylor`` for the time step). The GPU path lets the
+                statevector simulation reach larger qubit counts on an NVIDIA GPU (an A100 80GB
+                holds ~32 qubits); it requires ``cupy`` and is validated only on its CPU-fallback
+                math here -- run it on a GPU node to confirm end to end.
         """
         self.mh = molecular_hamiltonian
         self.offset = molecular_hamiltonian.energy_offset
         self.threshold = threshold
         self.noise_sigma = float(noise_sigma)
         self._rng = np.random.default_rng(seed)
+        self.device = device
 
-        self._H = molecular_hamiltonian.qubit_hamiltonian.to_matrix(sparse=True).tocsc()
-        self._psi0 = np.asarray(molecular_hamiltonian.hf_state().data, dtype=complex)
+        H_sparse = molecular_hamiltonian.qubit_hamiltonian.to_matrix(sparse=True)
+        if device == "gpu":
+            try:
+                import cupy as cp
+                import cupyx.scipy.sparse as cxsp
+            except Exception as exc:  # pragma: no cover - exercised only with a CuPy/GPU node
+                raise ImportError(
+                    "device='gpu' requires cupy (pip install cupy-cuda12x) and an NVIDIA GPU."
+                ) from exc
+            self._cp = cp
+            self._H = cxsp.csr_matrix(H_sparse.astype(complex))
+            self._psi0 = cp.asarray(molecular_hamiltonian.hf_state().data, dtype=complex)
+            # Upper bound on ||H||_2 for the Taylor sub-step count (sum of |Pauli coeffs|).
+            self._lambda = float(np.sum(np.abs(molecular_hamiltonian.qubit_hamiltonian.coeffs)))
+        else:
+            self._cp = None
+            self._H = H_sparse.tocsc()
+            self._psi0 = np.asarray(molecular_hamiltonian.hf_state().data, dtype=complex)
 
         self.dt = float(dt) if dt is not None else self._default_dt()
         self._basis: List[np.ndarray] = [self._psi0.copy()]  # cached Krylov vectors
@@ -131,9 +183,27 @@ class QuantumKrylovSolver:
         return 0.5 * (perturbed + perturbed.conj().T)
 
     # -- time step -----------------------------------------------------------
+    def _spectral_radius(self) -> float:
+        """Largest |eigenvalue| via power iteration (device-agnostic; only sparse mat-vec)."""
+        xp = self._cp if self.device == "gpu" else np
+        v = xp.asarray(self._psi0, dtype=complex)
+        v = v / xp.linalg.norm(v)
+        r = 0.0
+        for _ in range(50):
+            w = self._H.dot(v)
+            nrm = float(xp.linalg.norm(w))
+            if nrm == 0.0:
+                break
+            v, r = w / nrm, nrm
+        return r
+
     def _default_dt(self) -> float:
-        """dt = pi / (E_max - E_min); spectral extent estimated via sparse Lanczos."""
-        dim = self._H.shape[0]
+        """dt = pi / spectral_width."""
+        if self.device == "gpu":
+            # cupyx lacks a robust complex-Hermitian eigsh; estimate the width from the spectral
+            # radius (power iteration). Pass dt explicitly for large GPU runs to avoid this.
+            width = 2.0 * self._spectral_radius()
+            return np.pi / width if width > 0 else np.pi
         try:
             e_max = float(eigsh(self._H, k=1, which="LA", return_eigenvectors=False)[0])
             e_min = float(eigsh(self._H, k=1, which="SA", return_eigenvectors=False)[0])
@@ -148,13 +218,20 @@ class QuantumKrylovSolver:
     def _ensure_basis(self, dim: int) -> None:
         """Extend the cached Krylov basis to at least ``dim`` vectors."""
         while len(self._basis) < dim:
-            self._basis.append(expm_multiply(-1j * self.dt * self._H, self._basis[-1]))
+            if self.device == "gpu":
+                nxt = expm_multiply_taylor(self._H, self._basis[-1], self.dt, self._lambda)
+            else:
+                nxt = expm_multiply(-1j * self.dt * self._H, self._basis[-1])
+            self._basis.append(nxt)
 
     def _subspace_matrices(self, dim: int):
         self._ensure_basis(dim)
-        B = np.array(self._basis[:dim])              # (M, N)
+        xp = self._cp if self.device == "gpu" else np
+        B = xp.array(self._basis[:dim])              # (M, N)
         S = B.conj() @ B.T                           # <phi_i|phi_j>
         H = B.conj() @ self._H.dot(B.T)              # <phi_i|H|phi_j>
+        if self.device == "gpu":                     # M x M is tiny -> finish on the CPU
+            H, S = self._cp.asnumpy(H), self._cp.asnumpy(S)
         # Hermitise away numerical asymmetry (a *symmetric* correction, unlike the old
         # code which ADDED asymmetric noise to H). Optional shot noise is also added
         # Hermitian-symmetrically, so the eigenproblem stays well-posed.

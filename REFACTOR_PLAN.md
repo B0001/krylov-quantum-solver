@@ -167,16 +167,21 @@ Do not optimize, parallelize, or re-benchmark anything until Phase 1's gate is g
 > bond-breaking coordinate the Hartree–Fock error grows 101 → 625 mHa (single-reference
 > breakdown) while quantum Krylov stays ≤ 0.65 mHa vs exact CASCI — the exact reference
 > cross-validated against an independent PySCF CASCI solve (−107.62310177 Ha, agree to 1e-6).
-> DMRG (block2) is the intended reference for active spaces beyond FCI's reach; it could not be
-> installed in this sandbox (dependency conflict), but CAS(6,6) FCI is exact so CASCI is the gold
-> standard here. An optional **block2 DMRG reference** path is now in
-> `hybrid_quantum_solver/dmrg_reference.py` (`reference_energy(method="auto")` — exact-FCI fallback
-> tested here, DMRG ready for larger active spaces). **Resource accounting** is in
+> DMRG (block2) is the reference for active spaces beyond FCI's reach. **block2 0.5.3 is now
+> installed and the DMRG path is executed and validated** (`hybrid_quantum_solver/dmrg_reference.py`,
+> `reference_energy(method="auto")` routes through DMRG when available). The DMRG-backed ladder is
+> in `benchmark_dmrg.py` (stretched N₂, 6-31g, growing active space): DMRG reproduces exact FCI to
+> ~1e-10 Ha at CAS(6,6)→(10,10) and ~1e-8 Ha at CAS(12,12) (bond-dim-400 truncation), and at
+> **CAS(14,14)** (≈1.18e7 determinants, FCI skipped) **DMRG carries the reference alone** — the
+> beyond-FCI rung the earlier sandbox could not produce. Quantum Krylov tracks the reference where
+> the statevector fits (≤16 qubits: 0.016/0.285 mHa at CAS(6,6)/(8,8)); larger active spaces are
+> correctly out of reach of the statevector solver. **Resource accounting** is in
 > `benchmark_resources.py` + `HardwareKrylovSolver.resource_report` (gated by
 > `tests/test_hardware_krylov.py`): e.g. N₂ CAS(6,6) needs ~6.5k CX per Trotter step and ~240k CX
 > for the deepest M=6 Hadamard-test circuit — honestly far beyond NISQ, which motivates shallower
-> evolution (better Trotter/qubitization). Remaining: transition metals vs DMRG/AFQMC in a
-> block2-capable environment, and choosing a validated discovery target (CIF-as-molecule caveat below).
+> evolution (better Trotter/qubitization). Remaining: a real transition-metal active space vs DMRG,
+> and choosing a validated discovery target (CIF-as-molecule caveat below). NOTE: block2 is an
+> optional reference dependency (not in `requirements.txt`); the code degrades to exact FCI without it.
 
 
 - **Benchmark ladder, each vs. a classical reference:** H₂ → LiH → H₄/H₆ chains (vs FCI) → N₂

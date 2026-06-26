@@ -17,14 +17,16 @@ Integral convention (identical to ``molecular_hamiltonian.build_hamiltonian_from
   e_core : constant (nuclear + frozen-core energy)      = cas.get_h1eff()[1]
   n_elec : (n_alpha, n_beta) active electrons           = cas.nelecas
 
-NOTE: the ``dmrg_energy`` path is written against the standard pyblock2 ``DMRGDriver`` API but was
-not executed in the environment where this module was written (``block2`` could not be installed
-there). The ``fci_energy`` path it falls back to is exercised by the test suite, which also pins
-the shared integral convention DMRG relies on.
+VALIDATED: with ``block2`` installed, ``dmrg_energy`` reproduces exact FCI to ~1e-10 Ha on small
+active spaces (LiH CAS(4,5); N2 CAS up to (12,12) in ``benchmark_dmrg.py``), and carries the
+reference alone past FCI's determinant reach (N2 CAS(14,14), ~1.2e7 determinants). The
+``fci_energy`` fallback is exercised by the test suite, which also pins the shared integral
+convention DMRG relies on.
 """
 from __future__ import annotations
 
-from typing import Tuple
+from dataclasses import dataclass, field
+from typing import List, Tuple
 
 import numpy as np
 
@@ -96,6 +98,105 @@ def dmrg_energy(
         iprint=0,
     )
     return float(energy)
+
+
+@dataclass
+class ExtrapResult:
+    """Bond-dimension extrapolation of a DMRG energy (see SPEC_hchain_tdl.md)."""
+    energy: float                                   # E(D -> infinity)
+    stderr: float                                   # standard error of the extrapolated energy
+    per_D: List[Tuple[int, float, float]] = field(default_factory=list)  # (D, discarded_weight, E)
+    method: str = "dweight"                         # "dweight" (E vs truncation error) or "invD"
+
+
+def dmrg_energy_extrapolated(
+    h1: np.ndarray,
+    eri: np.ndarray,
+    n_elec,
+    e_core: float = 0.0,
+    *,
+    bond_dims=(200, 400, 800, 1600),
+    n_sweeps_per: int = 8,
+    scratch: str = "./.dmrg_tmp",
+    n_threads: int = 4,
+    seed=None,
+) -> ExtrapResult:
+    """DMRG energy extrapolated to infinite bond dimension via the discarded-weight rule.
+
+    For each bond dimension ``D`` the MPS is converged (warm-started from the previous ``D``, the
+    last sweeps run at zero noise for a clean truncation error). The converged energy ``E(D)`` is
+    linear in the discarded weight ``delta(D)`` near convergence, so a least-squares fit of
+    ``E`` vs ``delta`` extrapolated to ``delta = 0`` gives ``E(D -> inf)`` (White/Chan). If the
+    discarded weights are unusable (all ~0 or non-monotone) the method falls back to an ``E`` vs
+    ``1/D`` fit (cruder; ``method='invD'``).
+    """
+    try:
+        from pyblock2.driver.core import DMRGDriver, SymmetryTypes
+    except Exception as exc:  # pragma: no cover - only without block2
+        raise ImportError("dmrg_energy_extrapolated requires block2 (pip install block2).") from exc
+
+    norb = h1.shape[0]
+    na, nb = _as_pair(n_elec)
+    drv = DMRGDriver(scratch=scratch, symm_type=SymmetryTypes.SU2, n_threads=n_threads)
+    if seed is not None:
+        try:
+            import block2
+            block2.Random.rand_seed(int(seed))   # seeds the global RNG used by get_random_mps
+        except Exception:
+            pass  # converged DMRG energy is independent of the random initial MPS anyway
+    drv.initialize_system(n_sites=norb, n_elec=na + nb, spin=na - nb, orb_sym=None)
+    mpo = drv.get_qc_mpo(h1e=np.asarray(h1), g2e=np.asarray(eri), ecore=float(e_core), iprint=0)
+    ket = drv.get_random_mps(tag="KET", bond_dim=int(bond_dims[0]), nroots=1)
+
+    # anneal noise to zero so the final sweeps report a clean truncation error
+    noises = [1e-4, 1e-5, 1e-6] + [0.0] * max(0, n_sweeps_per - 3)
+    noises = noises[:n_sweeps_per]
+    per_D: List[Tuple[int, float, float]] = []
+    for D in bond_dims:
+        e = drv.dmrg(
+            mpo, ket, n_sweeps=n_sweeps_per, bond_dims=[int(D)] * n_sweeps_per,
+            noises=noises, thrds=[1e-12] * n_sweeps_per, iprint=0,
+        )
+        dw = float(drv._dmrg.discarded_weights[-1])
+        per_D.append((int(D), dw, float(e)))
+
+    Ds = np.array([p[0] for p in per_D], dtype=float)
+    dws = np.array([p[1] for p in per_D], dtype=float)
+    Es = np.array([p[2] for p in per_D], dtype=float)
+
+    method = "dweight"
+    x = dws
+    usable = (len(per_D) >= 2 and not np.allclose(dws, 0.0)
+              and np.all(np.diff(dws) <= 1e-12))    # monotone non-increasing
+    if not usable:
+        x, method = 1.0 / Ds, "invD"
+
+    if len(per_D) >= 3:
+        coef, cov = np.polyfit(x, Es, 1, cov=True)
+        energy = float(coef[1])
+        stderr = float(np.sqrt(max(cov[1, 1], 0.0)))
+    elif len(per_D) == 2:
+        coef = np.polyfit(x, Es, 1)          # exact line through 2 points; no covariance
+        energy, stderr = float(coef[1]), 0.0
+    else:
+        energy, stderr = float(Es[-1]), 0.0
+
+    return ExtrapResult(energy=energy, stderr=stderr, per_D=per_D, method=method)
+
+
+def thermodynamic_limit_fit(ns, e_per_atom) -> Tuple[float, float]:
+    """Extrapolate per-atom energy to n -> infinity: E(n)/n ~ e_inf + a/n (open-chain surface term).
+
+    Returns ``(e_inf, stderr)`` from a linear fit of ``e_per_atom`` vs ``1/n``.
+    """
+    x = 1.0 / np.asarray(ns, dtype=float)
+    y = np.asarray(e_per_atom, dtype=float)
+    if len(x) < 2:
+        return float(y[-1]), 0.0
+    if len(x) == 2:
+        return float(np.polyfit(x, y, 1)[1]), 0.0
+    coef, cov = np.polyfit(x, y, 1, cov=True)
+    return float(coef[1]), float(np.sqrt(max(cov[1, 1], 0.0)))
 
 
 def reference_energy(h1, eri, n_elec, e_core: float = 0.0, method: str = "auto", **kwargs):

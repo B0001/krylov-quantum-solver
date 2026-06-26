@@ -29,9 +29,15 @@ conda run -n "$ENV" python -m pip install -r requirements.txt
 
 echo
 echo "============================================================"
-echo "[3/4] Test suite  (expect: 32 passed)"
+echo "[3/4] Test suite  (expect: 32 passed, then 2 passed/1 skipped)"
 echo "============================================================"
-conda run -n "$ENV" python -m pytest tests/ -q
+# block2 (DMRG) initialises its own OpenMP runtime and segfaults if it loads into a process that
+# already imported pyscf/qiskit-aer. Run the block2/DMRG tests in their OWN process to keep the
+# suite green.
+conda run -n "$ENV" python -m pytest tests/ \
+    --ignore=tests/test_dmrg_reference.py --ignore=tests/test_hchain_extrapolation.py -q
+conda run -n "$ENV" python -m pytest \
+    tests/test_dmrg_reference.py tests/test_hchain_extrapolation.py -q
 
 echo
 echo "============================================================"
