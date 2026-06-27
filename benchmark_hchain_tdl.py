@@ -68,12 +68,19 @@ def load_done(path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--threads", type=int, default=4)
+    ap.add_argument("--protocol", choices=["perD", "ramp"], default="perD",
+                    help="DMRG extrapolation protocol ('ramp' is ~2x faster -- use for large n).")
+    ap.add_argument("--ns", default=None, help="comma-separated chain lengths (overrides default).")
+    ap.add_argument("--bond-dims", default=None, help="comma-separated D schedule (overrides default).")
     args = ap.parse_args()
     if not dmrg_available():
         print("[FATAL] block2 required: pip install block2.")
         return
 
-    print(f"H_n thermodynamic-limit study | R={R_ANG:.4f} A | sto-6g | D-schedule {BOND_DIMS}")
+    ns_list = [int(x) for x in args.ns.split(",")] if args.ns else CHAIN_LENGTHS
+    dims = tuple(int(x) for x in args.bond_dims.split(",")) if args.bond_dims else BOND_DIMS
+
+    print(f"H_n TDL study | R={R_ANG:.4f} A | sto-6g | D={dims} | protocol={args.protocol}")
     hdr = (f"{'n':>4} {'qubits':>6} {'ndet':>16} {'HF':>12} {'E_extrap':>13} {'stderr':>9} "
            f"{'E/atom':>11} {'FCI':>13} {'|D-FCI|':>9}")
     print(hdr)
@@ -84,13 +91,14 @@ def main():
     file_exists = os.path.exists(OUTPUT)
     per_atom = dict((n, v[0]) for n, v in done.items())
 
-    for n in CHAIN_LENGTHS:
+    for n in ns_list:
         if n in done:
             print(f"{n:>4}  (cached)")
             continue
         h1, eri, ne, ec, e_hf = integrals(n)
         ndet = math.comb(n, ne[0]) * math.comb(n, ne[1])
-        res = dmrg_energy_extrapolated(h1, eri, ne, ec, bond_dims=BOND_DIMS, n_threads=args.threads)
+        res = dmrg_energy_extrapolated(h1, eri, ne, ec, bond_dims=dims,
+                                       protocol=args.protocol, n_threads=args.threads)
         e_fci = fci_energy(h1, eri, ne, ec) if ndet <= FCI_DET_CUTOFF else None
         d_fci = abs(res.energy - e_fci) if e_fci is not None else None
         epa = res.energy / n
