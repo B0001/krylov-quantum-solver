@@ -102,7 +102,7 @@ def dmrg_energy(
 
 @dataclass
 class ExtrapResult:
-    """Bond-dimension extrapolation of a DMRG energy (see SPEC_hchain_tdl.md)."""
+    """Bond-dimension extrapolation of a DMRG energy (see specs/SPEC_hchain_tdl.md)."""
     energy: float                                   # E(D -> infinity)
     stderr: float                                   # standard error of the extrapolated energy
     per_D: List[Tuple[int, float, float]] = field(default_factory=list)  # (D, discarded_weight, E)

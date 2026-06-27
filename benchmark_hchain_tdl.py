@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-H_n thermodynamic-limit study (SPEC_hchain_tdl.md).
+H_n thermodynamic-limit study (specs/SPEC_hchain_tdl.md).
 
 Per-atom ground-state energy of the minimal-basis hydrogen chain, with TWO controlled
 extrapolations and honest error bars:

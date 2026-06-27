@@ -35,9 +35,9 @@ echo "============================================================"
 # already imported pyscf/qiskit-aer. Run the block2/DMRG tests in their OWN process to keep the
 # suite green.
 conda run -n "$ENV" python -m pytest tests/ \
-    --ignore=tests/test_dmrg_reference.py --ignore=tests/test_hchain_extrapolation.py -q
+    --ignore=tests/test_dmrg_reference.py --ignore=tests/test_hchain_tdl_spec.py -q
 conda run -n "$ENV" python -m pytest \
-    tests/test_dmrg_reference.py tests/test_hchain_extrapolation.py -q
+    tests/test_dmrg_reference.py tests/test_hchain_tdl_spec.py -q
 
 echo
 echo "============================================================"

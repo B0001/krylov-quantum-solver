@@ -1,5 +1,5 @@
 """
-Acceptance gates G1-G5 for SPEC_hchain_tdl.md (Hn DMRG bond-dim + thermodynamic-limit study).
+Acceptance gates G1-G5 for specs/SPEC_hchain_tdl.md (Hn DMRG bond-dim + thermodynamic-limit study).
 
 block2 (DMRG) is required; the file is skipped without it. It MUST run in its own process
 (block2 segfaults if it loads after pyscf/aer in the same interpreter -- see run_in_chem.sh).
@@ -35,7 +35,7 @@ def integrals(n):
 # Well-converged dims: the extrapolation is SOUND (lands near FCI). At these small, FCI-tractable
 # sizes the largest-D energy is itself near-exact, so extrapolation validates correctness, not
 # improvement -- the improvement only materialises in the under-converged large-n regime (where no
-# FCI exists to compare). See SPEC_hchain_tdl.md G1 note.
+# FCI exists to compare). See specs/SPEC_hchain_tdl.md G1 note.
 CONV_DIMS = (80, 160, 300)
 # Coarse dims: deliberately under-converged so truncation error is large -- used for the
 # monotone-convergence gate (G3).

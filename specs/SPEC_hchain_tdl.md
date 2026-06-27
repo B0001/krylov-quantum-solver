@@ -73,7 +73,7 @@ driver and reports `e_∞`, its standard error, and the fit residual.
 
 ## 5. Acceptance criteria (validation gates)
 
-Each is an automated check in `tests/test_hchain_extrapolation.py` (test-first):
+Each is an automated check in `tests/test_hchain_tdl_spec.py` (test-first):
 
 - **G1 — bond-dim extrapolation is *sound* (lands at exact FCI).** For `n = 10` and `n = 12`
   (FCI tractable) with well-converged bond dims `(80, 160, 300)`, `|E_extrap − E_FCI| < 2e-4 Ha`.
@@ -98,7 +98,7 @@ Each is an automated check in `tests/test_hchain_extrapolation.py` (test-first):
 
 ## 6. Implementation plan (test-first)
 
-1. Write `tests/test_hchain_extrapolation.py` encoding G1–G5 (initially failing).
+1. Write `tests/test_hchain_tdl_spec.py` encoding G1–G5 (initially failing).
 2. Implement `dmrg_energy_extrapolated` (truncation-error fit; `1/D` fallback per R1).
 3. Implement `benchmark_hchain_tdl.py` (resumable driver + TDL fit).
 4. Iterate until G1–G5 are green. Run block2 tests in their own process (the OpenMP-isolation
@@ -126,5 +126,5 @@ Each is an automated check in `tests/test_hchain_extrapolation.py` (test-first):
 
 - `hybrid_quantum_solver/dmrg_reference.py` — `dmrg_energy_extrapolated` (+ `ExtrapResult`).
 - `benchmark_hchain_tdl.py` — resumable study driver → `data/hchain_tdl.csv`.
-- `tests/test_hchain_extrapolation.py` — gates G1–G5.
+- `tests/test_hchain_tdl_spec.py` — gates G1–G5.
 - A short results summary (the `e_∞ ± stderr` table) in the PR description, with the §2/§7 caveats.
