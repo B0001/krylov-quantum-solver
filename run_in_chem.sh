@@ -32,12 +32,11 @@ echo "============================================================"
 echo "[3/4] Test suite  (expect: 32 passed, then 2 passed/1 skipped)"
 echo "============================================================"
 # block2 (DMRG) initialises its own OpenMP runtime and segfaults if it loads into a process that
-# already imported pyscf/qiskit-aer. Run the block2/DMRG tests in their OWN process to keep the
-# suite green.
+# already imported pyscf/qiskit-aer. Run the block2/DMRG tests (test_dmrg_reference + every spec
+# gate, test_*_spec.py) in their OWN process. The glob keeps this correct as new gates are added.
 conda run -n "$ENV" python -m pytest tests/ \
-    --ignore=tests/test_dmrg_reference.py --ignore=tests/test_hchain_tdl_spec.py -q
-conda run -n "$ENV" python -m pytest \
-    tests/test_dmrg_reference.py tests/test_hchain_tdl_spec.py -q
+    --ignore-glob='tests/test_*_spec.py' --ignore=tests/test_dmrg_reference.py -q
+conda run -n "$ENV" python -m pytest tests/test_dmrg_reference.py tests/test_*_spec.py -q
 
 echo
 echo "============================================================"

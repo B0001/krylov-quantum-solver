@@ -25,11 +25,13 @@ gates:
 	done; \
 	echo "all spec gates passed"
 
-# Full suite: block2/DMRG tests in their own process (see run_in_chem.sh).
+# Full suite. The block2/DMRG tests (test_dmrg_reference + every spec gate) must NOT share a
+# process with pyscf/qiskit-aer (block2's OpenMP runtime segfaults), so they run separately.
+# Excluding test_*_spec.py by glob keeps this correct as new spec gates are added.
 test:
 	$(RUN) python -m pytest tests/ \
-		--ignore=tests/test_dmrg_reference.py --ignore=tests/test_hchain_tdl_spec.py -q
-	$(RUN) python -m pytest tests/test_dmrg_reference.py tests/test_hchain_tdl_spec.py -q
+		--ignore-glob='tests/test_*_spec.py' --ignore=tests/test_dmrg_reference.py -q
+	$(RUN) python -m pytest tests/test_dmrg_reference.py tests/test_*_spec.py -q
 
 lint:
 	$(RUN) ruff check .

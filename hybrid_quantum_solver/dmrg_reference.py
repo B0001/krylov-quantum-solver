@@ -117,23 +117,32 @@ def dmrg_energy_extrapolated(
     *,
     bond_dims=(200, 400, 800, 1600),
     n_sweeps_per: int = 8,
+    protocol: str = "perD",
+    sweeps_per_stage: int = 4,
     scratch: str = "./.dmrg_tmp",
     n_threads: int = 4,
     seed=None,
 ) -> ExtrapResult:
     """DMRG energy extrapolated to infinite bond dimension via the discarded-weight rule.
 
-    For each bond dimension ``D`` the MPS is converged (warm-started from the previous ``D``, the
-    last sweeps run at zero noise for a clean truncation error). The converged energy ``E(D)`` is
-    linear in the discarded weight ``delta(D)`` near convergence, so a least-squares fit of
-    ``E`` vs ``delta`` extrapolated to ``delta = 0`` gives ``E(D -> inf)`` (White/Chan). If the
-    discarded weights are unusable (all ~0 or non-monotone) the method falls back to an ``E`` vs
-    ``1/D`` fit (cruder; ``method='invD'``).
+    The converged energy ``E(D)`` is linear in the discarded weight ``delta(D)`` near convergence,
+    so a least-squares fit of ``E`` vs ``delta`` extrapolated to ``delta = 0`` gives ``E(D -> inf)``
+    (White/Chan). Falls back to an ``E`` vs ``1/D`` fit (``method='invD'``) if the discarded weights
+    are unusable (all ~0 or non-monotone).
+
+    ``protocol``:
+      * ``"perD"`` (default) -- a SEPARATE converged DMRG per bond dimension (warm-started, final
+        sweeps at zero noise). Cleanest truncation points; ~``len(bond_dims)``x the sweeps.
+      * ``"ramp"`` -- ONE DMRG run whose schedule holds each ``D`` for ``sweeps_per_stage`` sweeps;
+        the per-stage points come from block2's ``get_dmrg_results()``. Much cheaper (see
+        specs/SPEC_singleramp.md); intermediate-``D`` points are slightly less converged.
     """
     try:
         from pyblock2.driver.core import DMRGDriver, SymmetryTypes
     except Exception as exc:  # pragma: no cover - only without block2
         raise ImportError("dmrg_energy_extrapolated requires block2 (pip install block2).") from exc
+    if protocol not in ("perD", "ramp"):
+        raise ValueError(f"protocol must be 'perD' or 'ramp', got {protocol!r}")
 
     norb = h1.shape[0]
     na, nb = _as_pair(n_elec)
@@ -148,17 +157,28 @@ def dmrg_energy_extrapolated(
     mpo = drv.get_qc_mpo(h1e=np.asarray(h1), g2e=np.asarray(eri), ecore=float(e_core), iprint=0)
     ket = drv.get_random_mps(tag="KET", bond_dim=int(bond_dims[0]), nroots=1)
 
-    # anneal noise to zero so the final sweeps report a clean truncation error
-    noises = [1e-4, 1e-5, 1e-6] + [0.0] * max(0, n_sweeps_per - 3)
-    noises = noises[:n_sweeps_per]
     per_D: List[Tuple[int, float, float]] = []
-    for D in bond_dims:
-        e = drv.dmrg(
-            mpo, ket, n_sweeps=n_sweeps_per, bond_dims=[int(D)] * n_sweeps_per,
-            noises=noises, thrds=[1e-12] * n_sweeps_per, iprint=0,
-        )
-        dw = float(drv._dmrg.discarded_weights[-1])
-        per_D.append((int(D), dw, float(e)))
+    if protocol == "ramp":
+        # one run; schedule holds each target D for sweeps_per_stage sweeps
+        schedule = [int(D) for D in bond_dims for _ in range(sweeps_per_stage)]
+        nsw = len(schedule)
+        noises = ([1e-4, 1e-5, 1e-6] + [0.0] * nsw)[:nsw]
+        drv.dmrg(mpo, ket, n_sweeps=nsw, bond_dims=schedule, noises=noises,
+                 thrds=[1e-12] * nsw, iprint=0)
+        r_dims, r_dws, r_energies = drv.get_dmrg_results()   # per distinct bond dim
+        by_D = {int(d): (float(w), float(np.asarray(e).ravel()[0]))
+                for d, w, e in zip(r_dims, r_dws, r_energies)}
+        per_D = [(int(D), by_D[int(D)][0], by_D[int(D)][1]) for D in bond_dims if int(D) in by_D]
+    else:
+        # anneal noise to zero so the final sweeps report a clean truncation error
+        noises = ([1e-4, 1e-5, 1e-6] + [0.0] * max(0, n_sweeps_per - 3))[:n_sweeps_per]
+        for D in bond_dims:
+            e = drv.dmrg(
+                mpo, ket, n_sweeps=n_sweeps_per, bond_dims=[int(D)] * n_sweeps_per,
+                noises=noises, thrds=[1e-12] * n_sweeps_per, iprint=0,
+            )
+            dw = float(drv._dmrg.discarded_weights[-1])
+            per_D.append((int(D), dw, float(e)))
 
     Ds = np.array([p[0] for p in per_D], dtype=float)
     dws = np.array([p[1] for p in per_D], dtype=float)
