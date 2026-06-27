@@ -7,7 +7,7 @@ numpy>=1.22.0
 # array_api_compat) when torch is absent, breaking the qiskit-nature import chain.
 # 1.15.x is the verified-working range.
 scipy>=1.8.0,<1.16
-pandas>=2.0
+polars>=1.0
 matplotlib>=3.6
 
 # Quantum + electronic-structure stack
@@ -15,6 +15,7 @@ qiskit>=1.0
 qiskit-nature>=0.7
 qiskit-aer>=0.13          # Aer simulator backend (trotter_krylov, hardware tests)
 qiskit-ibm-runtime>=0.20
+qiskit-addon-sqd>=0.12    # SQD solver (run_nbn_sqd_sweep.py)
 pyscf>=2.0.0
 ase>=3.22
 

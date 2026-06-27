@@ -13,7 +13,7 @@ study of the solver, NOT a validated electronic-structure result for solid NbN (
 """
 import time
 
-import pandas as pd
+import polars as pl
 
 from hybrid_quantum_solver.chemistry_gateway import load_and_compute_integrals
 from hybrid_quantum_solver.pipeline import run_from_integrals
@@ -48,7 +48,7 @@ def main():
                 "error_vs_casci": r.error_vs_reference, "time_s": round(dt, 2),
             })
 
-    pd.DataFrame(rows).to_csv("data/nbn_krylov_scaling.csv", index=False)
+    pl.DataFrame(rows).write_csv("data/nbn_krylov_scaling.csv")
     print("\n[DONE] -> data/nbn_krylov_scaling.csv")
 
 

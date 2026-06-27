@@ -20,12 +20,13 @@ dependencies = [
     # scipy 1.16-1.17 crash the qiskit-nature import chain (vendored array_api_compat torch
     # detection bug); 1.15.x is the verified-working range. See requirements.txt.
     "scipy>=1.8.0,<1.16",
-    "pandas>=3.0.3",
+    "polars>=1.0",
     "matplotlib>=3.10.9",
     "qiskit>=1.0",
     "qiskit-nature>=0.7",
     "qiskit-aer>=0.13",
     "qiskit-ibm-runtime>=0.20",
+    "qiskit-addon-sqd>=0.12",
     "pyscf>=2.0.0",
     "ase>=3.22",
 ]

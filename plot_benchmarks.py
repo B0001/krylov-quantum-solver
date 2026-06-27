@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-import pandas as pd
+import polars as pl
 import matplotlib.pyplot as plt
 
 def plot_performance(csv_file):
-    df = pd.read_csv(csv_file)
+    df = pl.read_csv(csv_file)
     
     fig, ax1 = plt.subplots(figsize=(8, 5))
     
@@ -11,14 +11,14 @@ def plot_performance(csv_file):
     color = 'tab:blue'
     ax1.set_xlabel('System Size (Orbitals)')
     ax1.set_ylabel('Execution Time (s)', color=color)
-    ax1.plot(df['n_orbitals'], df['time_seconds'], marker='o', color=color, label='Time')
+    ax1.plot(df['n_orbitals'].to_numpy(), df['time_seconds'].to_numpy(), marker='o', color=color, label='Time')
     ax1.tick_params(axis='y', labelcolor=color)
     
     # Plot Energy (Verification of Stability)
     ax2 = ax1.twinx()
     color = 'tab:red'
     ax2.set_ylabel('Energy (Hartrees)', color=color)
-    ax2.plot(df['n_orbitals'], df['energy_hartrees'], marker='x', linestyle='--', color=color, label='Energy')
+    ax2.plot(df['n_orbitals'].to_numpy(), df['energy_hartrees'].to_numpy(), marker='x', linestyle='--', color=color, label='Energy')
     ax2.tick_params(axis='y', labelcolor=color)
     
     plt.title('Orchestrator Performance & Stability Scaling')
