@@ -178,6 +178,40 @@ def build_hamiltonian_from_integrals(
     )
 
 
+def build_dipole_operators(
+    atom: str,
+    basis: str = "sto3g",
+    charge: int = 0,
+    spin: int = 0,
+    mapper: Optional[JordanWignerMapper] = None,
+) -> list[SparsePauliOp]:
+    """Total molecular dipole operator per Cartesian axis, on the same qubit basis as the
+    Hamiltonian.
+
+    For each axis the operator is ``nuclear_dipole * I - electronic_dipole_op`` (Jordan-Wigner
+    mapped), so its expectation on an eigenstate of ``build_molecular_hamiltonian(atom, ...)`` is
+    the physical total dipole moment in atomic units (verified against PySCF: the qubit
+    ground-state expectation is the *correlated* FCI dipole, e.g. LiH/STO-3G ≈ -1.817 a.u. vs RHF
+    -1.912). Returns ``[mu_x, mu_y, mu_z]`` as ``SparsePauliOp``.
+
+    Full orbital space only (no active-space transform): the property gates run on full-space
+    molecules, which keeps the dipole convention exactly as probed. An active-space dipole (with
+    the frozen-core contribution folded in) is a follow-up. See specs/SPEC_qksd_properties.md.
+    """
+    mapper = mapper or JordanWignerMapper()
+    problem = PySCFDriver(atom=atom, basis=basis, charge=charge, spin=spin).run()
+    dipole = problem.properties.electronic_dipole_moment
+    elec_ops = dipole.second_q_ops()                 # {'XDipole', 'YDipole', 'ZDipole'}
+    nuclear = np.asarray(dipole.nuclear_dipole_moment, dtype=float)
+
+    operators = []
+    for axis, key in enumerate(("XDipole", "YDipole", "ZDipole")):
+        elec = mapper.map(elec_ops[key])
+        identity = SparsePauliOp.from_list([("I" * elec.num_qubits, nuclear[axis])])
+        operators.append((identity - elec).simplify())
+    return operators
+
+
 if __name__ == "__main__":
     for name, spec in {
         "H2": dict(atom="H 0 0 0; H 0 0 0.74"),

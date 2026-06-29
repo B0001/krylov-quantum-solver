@@ -77,12 +77,13 @@ def expm_multiply_taylor(H, v, t, lambda_bound, theta: float = 0.9, order: int =
     return w
 
 
-def ritz_spectrum(H, S, threshold: float = 1e-10, noise_floor: float = 0.0):
-    """Thresholded canonical orthogonalisation for ``H c = E S c``; returns (ritz, rank).
+def ritz_pairs(H, S, threshold: float = 1e-10, noise_floor: float = 0.0):
+    """Thresholded canonical orthogonalisation for ``H c = E S c``; returns (vals, C, rank).
 
-    ``ritz`` is the full ascending array of Ritz values (the eigenvalues of H projected onto the
-    well-conditioned subspace) -- ``ritz[0]`` is the ground-state estimate, ``ritz[1:]`` the
-    excited-state estimates (see ``solve_excited``).
+    ``vals`` is the ascending array of Ritz values; ``C`` (shape ``M x rank``) holds the
+    corresponding generalised eigenvectors **in the original Krylov basis** -- column ``m`` gives
+    the coefficients of |Ψ_m⟩ = Σ_i C[i, m] |φ_i⟩, S-normalised (⟨Ψ_m|Ψ_m⟩ = 1). These are what
+    ``eigenstates`` reconstructs into Hilbert-space vectors for property evaluation.
 
     The overlap cutoff is the larger of a relative floor (``threshold * lambda_max``) and a
     noise-aware absolute floor (``noise_floor``): overlap directions buried below the
@@ -99,8 +100,19 @@ def ritz_spectrum(H, S, threshold: float = 1e-10, noise_floor: float = 0.0):
     X = V / np.sqrt(s_keep)                           # canonical S^{-1/2} on kept subspace
     H_proj = X.conj().T @ H @ X
     H_proj = 0.5 * (H_proj + H_proj.conj().T)
-    ritz = np.linalg.eigvalsh(H_proj).real            # ascending
-    return ritz, int(keep.sum())
+    vals, Y = np.linalg.eigh(H_proj)                  # ascending; Y orthonormal in the kept basis
+    C = X @ Y                                         # eigenvectors back in the Krylov basis
+    return vals.real, C, int(keep.sum())
+
+
+def ritz_spectrum(H, S, threshold: float = 1e-10, noise_floor: float = 0.0):
+    """Ascending Ritz values of ``H c = E S c``; returns (ritz, rank).
+
+    Thin wrapper over :func:`ritz_pairs` discarding the eigenvectors. ``ritz[0]`` is the
+    ground-state estimate, ``ritz[1:]`` the excited-state estimates (see ``solve_excited``).
+    """
+    vals, _, rank = ritz_pairs(H, S, threshold, noise_floor)
+    return vals, rank
 
 
 def solve_generalized_eig(H, S, threshold: float = 1e-10, noise_floor: float = 0.0):
@@ -296,6 +308,31 @@ class QuantumKrylovSolver:
             ritz = ritz[:n_states]
         energies = [float(e) + self.offset for e in ritz]
         return ExcitedKrylovStep(dim=krylov_dim, rank=rank, energies=energies)
+
+    def eigenstates(self, krylov_dim: int, n_states: Optional[int] = None):
+        """Krylov eigen-energies and the corresponding Hilbert-space eigenvectors.
+
+        Returns ``(energies, states)`` where ``energies`` is the ascending list of total energies
+        (offset included, identical to ``solve_excited``) and ``states`` is an ``(k, N)`` complex
+        array whose row ``m`` is the Ritz eigenstate |Ψ_m⟩ = Σ_i C[i, m] |φ_i⟩ as a normalised
+        statevector. These feed the property layer (``qksd_properties``): permanent and transition
+        dipoles are ⟨Ψ_m|Ô|Ψ_n⟩ on these states. CPU path only (properties are a dense reference
+        analysis; a GPU statevector is copied back to host). See specs/SPEC_qksd_properties.md.
+        """
+        if krylov_dim < 1:
+            raise ValueError("krylov_dim must be >= 1")
+        H, S = self._subspace_matrices(krylov_dim)
+        vals, C, _ = ritz_pairs(H, S, self.threshold, 5.0 * self.noise_sigma)
+        if n_states is not None:
+            vals, C = vals[:n_states], C[:, :n_states]
+        if self.device == "gpu":
+            basis = [self._cp.asnumpy(v) for v in self._basis[:krylov_dim]]
+        else:
+            basis = self._basis[:krylov_dim]
+        B = np.asarray(basis)                         # (M, N): rows are the Krylov vectors
+        states = C.T @ B                              # (k, N): row m is |Ψ_m>
+        energies = [float(e) + self.offset for e in vals]
+        return energies, states
 
 
 if __name__ == "__main__":

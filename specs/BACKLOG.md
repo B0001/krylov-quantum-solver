@@ -52,6 +52,13 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   excitation gap matches FCI < 1.6 mHa. Gates G1–G4 in `tests/test_qksd_excited_spec.py`;
   `solve_excited` in `quantum_krylov_solver.py`. → [`SPEC_qksd_excited.md`](SPEC_qksd_excited.md)
   (repro of `arXiv:2109.06868`; exact statevector, no advantage at this scale).
+- [x] **QKSD molecular properties** — the Krylov eigenstates (not just energies) give dipoles,
+  transition dipoles, and oscillator strengths via ⟨Ψ_m|μ̂|Ψ_n⟩, matching dense-diagonalization
+  FCI: HeH⁺ permanent dipole + bright transition (|μ|≈0.85 a.u.), H₂ recovered dipole-zero/dark by
+  symmetry; property matrices Hermitian, eigenstates normalized. Gates G1–G4 in
+  `tests/test_qksd_properties_spec.py`; `eigenstates`/`ritz_pairs` + `qksd_properties.py` +
+  `build_dipole_operators`. → [`SPEC_qksd_properties.md`](SPEC_qksd_properties.md) (repro of
+  `arXiv:2501.05286`; property values, not the hardware RDM/QSP measurement scheme).
 
 ## Killed
 

@@ -12,10 +12,12 @@ fixtures -- see REFACTOR_PLAN.md. They are intentionally NOT exported here.
 """
 from .molecular_hamiltonian import (
     MolecularHamiltonian,
+    build_dipole_operators,
     build_hamiltonian_from_integrals,
     build_molecular_hamiltonian,
 )
 from .pipeline import PipelineResult, run_from_integrals, run_geometry
+from .qksd_properties import oscillator_strengths, property_matrix, transition_dipoles
 from .quantum_krylov_solver import ExcitedKrylovStep, KrylovStep, QuantumKrylovSolver
 from .trotter_krylov import TrotterKrylovSolver, build_trotter_step, estimate_energy_aer
 from .hardware_krylov import HardwareKrylovSolver
@@ -25,9 +27,13 @@ __all__ = [
     "MolecularHamiltonian",
     "build_molecular_hamiltonian",
     "build_hamiltonian_from_integrals",
+    "build_dipole_operators",
     "QuantumKrylovSolver",
     "KrylovStep",
     "ExcitedKrylovStep",
+    "property_matrix",
+    "transition_dipoles",
+    "oscillator_strengths",
     "TrotterKrylovSolver",
     "build_trotter_step",
     "estimate_energy_aer",
