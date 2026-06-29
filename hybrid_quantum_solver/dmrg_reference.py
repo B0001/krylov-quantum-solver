@@ -121,6 +121,7 @@ def dmrg_energy_extrapolated(
     sweeps_per_stage: int = 4,
     scratch: str = "./.dmrg_tmp",
     n_threads: int = 4,
+    stack_mem=None,
     seed=None,
 ) -> ExtrapResult:
     """DMRG energy extrapolated to infinite bond dimension via the discarded-weight rule.
@@ -146,7 +147,12 @@ def dmrg_energy_extrapolated(
 
     norb = h1.shape[0]
     na, nb = _as_pair(n_elec)
-    drv = DMRGDriver(scratch=scratch, symm_type=SymmetryTypes.SU2, n_threads=n_threads)
+    # block2 preallocates a fixed memory pool (~0.5 GB by default); large D at large n overruns it
+    # and aborts. stack_mem (bytes) raises that ceiling -- size it to the node, not the problem.
+    driver_kwargs = dict(scratch=scratch, symm_type=SymmetryTypes.SU2, n_threads=n_threads)
+    if stack_mem is not None:
+        driver_kwargs["stack_mem"] = int(stack_mem)
+    drv = DMRGDriver(**driver_kwargs)
     if seed is not None:
         try:
             import block2
@@ -217,6 +223,33 @@ def thermodynamic_limit_fit(ns, e_per_atom) -> Tuple[float, float]:
         return float(np.polyfit(x, y, 1)[1]), 0.0
     coef, cov = np.polyfit(x, y, 1, cov=True)
     return float(coef[1]), float(np.sqrt(max(cov[1, 1], 0.0)))
+
+
+def bulk_per_site_energy(ns, totals, *, step=None) -> float:
+    """Bulk (surface-term-free) per-site energy from total energies E(n) of an open chain.
+
+    For an open chain the total is ``E(n) ~ n * e_inf + c`` with a constant two-end surface term
+    ``c``, so the difference quotient ``(E(n) - E(n-d)) / d`` cancels ``c`` and estimates the bulk
+    per-site energy ``e_inf`` directly -- an independent cross-check on the 1/n surface-term fit in
+    ``thermodynamic_limit_fit`` (it approaches e_inf from a different direction).
+
+    ``ns``, ``totals`` : matching sequences of chain lengths and total energies.
+    ``step``           : the site gap ``d`` to difference over. Default: the two largest available n.
+    """
+    pairs = sorted(zip((int(n) for n in ns), (float(e) for e in totals)))
+    if len(pairs) < 2:
+        raise ValueError("bulk_per_site_energy needs at least two (n, E) points")
+    by_n = dict(pairs)
+    if step is None:
+        (n1, e1), (n2, e2) = pairs[-2], pairs[-1]
+    else:
+        step = int(step)
+        candidates = [n for n in by_n if (n - step) in by_n]
+        if not candidates:
+            raise ValueError(f"no pair separated by step={step} in ns={sorted(by_n)}")
+        n2 = max(candidates)
+        n1, e1, e2 = n2 - step, by_n[n2 - step], by_n[n2]
+    return (e2 - e1) / (n2 - n1)
 
 
 def reference_energy(h1, eri, n_elec, e_core: float = 0.0, method: str = "auto", **kwargs):

@@ -27,6 +27,7 @@ from pyscf import gto, scf, ao2mo
 from hybrid_quantum_solver.dmrg_reference import (
     dmrg_energy_extrapolated,
     thermodynamic_limit_fit,
+    bulk_per_site_energy,
     fci_energy,
     dmrg_available,
 )
@@ -72,6 +73,8 @@ def main():
                     help="DMRG extrapolation protocol ('ramp' is ~2x faster -- use for large n).")
     ap.add_argument("--ns", default=None, help="comma-separated chain lengths (overrides default).")
     ap.add_argument("--bond-dims", default=None, help="comma-separated D schedule (overrides default).")
+    ap.add_argument("--stack-mem-gb", type=float, default=None,
+                    help="block2 memory pool in GB (raise for large D at large n; default ~0.5).")
     args = ap.parse_args()
     if not dmrg_available():
         print("[FATAL] block2 required: pip install block2.")
@@ -97,8 +100,10 @@ def main():
             continue
         h1, eri, ne, ec, e_hf = integrals(n)
         ndet = math.comb(n, ne[0]) * math.comb(n, ne[1])
+        stack_mem = int(args.stack_mem_gb * 1024**3) if args.stack_mem_gb else None
         res = dmrg_energy_extrapolated(h1, eri, ne, ec, bond_dims=dims,
-                                       protocol=args.protocol, n_threads=args.threads)
+                                       protocol=args.protocol, n_threads=args.threads,
+                                       stack_mem=stack_mem)
         e_fci = fci_energy(h1, eri, ne, ec) if ndet <= FCI_DET_CUTOFF else None
         d_fci = abs(res.energy - e_fci) if e_fci is not None else None
         epa = res.energy / n
@@ -126,6 +131,10 @@ def main():
         print(f"\nThermodynamic limit  e_inf = {e_inf:.6f} +/- {stderr:.6f} Ha/atom")
         print(f"  leave-one-out (drop n={ns[-1]}): {e_inf_lo:.6f}  "
               f"(shift {abs(e_inf - e_inf_lo) * 1e3:.2f} mHa/atom)")
+        # Independent cross-check: surface-term-free bulk per-site estimator (SPEC_hchain_largen2 G2).
+        e_bulk = bulk_per_site_energy(ns, [per_atom[n] * n for n in ns])
+        print(f"  bulk per-site (E(n)-E(n-d))/d at n={ns[-1]}: {e_bulk:.6f}  "
+              f"(vs 1/n fit {abs(e_bulk - e_inf) * 1e3:.2f} mHa/atom)")
     print(f"\nMinimal-basis model, open chain -- reproduces benchmark physics, not a new result.  ->  {OUTPUT}")
 
 
