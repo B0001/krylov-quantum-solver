@@ -1,6 +1,7 @@
 # SPEC: Sample-based Krylov quantum diagonalization (SKQD) reproduces the exact-Krylov floor
 
-**Status:** DRAFT — awaiting approval. No implementation until the acceptance gates are agreed.
+**Status:** CLOSED — gates pre-agreed in `BACKLOG.md`; G1–G4 PASS (`make gates`, 2026-06-29).
+Implementation merged (`hybrid_quantum_solver/skqd.py`). Measured findings recorded inline in §5.
 
 > A spec is a *falsifiable hypothesis*, not a contract: if implementation shows a gate is wrong,
 > change the gate and record why (that mismatch is the finding).

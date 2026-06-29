@@ -1,6 +1,8 @@
 # SPEC: Factorization-native λ + symmetry shift lowers the FT-QPE 1-norm
 
-**Status:** DRAFT — awaiting approval. No implementation until the acceptance gates are agreed.
+**Status:** CLOSED — gates pre-agreed in `BACKLOG.md`; G1–G4 PASS (`make gates`, 2026-06-29).
+Implementation merged (`df_factorization.py`). Headline (§5 G3): N₂ CAS(6,6) λ_DF 24.94 → 4.00 Ha
+(84% drop) with FCI invariant < 1e-8 Ha.
 
 > A spec is a *falsifiable hypothesis*, not a contract: if implementation shows a gate is wrong,
 > change the gate and record why (that mismatch is the finding).

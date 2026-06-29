@@ -1,6 +1,9 @@
 # SPEC: Hₙ to larger n, done right (adequate-D ramp + bulk per-site estimator)
 
-**Status:** DRAFT — awaiting approval. No implementation until the acceptance gates are agreed.
+**Status:** PARTIAL — CI gates G1–G3 PASS (`make gates`, 2026-06-29); `bulk_per_site_energy`
+merged. The headline "definition of done" (leave-one-out < 0.1 mHa/atom on the large-n D=400/800/1600
+ramp) is a **driver-level run not yet executed/recorded** — see §5. Small-n proxy (G2) agrees to
+0.51 mHa/atom, on the right side but not yet the headline.
 
 > Supersedes [`SPEC_hchain_largen.md`](SPEC_hchain_largen.md), which was **killed**: the cheap
 > ramp at D=100/200/400 truncated too hard as chain entanglement grew — discarded-weight stderr
