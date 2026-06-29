@@ -45,6 +45,13 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   invariant < 1e-8 Ha. Gates G1–G4 in `tests/test_scdf_lambda_spec.py`; `df_factorization.py`.
   → [`SPEC_scdf_lambda.md`](SPEC_scdf_lambda.md) (repro of BLISS/SCDF — `arXiv:2403.03502`,
   `2412.01338`; closes the gap named in `lambda_ladder.py`).
+- [x] **QKSD excited states** — the same real-time Krylov subspace carries the low-lying *excited*
+  spectrum in its Ritz values. Every Ritz value is variationally above its exact target (Cauchy
+  interlacing); on H₄ the lowest 3 of 12 HF-reachable states converge to < 0.05 mHa by depth M=24
+  (excited states need deeper M than the ground state — the recorded finding), and the first
+  excitation gap matches FCI < 1.6 mHa. Gates G1–G4 in `tests/test_qksd_excited_spec.py`;
+  `solve_excited` in `quantum_krylov_solver.py`. → [`SPEC_qksd_excited.md`](SPEC_qksd_excited.md)
+  (repro of `arXiv:2109.06868`; exact statevector, no advantage at this scale).
 
 ## Killed
 

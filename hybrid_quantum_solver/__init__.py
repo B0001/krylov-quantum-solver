@@ -16,7 +16,7 @@ from .molecular_hamiltonian import (
     build_molecular_hamiltonian,
 )
 from .pipeline import PipelineResult, run_from_integrals, run_geometry
-from .quantum_krylov_solver import KrylovStep, QuantumKrylovSolver
+from .quantum_krylov_solver import ExcitedKrylovStep, KrylovStep, QuantumKrylovSolver
 from .trotter_krylov import TrotterKrylovSolver, build_trotter_step, estimate_energy_aer
 from .hardware_krylov import HardwareKrylovSolver
 from .dmrg_reference import dmrg_available, dmrg_energy, fci_energy, reference_energy
@@ -27,6 +27,7 @@ __all__ = [
     "build_hamiltonian_from_integrals",
     "QuantumKrylovSolver",
     "KrylovStep",
+    "ExcitedKrylovStep",
     "TrotterKrylovSolver",
     "build_trotter_step",
     "estimate_energy_aer",

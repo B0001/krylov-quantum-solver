@@ -3,7 +3,10 @@
 **Status:** PARTIAL — CI gates G1–G3 PASS (`make gates`, 2026-06-29); `bulk_per_site_energy`
 merged. The headline "definition of done" (leave-one-out < 0.1 mHa/atom on the large-n D=400/800/1600
 ramp) is a **driver-level run not yet executed/recorded** — see §5. Small-n proxy (G2) agrees to
-0.51 mHa/atom, on the right side but not yet the headline.
+0.51 mHa/atom, on the right side but not yet the headline. **Attempt 2026-06-29** (n=16..30,
+D=400/800/1600, 8 threads) **aborted**: block2 ran out of stack memory before the first row
+(`Abort trap: 6`, "exceeding allowed memory"). The headline run needs a larger-memory node and/or
+`--stack-mem-gb` tuning / staged n — it is not satisfiable on this machine as specced.
 
 > Supersedes [`SPEC_hchain_largen.md`](SPEC_hchain_largen.md), which was **killed**: the cheap
 > ramp at D=100/200/400 truncated too hard as chain entanglement grew — discarded-weight stderr

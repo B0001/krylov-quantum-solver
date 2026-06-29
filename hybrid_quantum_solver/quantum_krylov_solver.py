@@ -77,16 +77,18 @@ def expm_multiply_taylor(H, v, t, lambda_bound, theta: float = 0.9, order: int =
     return w
 
 
-def solve_generalized_eig(H, S, threshold: float = 1e-10, noise_floor: float = 0.0):
-    """Thresholded canonical orthogonalisation for ``H c = E S c``; returns (energy, rank).
+def ritz_spectrum(H, S, threshold: float = 1e-10, noise_floor: float = 0.0):
+    """Thresholded canonical orthogonalisation for ``H c = E S c``; returns (ritz, rank).
+
+    ``ritz`` is the full ascending array of Ritz values (the eigenvalues of H projected onto the
+    well-conditioned subspace) -- ``ritz[0]`` is the ground-state estimate, ``ritz[1:]`` the
+    excited-state estimates (see ``solve_excited``).
 
     The overlap cutoff is the larger of a relative floor (``threshold * lambda_max``) and a
     noise-aware absolute floor (``noise_floor``): overlap directions buried below the
     sampling-noise level carry no signal and must be dropped, otherwise dividing by their tiny
     eigenvalues amplifies noise and lets the estimate drift below the true minimum
     (cf. Epperly, Lin & Nakatsukasa, SIAM J. Matrix Anal. Appl. 43, 1263, 2022).
-
-    Shared by the exact-evolution solver and the Trotter-circuit solver.
     """
     s_vals, s_vecs = eigh(S)
     cutoff = max(threshold * s_vals.max(), noise_floor)
@@ -97,8 +99,19 @@ def solve_generalized_eig(H, S, threshold: float = 1e-10, noise_floor: float = 0
     X = V / np.sqrt(s_keep)                           # canonical S^{-1/2} on kept subspace
     H_proj = X.conj().T @ H @ X
     H_proj = 0.5 * (H_proj + H_proj.conj().T)
-    energy = float(np.linalg.eigvalsh(H_proj)[0].real)
-    return energy, int(keep.sum())
+    ritz = np.linalg.eigvalsh(H_proj).real            # ascending
+    return ritz, int(keep.sum())
+
+
+def solve_generalized_eig(H, S, threshold: float = 1e-10, noise_floor: float = 0.0):
+    """Ground-state Ritz value of ``H c = E S c``; returns (energy, rank).
+
+    Thin wrapper over :func:`ritz_spectrum` (returns its lowest Ritz value). Shared by the
+    exact-evolution solver and the Trotter-circuit solver; the variational floor argument applies
+    to every Ritz value, not just the lowest.
+    """
+    ritz, rank = ritz_spectrum(H, S, threshold, noise_floor)
+    return float(ritz[0]), rank
 
 
 @dataclass
@@ -107,6 +120,14 @@ class KrylovStep:
     dim: int          # requested Krylov dimension M
     rank: int         # effective subspace rank kept after thresholding
     energy: float     # total energy in Ha (electronic eigenvalue + offset)
+
+
+@dataclass
+class ExcitedKrylovStep:
+    """Low-lying spectrum at one Krylov dimension (ground + excited Ritz values)."""
+    dim: int                # requested Krylov dimension M
+    rank: int               # effective subspace rank kept after thresholding
+    energies: List[float]   # ascending total energies in Ha (offset included); [0] is the ground
 
 
 class QuantumKrylovSolver:
@@ -257,6 +278,24 @@ class QuantumKrylovSolver:
         """Energies for M = 1 .. max_dim (basis built once and reused)."""
         self._ensure_basis(max_dim)
         return [self.solve(m) for m in range(1, max_dim + 1)]
+
+    def solve_excited(self, krylov_dim: int, n_states: Optional[int] = None) -> ExcitedKrylovStep:
+        """Estimate the low-lying spectrum (ground + excited) from a Krylov space.
+
+        Returns the lowest ``n_states`` Ritz values (all of them if ``n_states`` is None) of the
+        same subspace ``solve`` uses -- ``energies[0]`` is identical to ``solve(krylov_dim).energy``.
+        Each Ritz value is variationally above the corresponding exact eigenvalue (Cauchy
+        interlacing); excited states are reachable only insofar as |HF> overlaps them. See
+        specs/SPEC_qksd_excited.md.
+        """
+        if krylov_dim < 1:
+            raise ValueError("krylov_dim must be >= 1")
+        H, S = self._subspace_matrices(krylov_dim)
+        ritz, rank = ritz_spectrum(H, S, self.threshold, 5.0 * self.noise_sigma)
+        if n_states is not None:
+            ritz = ritz[:n_states]
+        energies = [float(e) + self.offset for e in ritz]
+        return ExcitedKrylovStep(dim=krylov_dim, rank=rank, energies=energies)
 
 
 if __name__ == "__main__":
