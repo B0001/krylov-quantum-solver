@@ -107,6 +107,13 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   `tests/test_classical_shadows_spec.py`; `classical_shadows.py`.
   → [`SPEC_classical_shadows.md`](SPEC_classical_shadows.md) (repro of HKP — `arXiv:2002.08953`;
   random-Pauli shadows, exact statevector).
+- [x] **Rodeo algorithm** — stochastic spectral filter: K cycles of random-time evolution + ancilla
+  band-pass the spectrum to a target E. The expected survival probability peaks at the eigenvalues
+  with height = reference overlap; the dominant low-energy peak recovers FCI (≈0.13 mHa, H₂/H₄), the
+  peak sharpens with K (H₄ 4.63→0.13 mHa over K=3→12), off-resonance suppressed as (<1)^K. **Finding:**
+  ground-peak height = |⟨HF|E_0⟩|², so a poor reference gives a weak peak. Gates G1–G4 in
+  `tests/test_rodeo_spec.py`; `rodeo.py`. → [`SPEC_rodeo.md`](SPEC_rodeo.md) (repro of
+  `arXiv:2009.04092`; expected-value simulation, exact statevector).
 
 ## Killed
 
