@@ -24,9 +24,11 @@ from .hardware_krylov import HardwareKrylovSolver
 from .dmrg_reference import dmrg_available, dmrg_energy, fci_energy, reference_energy
 from .model_hamiltonians import (
     ModelIntegrals,
+    hubbard_chain_integrals,
     hubbard_dimer_energy,
     hubbard_dimer_gap,
     hubbard_integrals,
+    lieb_wu_energy,
     load_from_nb3x8_database,
 )
 
@@ -54,7 +56,9 @@ __all__ = [
     "run_from_integrals",
     "ModelIntegrals",
     "hubbard_integrals",
+    "hubbard_chain_integrals",
     "hubbard_dimer_energy",
     "hubbard_dimer_gap",
+    "lieb_wu_energy",
     "load_from_nb3x8_database",
 ]

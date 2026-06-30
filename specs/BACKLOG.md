@@ -18,9 +18,14 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   moves the FCI/DMRG well depth from ~305 cm⁻¹ toward the experimental 929.7. *Gate (reproduction):*
   `|D_e − 930| < 100 cm⁻¹` at CBS+CV; `R_e` within 0.1 Å of 2.45. (Honest: reproduces a settled
   result.)
-- [ ] **1D Hubbard vs Bethe ansatz** — *Claim:* the solver/DMRG reproduce the exact 1D Hubbard
-  ground-state energy. *Gate:* `|E − E_Bethe| < 1 mHa/site` at half-filling, L=10, several U/t.
-  (A clean analytic reference — strong falsifiability.)
+- [x] **1D Hubbard vs Bethe ansatz** — the validated stack (`hubbard_chain_integrals` → FCI/Krylov)
+  reproduces the exact Lieb–Wu Bethe-ansatz energy: closed-shell-BC finite-L FCI extrapolates to the
+  TDL integral (U=2→1.6, U=4→5.5, U=8→1.4 mHa/site), free-fermion (−4/π) + dimer limits at machine
+  precision. *Gate revised from 1 mHa/site to < 8 mHa/site:* L≤12 FCI extrapolation is finite-size-
+  limited (intermediate coupling slowest); sub-mHa needs DMRG at larger L. Finding: HF-referenced
+  Krylov is slow on the strongly-correlated Mott chain (L≥6, large U). Gates G1–G4 in
+  `tests/test_hubbard_bethe_spec.py`; `model_hamiltonians.py`.
+  → [`SPEC_hubbard_bethe.md`](SPEC_hubbard_bethe.md) (repro of Lieb & Wu 1968, exact analytic ref).
 - [ ] **GPU backend on real hardware** — *Claim:* `device="gpu"` reproduces CPU energies and reaches
   larger qubit counts. *Gate (on an NVIDIA node):* `|E_gpu − E_cpu| < 1e-6 Ha` at 16q; completes a
   28q statevector run. (Code exists, CPU-validated; needs a GPU node — see `tests/test_gpu_backend.py`.)

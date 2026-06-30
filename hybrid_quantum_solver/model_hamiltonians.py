@@ -196,6 +196,57 @@ def hubbard_dimer_gap(t: float, U: float) -> float:
     return -hubbard_dimer_energy(t, U)
 
 
+def hubbard_chain_integrals(
+    n_sites: int,
+    U: float,
+    t: float = 1.0,
+    *,
+    closed_shell: bool = True,
+    e_core: float = 0.0,
+    units: str = "Ha",
+) -> ModelIntegrals:
+    """Half-filled 1D Hubbard ring: nearest-neighbour hopping ``t``, on-site ``U``, as integrals.
+
+    ``h1`` is the ``n_sites x n_sites`` ring hopping matrix (``-t`` on the nearest-neighbour
+    off-diagonals and the wrap). ``closed_shell`` picks the boundary phase that closes the
+    non-interacting shell -- **periodic** when ``n_sites/2`` is odd, **antiperiodic** (``+t`` on the
+    wrap) when even. That removes the open-shell even/odd-L zigzag in the finite-size energy, so the
+    per-site energy converges smoothly (``~1/L^2``) to the thermodynamic limit and can be compared
+    to :func:`lieb_wu_energy`. Filling is fixed to half (``n_sites/2`` electrons per spin); ``n_sites``
+    must be even.
+    """
+    if n_sites % 2:
+        raise ValueError("n_sites must be even (half-filling)")
+    h = np.zeros((n_sites, n_sites))
+    for i in range(n_sites - 1):
+        h[i, i + 1] = h[i + 1, i] = -t
+    if n_sites > 2:
+        wrap = -t if (not closed_shell or (n_sites // 2) % 2 == 1) else +t
+        h[0, n_sites - 1] = h[n_sites - 1, 0] = wrap
+    return hubbard_integrals(h, U, nelec=(n_sites // 2, n_sites // 2), e_core=e_core, units=units)
+
+
+def lieb_wu_energy(U: float, t: float = 1.0) -> float:
+    """Exact half-filled 1D Hubbard ground-state energy **per site** in the thermodynamic limit.
+
+    The Bethe-ansatz result (Lieb & Wu, Phys. Rev. Lett. 20, 1445, 1968):
+
+        e0 / t = -4 * integral_0^inf  J0(w) J1(w) / ( w (1 + exp(w U / (2 t))) )  dw
+
+    with ``J0, J1`` Bessel functions. Limits: ``U=0 -> -4 t / pi`` (free fermions); ``U -> inf -> 0``
+    (Mott insulator, ``~ -4 ln2 t^2 / U`` superexchange). This is the analytic reference the finite-
+    size :func:`hubbard_chain_integrals` energies are extrapolated against (see specs/SPEC_hubbard_bethe.md).
+    """
+    from scipy.integrate import quad
+    from scipy.special import j0, j1
+
+    def integrand(w):
+        return j0(w) * j1(w) / (w * (1.0 + np.exp(np.clip(w * U / (2.0 * t), 0.0, 700.0))))
+
+    value, _ = quad(integrand, 0.0, np.inf, limit=400)
+    return -4.0 * t * value
+
+
 # -- Nb3X8 -------------------------------------------------------------------------------------
 
 # Bulk low-temperature generalized Hubbard *dimer* parameters (meV). The bulk LT manifold is two
