@@ -59,6 +59,13 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   `tests/test_qksd_properties_spec.py`; `eigenstates`/`ritz_pairs` + `qksd_properties.py` +
   `build_dipole_operators`. → [`SPEC_qksd_properties.md`](SPEC_qksd_properties.md) (repro of
   `arXiv:2501.05286`; property values, not the hardware RDM/QSP measurement scheme).
+- [x] **Tensor hypercontraction (THC) factorization + λ** — `(pq|rs) ≈ Σ χχ ζ χχ`; linear-LS THC
+  reconstructs exactly at rank norb(norb+1)/2 (28<196 for H₂O vs DF-THC), FCI preserved, and
+  `thc_lambda` == `df_lambda` on the DF-derived structured THC (validates the 1-norm against vetted
+  code). **Finding:** with unoptimized collocation λ_THC ≈ 62× λ_DF — the THC λ advantage needs
+  ISDF/optimized points (out of scope). Gates G1–G4 in `tests/test_thc_lambda_spec.py`;
+  `thc_factorization.py`. → [`SPEC_thc_lambda.md`](SPEC_thc_lambda.md) (repro of `arXiv:2011.03494`;
+  the asymptotic λ win is not reachable at this scale with naive collocation — the recorded boundary).
 
 ## Killed
 
