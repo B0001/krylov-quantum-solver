@@ -81,6 +81,14 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   low shots. Gates G1–G4 in `tests/test_qksd_noise_spec.py` (no new code — reuses the noise
   machinery). → [`SPEC_qksd_noise.md`](SPEC_qksd_noise.md) (repro of QKSD sampling-error analysis,
   `arXiv` Lee-Lee-Huh / Kirby 2024; idealized i.i.d. shot noise).
+- [x] **Mirror subspace diagonalization (MSD)** — estimates H from central finite-differences of
+  shifted-time overlaps instead of per-Pauli measurement, so sampling variance scales with the
+  stencil 1-norm fd1 not the Hamiltonian 1-norm λ. With an energy-level shift + order-8 stencil,
+  fd1=5.48 < λ=14.75 on N₂ CAS(6,6) and MSD's median error is ≈ 3.2× below KQD at 10⁵ shots.
+  **Boundary:** H₂ (λ/W≈1.3) gives fd1>λ → no advantage; the win is a λ/W effect, modest at this
+  scale (the paper's 10–10⁴× needs larger λ/W). Gates G1–G4 in `tests/test_msd_sampling_spec.py`;
+  `msd.py`. → [`SPEC_msd_sampling.md`](SPEC_msd_sampling.md) (repro of `arXiv:2511.20998`; idealized
+  shot noise, exact statevector).
 
 ## Killed
 
