@@ -94,6 +94,12 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   scale (the paper's 10–10⁴× needs larger λ/W). Gates G1–G4 in `tests/test_msd_sampling_spec.py`;
   `msd.py`. → [`SPEC_msd_sampling.md`](SPEC_msd_sampling.md) (repro of `arXiv:2511.20998`; idealized
   shot noise, exact statevector).
+- [x] **Hamiltonian-moment energies (PDS / CMX)** — ground-state energy from the moments ⟨H^n⟩ of
+  the HF reference, no time evolution. PDS(K) is a variational upper bound (≥ FCI at every K) that
+  converges (H₄ 67→10→2.0→0.43 mHa over K=1..4; PDS(1)=⟨H⟩); CMX(2) dips below FCI on H₂
+  (−0.27 mHa) — non-variational, the recorded boundary. Gates G1–G4 in
+  `tests/test_moment_pds_spec.py`; `moment_expansion.py`. → [`SPEC_moment_pds.md`](SPEC_moment_pds.md)
+  (repro of PDS/CMX — `arXiv:2101.08526`, JCP 153 201102; exact statevector moments).
 
 ## Killed
 
