@@ -74,6 +74,13 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   ISDF/optimized points (out of scope). Gates G1–G4 in `tests/test_thc_lambda_spec.py`;
   `thc_factorization.py`. → [`SPEC_thc_lambda.md`](SPEC_thc_lambda.md) (repro of `arXiv:2011.03494`;
   the asymptotic λ win is not reachable at this scale with naive collocation — the recorded boundary).
+- [x] **Excited-state QKSD under shot noise** — `solve_excited` under the finite-sampling noise model
+  degrades gracefully: H₂ gap error shrinks 0.062→0.012 Ha as shots go 4096→262144, stays bounded
+  (no blow-up). **Finding:** excited states are ≈ 24–36× more noise-fragile than the ground state,
+  and weakly-overlapped excited states fall below the noise-aware overlap floor (rank collapse) at
+  low shots. Gates G1–G4 in `tests/test_qksd_noise_spec.py` (no new code — reuses the noise
+  machinery). → [`SPEC_qksd_noise.md`](SPEC_qksd_noise.md) (repro of QKSD sampling-error analysis,
+  `arXiv` Lee-Lee-Huh / Kirby 2024; idealized i.i.d. shot noise).
 
 ## Killed
 
