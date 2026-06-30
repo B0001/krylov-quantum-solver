@@ -100,6 +100,13 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   (−0.27 mHa) — non-variational, the recorded boundary. Gates G1–G4 in
   `tests/test_moment_pds_spec.py`; `moment_expansion.py`. → [`SPEC_moment_pds.md`](SPEC_moment_pds.md)
   (repro of PDS/CMX — `arXiv:2101.08526`, JCP 153 201102; exact statevector moments).
+- [x] **Classical shadows** — estimate ⟨H⟩ from randomized single-qubit (random-Pauli) measurements.
+  Unbiased on HF and FCI states (within 4·stderr), ~1/√shots convergence, single-shot variance
+  bounded by the HKP shadow norm Σ|c_k|²3^{w_k} (1.95 ≤ 3.09 on H₂). **Finding:** the 3^{weight} factor
+  makes high-weight terms sample-expensive (weight≥3 ≈ 22% of the norm). Gates G1–G4 in
+  `tests/test_classical_shadows_spec.py`; `classical_shadows.py`.
+  → [`SPEC_classical_shadows.md`](SPEC_classical_shadows.md) (repro of HKP — `arXiv:2002.08953`;
+  random-Pauli shadows, exact statevector).
 
 ## Killed
 
