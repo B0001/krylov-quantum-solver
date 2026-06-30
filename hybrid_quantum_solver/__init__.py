@@ -22,6 +22,13 @@ from .quantum_krylov_solver import ExcitedKrylovStep, KrylovStep, QuantumKrylovS
 from .trotter_krylov import TrotterKrylovSolver, build_trotter_step, estimate_energy_aer
 from .hardware_krylov import HardwareKrylovSolver
 from .dmrg_reference import dmrg_available, dmrg_energy, fci_energy, reference_energy
+from .model_hamiltonians import (
+    ModelIntegrals,
+    hubbard_dimer_energy,
+    hubbard_dimer_gap,
+    hubbard_integrals,
+    load_from_nb3x8_database,
+)
 
 __all__ = [
     "MolecularHamiltonian",
@@ -45,4 +52,9 @@ __all__ = [
     "PipelineResult",
     "run_geometry",
     "run_from_integrals",
+    "ModelIntegrals",
+    "hubbard_integrals",
+    "hubbard_dimer_energy",
+    "hubbard_dimer_gap",
+    "load_from_nb3x8_database",
 ]

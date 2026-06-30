@@ -24,6 +24,14 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
 - [ ] **GPU backend on real hardware** — *Claim:* `device="gpu"` reproduces CPU energies and reaches
   larger qubit counts. *Gate (on an NVIDIA node):* `|E_gpu − E_cpu| < 1e-6 Ha` at 16q; completes a
   28q statevector run. (Code exists, CPU-validated; needs a GPU node — see `tests/test_gpu_backend.py`.)
+- [~] **Nb₃X₈ / Hubbard model loader** — *Claim:* a tight-binding hopping matrix + Hubbard/cRPA
+  interaction maps onto the universal `(h1, eri, e_core, nelec, norb)` interface and the
+  number-conserving solver reproduces the analytic 2-site Hubbard dimer `(U−√(U²+16t²))/2` and PySCF
+  FCI for a rank-4 cRPA tensor. *Gate:* `|E_solver − E_analytic| < 1e-6 Ha` across U/t = 0…20;
+  rank-4 mapping `< 1e-9` vs FCI. → [`SPEC_nb3x8_hubbard.md`](SPEC_nb3x8_hubbard.md). **G1–G5 green
+  (2026-06-29); `hybrid_quantum_solver/model_hamiltonians.py`.** Validates the Nb₃X₈ Model-Database
+  drop-in path (handoff). Honest: not yet checked against the DB's DMFT/Hubbard-I gaps (DB files not
+  bundled); Nb₃I₈ is the weakly-correlated anchor, not a strong-correlation headline.
 - [ ] **DMRG-referenced transition-metal active space** — *Claim:* for a low-spin NbN (or a smaller
   TM dimer) CAS large enough that FCI is intractable, DMRG gives a converged correlation energy.
   *Gate:* bond-dim extrapolation stderr < 1 mHa **and** agreement between two independent DMRG
