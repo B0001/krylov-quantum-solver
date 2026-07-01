@@ -1,15 +1,19 @@
 """
-Acceptance gates G1-G4 for specs/SPEC_nb3x8_gaps.md (exact Nb3X8 cluster gaps vs Hubbard-I).
+Acceptance gates G1-G6 for specs/SPEC_nb3x8_gaps.md (exact Nb3X8 cluster gaps vs Hubbard-I).
 
 Test-first origin: the Nb3X8 bilayer cluster (a generalized Hubbard dimer, from the arXiv:2501.10320
 cRPA parameters) is exactly diagonalizable; we compute the exact charge gap and the Hubbard-I gap and
 quantify where the Hubbard-I approximation the source paper uses breaks down. Reference: exact
 diagonalization + the t->0 atomic limit (both -> U0).
 
-The gates encode the finding AS REVISED by the full 10-cluster dataset: the material-level conclusion
-(iodides worst; strongly-correlated clusters near-exact) is robust, but the clean single-parameter
-U0/|t| law seen in the 4-point LT-bulk subset does NOT survive (Spearman ~ -0.86, not -1) -- that
-mismatch is itself a recorded finding.
+The gates tell an honest, self-correcting story:
+  * G1-G4: facts about the ISOLATED cluster -- Hubbard-I is near-exact for strong correlation but
+    underestimates the isolated iodide gap by ~29% (G3); the single-ratio U0/|t| law fails (G4).
+  * G5: the one-neighbour "bath bound" -- small (~5%) but MISLEADING (it under-samples coordination).
+  * G6 (the correction, and the real definition of done): restoring inter-dimer coordination collapses
+    the exact gap toward Hubbard-I, so the isolated ~29% is an artifact that does NOT translate to the
+    solid. The thermodynamic-limit story (block2 DMRG ~708 meV -> ~600-650 with 3-D coordination) is
+    in nb3x8_gaps.ssh_chain_gap / the module docstring.
 
 PySCF FCI / NumPy / SciPy only (no block2); `make gates` runs it in its own process.
 """
@@ -18,6 +22,7 @@ from scipy.stats import spearmanr
 from nb3x8_gaps import (
     NB3X8_CLUSTERS,
     NB3X8_LT_BULK_5P,
+    coordination_gap,
     exact_charge_gap,
     four_site_exact_gap,
     hubbard_i_gap,
@@ -44,9 +49,10 @@ def test_G2_exact_gaps_are_the_new_numbers():
         assert computed > 0.0
 
 
-def test_G3_material_level_finding_is_robust():
-    """DEFINITION OF DONE (robust across all 10 clusters): strongly-correlated clusters are near-exact
-    (<2%); the iodides are consistently the worst, with Hubbard-I underestimating their gap."""
+def test_G3_isolated_cluster_iodides_worst():
+    """ISOLATED-CLUSTER FACT (superseded for the material by G6): strongly-correlated clusters are
+    near-exact (<2%); the iodides are the worst, Hubbard-I underestimating the isolated gap. True for
+    the isolated cluster, but G6 shows this does not translate to the solid."""
     def rel_err(name):
         p = NB3X8_CLUSTERS[name]
         return (hubbard_i_gap(**p) - exact_charge_gap(**p)) / exact_charge_gap(**p)
@@ -76,18 +82,30 @@ def test_G4_single_parameter_law_is_falsified():
     assert not all(order[i] >= order[i + 1] for i in range(len(order) - 1)), order   # non-monotone
 
 
-def test_G5_bath_bound_finding_survives_cluster_enlargement():
-    """R1 (the isolated-cluster caveat) is bounded: enlarging the correlated region to include the
-    inter-cluster weak link moves the Nb3I8 gap by only ~5% -- far below the ~29% Hubbard-I error --
-    so the finding travels toward the solid. The bath effect is largest for Nb3F8 (ill-defined dimer,
-    t_s ~ t_w), but Hubbard-I is exact there anyway."""
+def test_G5_nearest_neighbour_shift_is_small_but_misleading():
+    """The nearest-neighbour cluster enlargement (2->4 sites) moves the Nb3I8 gap by only ~5% and is
+    largest for Nb3F8 (ill-defined dimer, t_s ~ t_w). These facts hold -- but this ONE-neighbour
+    'bath bound' is misleading: it under-samples the coordination (see G6). Kept as a recorded fact
+    and a caution, not as evidence the isolated-cluster finding survives."""
     shift = {}
     for name, five in NB3X8_LT_BULK_5P.items():
         g2 = exact_charge_gap(five[0], five[1], five[2])
         shift[name] = abs(four_site_exact_gap(*five) - g2) / g2
-    assert shift["Nb3I8"] < 0.06, shift                            # iodide dimer well-isolated (~5%)
-    assert shift["Nb3I8"] < abs(  # bath shift far below the Hubbard-I error for the iodide
-        (hubbard_i_gap(787.0, -218.2, 258.5) - exact_charge_gap(787.0, -218.2, 258.5))
-        / exact_charge_gap(787.0, -218.2, 258.5)) / 4, shift
-    # bath effect is largest where the dimer is ill-defined (F: t_s ~ t_w), smallest for the iodide
+    assert shift["Nb3I8"] < 0.06, shift                            # ~5% for one neighbour...
     assert shift["Nb3F8"] > shift["Nb3Cl8"] > shift["Nb3Br8"] > shift["Nb3I8"], shift
+
+
+def test_G6_coordination_collapses_the_isolated_cluster_error():
+    """THE CORRECTION (definition of done, superseding the isolated-cluster headline): restoring
+    inter-dimer coordination -- the band broadening the isolated dimer omits and cluster-DMFT keeps --
+    collapses the exact Nb3I8 gap monotonically toward the Hubbard-I value. So the isolated ~29%
+    'error' is an artifact of the isolated-cluster approximation and does NOT translate to the solid;
+    Hubbard-I (embedded in the full dispersion) is close to the true gap."""
+    p = NB3X8_LT_BULK_5P["Nb3I8"]
+    hub = hubbard_i_gap(p[0], p[1], p[2])
+    gaps = [coordination_gap(*p, z) for z in (0, 1, 2, 3)]
+    assert all(gaps[k + 1] < gaps[k] for k in range(3)), gaps        # monotone drop with coordination
+    disc0 = gaps[0] - hub                                            # isolated exact - Hubbard-I
+    disc3 = gaps[3] - hub                                            # after z=3 coordination
+    assert disc3 < 0.35 * disc0, (gaps, hub)                         # >65% of the discrepancy closed
+    assert gaps[3] < gaps[0], gaps                                   # solid gap far below isolated

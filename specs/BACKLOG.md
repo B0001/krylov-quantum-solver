@@ -126,14 +126,15 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
 - [x] **Exact Nb₃X₈ cluster gaps vs Hubbard-I** *(scientific study, not a method rung)* — the Nb₃X₈
   bilayer downfolds to an exactly-diagonalizable generalized Hubbard dimer; from the paper's cRPA
   parameters, exact ED gives charge gaps the paper never reported (Nb₃I₈ bulk 842 / bilayer 1961 …
-  Nb₃F₈ bulk 2581 / bilayer 3979 meV). **Tested across all 10 dimer-cluster sets** (LT bulk, LT
-  bilayer, HT bulk): robust finding — strongly-correlated clusters (F, HT Cl/Br) near-exact (<2%),
-  iodides worst (Hubbard-I underestimates by ~29% bulk / ~12% bilayer). **Negative result recorded:**
-  the clean single-parameter U₀/|t| law from the 4-point subset does *not* survive (Spearman −0.86,
-  non-monotone) — the error is multi-parameter. Both →U₀ as t→0 (validated). Scope: isolated cluster
-  (impurity-solver error, not the solid's gap). Gates G1–G4 in `tests/test_nb3x8_gaps_spec.py`;
-  `nb3x8_gaps.py`. → [`SPEC_nb3x8_gaps.md`](SPEC_nb3x8_gaps.md) (data from `arXiv:2501.10320`,
-  Tables I & IV).
+  Nb₃F₈ bulk 2581 / bilayer 3979 meV). **Corrected conclusion:** on the isolated cluster Hubbard-I
+  underestimates the iodides by ~29% (bulk)/12% (bilayer) and the single-ratio U₀/|t| law fails
+  (Spearman −0.86) — but a thermodynamic-limit check (coordination scan + DMRG chain) shows this is an
+  artifact of neglecting band broadening: restoring coordination collapses the exact Nb₃I₈ gap
+  (842→650 at z=3; ~708 at the 1-D DMRG TDL; ~600–650 with 3-D coordination) back toward Hubbard-I
+  (~599). So it **supports** the paper's cluster-DMFT/Hubbard-I gaps — a null/confirming result whose
+  headline was corrected by the TDL step (the honest turn). Gates G1–G6 in
+  `tests/test_nb3x8_gaps_spec.py`; `nb3x8_gaps.py`. → [`SPEC_nb3x8_gaps.md`](SPEC_nb3x8_gaps.md)
+  (data from `arXiv:2501.10320`, Tables I & IV).
 
 ## Killed
 

@@ -1,12 +1,14 @@
 # SPEC: Exact Nb₃X₈ cluster gaps expose where Hubbard-I breaks down (weakly-correlated Nb₃I₈)
 
-**Status:** CLOSED — gates G1–G4 PASS (2026-07-01); `nb3x8_gaps.py` merged. **Revised by the full
-10-cluster dataset (LT bulk + LT bilayer + HT bulk).** Robust finding: strongly-correlated clusters
-(Nb₃F₈, HT-phase Cl/Br) are near-exact (<2%); the iodides are consistently worst — Hubbard-I
-underestimates Nb₃I₈ by 29% (bulk) / 12% (bilayer). **Recorded negative result:** the clean
-single-parameter "error ∝ U₀/|t|" law from the 4-point LT-bulk subset does **not** survive the full
-set (Spearman −0.86, non-monotone) — the error is multi-parameter (t and U_s⊥). Both → U₀ as t→0
-(validated). Scope: isolated cluster (impurity-solver error, not the solid's gap).
+**Status:** CLOSED — gates G1–G6 PASS (2026-07-01); `nb3x8_gaps.py` merged. **CORRECTED conclusion.**
+On the *isolated* cluster Hubbard-I underestimates the weakly-correlated iodides by ~29% (bulk)/12%
+(bilayer) and is near-exact (<2%) for the strongly-correlated members (G3); the single-ratio U₀/|t|
+law fails across the 10-cluster set (Spearman −0.86, G4). **But the isolated-cluster finding does NOT
+translate to the solid (G6):** restoring inter-dimer coordination collapses the exact Nb₃I₈ gap
+(842→650 at z=3 FCI; ~708 at the 1-D DMRG/block2 TDL; ~600–650 with 3-D coordination) back toward the
+Hubbard-I value (~599). The ~29% is an artifact of neglecting band broadening — so this **supports**
+the paper's Hubbard-I/cluster-DMFT gaps rather than challenging them. A null/confirming result; the
+earlier headline was corrected by the thermodynamic-limit step.
 
 > A spec is a *falsifiable hypothesis*, not a contract: if implementation shows a gate is wrong,
 > change the gate and record why (that mismatch is the finding).

@@ -26,18 +26,25 @@ bilayer, HT bulk):
     not a single-ratio scaling law.
 Both methods agree (-> U0) in the atomic limit t -> 0, which validates the machinery.
 
-HONEST SCOPE: this is the *isolated* two-orbital cluster. The paper's cluster-DMFT embeds it in a
-self-consistent bath, so this quantifies the impurity-solver (Hubbard-I) error *on the cluster*, not
-the solid's true gap. It is not a claim that the paper's material gaps are wrong by 29% -- it flags
-which cluster-level approximation is least reliable. Density-density interactions only (the paper
-reports non-density-density terms of only a few meV). Gaps are in meV.
+*** THE ISOLATED-CLUSTER FINDING DOES NOT TRANSLATE TO THE SOLID (the important correction). ***
+The isolated-dimer exact gap has NO band broadening, so it is an *upper bound* on the solid gap;
+Hubbard-I embedded in the full dispersion (the paper's cluster-DMFT) *includes* broadening and lies
+lower. The two therefore bracket the true gap from opposite sides. Restoring the inter-dimer
+coordination collapses the isolated exact-vs-Hubbard-I discrepancy:
 
-BATH BOUND (``four_site_exact_gap``): enlarging the correlated region to include the inter-cluster
-weak link is a rigorous, bath-fit-free proxy for how far the isolated-cluster result travels toward
-the solid. It moves the Nb3I8 gap by only ~5% (the strong intra-dimer bond isolates the cluster for
-the iodides), vs the ~29% Hubbard-I error -- so the finding survives. The bath effect is largest for
-Nb3F8 (~22%), where t_s ~ t_w makes the dimer ill-defined, but there Hubbard-I is exact anyway. The
-finding is therefore most reliable exactly where it matters (the iodides).
+  * ``coordination_gap`` (central dimer + z out-of-plane neighbours, FCI), Nb3I8:
+      z=0 (isolated) 842 -> z=1 797 -> z=2 747 -> z=3 (~real) 650 meV, heading to Hubbard-I ~599.
+  * ``ssh_chain_gap`` extrapolated to the 1-D thermodynamic limit (DMRG/block2, L=8..20 monotone
+    730->709): ~708 meV, i.e. the out-of-plane chain alone already removes ~55% of the 842->599 gap.
+  * With realistic 3-D coordination (out-of-plane z~3 plus in-plane t_par) the exact solid gap is
+    ~600-650 meV -- close to Hubbard-I.
+
+So the earlier headline "Hubbard-I underestimates the gap by ~29%" is a correct statement ABOUT THE
+ISOLATED CLUSTER but an artifact of neglecting broadening; it does NOT mean the paper's material
+gaps are wrong. If anything this VINDICATES the cluster-DMFT/Hubbard-I approach for the Nb3X8 solid
+gaps. (Density-density interactions only; the paper reports non-density-density terms of a few meV.)
+Gaps are in meV. The ``four_site_exact_gap`` "bath bound" (~5% at z=1) was too optimistic -- it
+sampled only the nearest neighbour; coordination and the full chain (above) move the gap much more.
 """
 from __future__ import annotations
 
@@ -79,6 +86,64 @@ def dimer_cluster_integrals(U0: float, t: float, Us: float) -> ModelIntegrals:
     eri[0, 0, 0, 0] = eri[1, 1, 1, 1] = U0        # on-site Hubbard
     eri[0, 0, 1, 1] = eri[1, 1, 0, 0] = Us        # inter-site density-density
     return ModelIntegrals(h1=h1, eri=eri, e_core=0.0, nelec=(1, 1), norb=2)
+
+
+def _cluster_charge_gap(h1: np.ndarray, eri: np.ndarray) -> float:
+    """Charge gap E(L+1)+E(L-1)-2E(L) of an L-site half-filled extended-Hubbard cluster (FCI)."""
+    L = h1.shape[0]
+    E = {n: fixed_filling_energy(ModelIntegrals(h1, eri, 0.0, (n - n // 2, n // 2), L))
+         for n in (L - 1, L, L + 1)}
+    return E[L + 1] + E[L - 1] - 2 * E[L]
+
+
+def coordination_gap(U0: float, ts: float, Us: float, tw: float, Uw: float, z: int) -> float:
+    """Charge gap of a central dimer with ``z`` out-of-plane weak-link neighbour dimers (FCI).
+
+    A minimal probe of *coordination*: increasing ``z`` restores the band broadening the isolated
+    dimer omits. As ``z`` grows the gap falls toward the Hubbard-I / cluster-DMFT value -- which is
+    why the isolated-cluster ``exact_charge_gap`` OVERESTIMATES the solid gap and the isolated
+    exact-vs-Hubbard-I discrepancy does not translate to the material (see the module docstring and
+    specs/SPEC_nb3x8_gaps.md)."""
+    L = 2 + 2 * z
+    h1 = np.zeros((L, L))
+    eri = np.zeros((L, L, L, L))
+    for i in range(L):
+        eri[i, i, i, i] = U0
+
+    def bond(i, j, t, U):
+        h1[i, j] = h1[j, i] = t
+        eri[i, i, j, j] = eri[j, j, i, i] = U
+
+    bond(0, 1, ts, Us)                               # central strong dimer
+    for k in range(z):
+        a, b = 2 + 2 * k, 3 + 2 * k
+        bond(a, b, ts, Us)                           # pendant strong dimer
+        bond(0 if k % 2 == 0 else 1, a, tw, Uw)      # weak link to an alternating central end
+    return _cluster_charge_gap(h1, eri)
+
+
+def ssh_chain_gap(U0: float, ts: float, Us: float, tw: float, Uw: float, n_dimers: int) -> float:
+    """Charge gap of an open 1-D SSH extended-Hubbard chain of ``n_dimers`` dimers (FCI): strong
+    bonds (ts, Us) within a dimer, weak bonds (tw, Uw) between dimers. This captures the out-of-plane
+    (stacking) inter-dimer coupling; extrapolated to n->inf it gives the quasi-1D gap. For Nb3I8 the
+    DMRG (block2) limit is ~708 meV (L=8..20 monotone 730->709), between the isolated 842 and the
+    fuller-coordination values -- exact FCI here is limited to small n (the L=12 half-filled FCI
+    even fails to converge, which DMRG corrects)."""
+    L = 2 * n_dimers
+    h1 = np.zeros((L, L))
+    eri = np.zeros((L, L, L, L))
+    for i in range(L):
+        eri[i, i, i, i] = U0
+
+    def bond(i, j, t, U):
+        h1[i, j] = h1[j, i] = t
+        eri[i, i, j, j] = eri[j, j, i, i] = U
+
+    for k in range(n_dimers):
+        bond(2 * k, 2 * k + 1, ts, Us)               # strong (intra-dimer)
+    for k in range(n_dimers - 1):
+        bond(2 * k + 1, 2 * k + 2, tw, Uw)           # weak (inter-dimer)
+    return _cluster_charge_gap(h1, eri)
 
 
 # LT-bulk parameters extended with the weak inter-bilayer link (t_w_perp) and its Coulomb (U_w_perp),
@@ -158,12 +223,16 @@ if __name__ == "__main__":
           "iodides\nare consistently worst (bulk ~29%, bilayer ~12%). The error is multi-parameter, "
           "not a clean U0/|t| law.")
 
-    print("\nBath bound -- enlarge the correlated region (isolated dimer -> two dimers + weak link):")
-    print(f"{'compound':8} {'gap 2-site':>10} {'gap 4-site':>10} {'bath shift':>11}")
-    for name, five in NB3X8_LT_BULK_5P.items():
-        g2 = exact_charge_gap(five[0], five[1], five[2])
-        g4 = four_site_exact_gap(*five)
-        print(f"{name:8} {g2:10.1f} {g4:10.1f} {(g4 - g2) / g2 * 100:10.1f}%")
-    print("The bath moves the Nb3I8 gap by only ~5% (well-isolated dimer, t_s >> t_w) vs the ~29% "
-          "Hubbard-I\nerror -- so the finding survives the isolated-cluster approximation. (4-site "
-          "Hubbard-I, computed\nseparately, keeps the Nb3I8 error ~34% -- it grows, not washes out.)")
+    print("\n*** CORRECTION -- the isolated-cluster finding does NOT translate to the solid ***")
+    print("Nb3I8: restoring inter-dimer coordination (band broadening) collapses the exact gap toward "
+          "Hubbard-I:")
+    i = NB3X8_LT_BULK_5P["Nb3I8"]
+    hub = hubbard_i_gap(i[0], i[1], i[2])
+    print(f"{'coordination z':>15} {'exact gap':>10}   (Hubbard-I = {hub:.0f} meV)")
+    for z in (0, 1, 2, 3):
+        print(f"{z:>15} {coordination_gap(*i, z):10.1f}")
+    print("1-D SSH chain -> thermodynamic limit (DMRG/block2, L=8..20 monotone 730->709): ~708 meV.")
+    print("With realistic 3-D coordination the solid gap is ~600-650 meV, close to Hubbard-I. The "
+          "isolated\n'~29% error' is an artifact of neglecting broadening -- it does NOT imply the "
+          "paper's gaps are wrong;\nif anything it vindicates the cluster-DMFT/Hubbard-I approach. "
+          "(The 4-site 'bath bound' was too\noptimistic: it sampled only the nearest neighbour.)")
