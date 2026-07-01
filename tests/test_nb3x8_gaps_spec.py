@@ -15,7 +15,13 @@ PySCF FCI / NumPy / SciPy only (no block2); `make gates` runs it in its own proc
 """
 from scipy.stats import spearmanr
 
-from nb3x8_gaps import NB3X8_CLUSTERS, exact_charge_gap, hubbard_i_gap
+from nb3x8_gaps import (
+    NB3X8_CLUSTERS,
+    NB3X8_LT_BULK_5P,
+    exact_charge_gap,
+    four_site_exact_gap,
+    hubbard_i_gap,
+)
 
 
 def test_G1_atomic_limit_validation():
@@ -68,3 +74,20 @@ def test_G4_single_parameter_law_is_falsified():
     assert -1.0 < rho < -0.7, rho                                   # strong but NOT perfect
     order = [e for _, e in sorted(zip(ratios, errs))]              # by increasing U0/|t|
     assert not all(order[i] >= order[i + 1] for i in range(len(order) - 1)), order   # non-monotone
+
+
+def test_G5_bath_bound_finding_survives_cluster_enlargement():
+    """R1 (the isolated-cluster caveat) is bounded: enlarging the correlated region to include the
+    inter-cluster weak link moves the Nb3I8 gap by only ~5% -- far below the ~29% Hubbard-I error --
+    so the finding travels toward the solid. The bath effect is largest for Nb3F8 (ill-defined dimer,
+    t_s ~ t_w), but Hubbard-I is exact there anyway."""
+    shift = {}
+    for name, five in NB3X8_LT_BULK_5P.items():
+        g2 = exact_charge_gap(five[0], five[1], five[2])
+        shift[name] = abs(four_site_exact_gap(*five) - g2) / g2
+    assert shift["Nb3I8"] < 0.06, shift                            # iodide dimer well-isolated (~5%)
+    assert shift["Nb3I8"] < abs(  # bath shift far below the Hubbard-I error for the iodide
+        (hubbard_i_gap(787.0, -218.2, 258.5) - exact_charge_gap(787.0, -218.2, 258.5))
+        / exact_charge_gap(787.0, -218.2, 258.5)) / 4, shift
+    # bath effect is largest where the dimer is ill-defined (F: t_s ~ t_w), smallest for the iodide
+    assert shift["Nb3F8"] > shift["Nb3Cl8"] > shift["Nb3Br8"] > shift["Nb3I8"], shift

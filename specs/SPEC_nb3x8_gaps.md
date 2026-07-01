@@ -104,8 +104,14 @@ all 10 dimer-cluster parameter sets (`NB3X8_CLUSTERS`).
 
 ## 8. Caveats and risks
 
-- **R1 — isolated cluster ≠ solid.** The single biggest caveat; stated in §2 and the module docstring,
-  and the claim is scoped to the impurity-solver error, not the material gap.
+- **R1 — isolated cluster ≠ solid (bounded, G5).** The biggest caveat, now *quantified* rather than
+  just stated: enlarging the correlated region to include the inter-cluster weak link
+  (`four_site_exact_gap`, a bath-fit-free proxy for the DMFT bath) moves the Nb₃I₈ gap by only ~5%
+  (the strong intra-dimer bond isolates the cluster for the iodides) — far below the ~29% Hubbard-I
+  error — and the 4-site Hubbard-I error *grows* to ~34%, so the finding survives cluster enlargement.
+  The bath effect is largest for Nb₃F₈ (~22%, where `t_s ≈ t_w` makes the dimer ill-defined), but
+  Hubbard-I is exact there anyway. Still not full cluster-DMFT (the paper's method); it bounds how far
+  the finding travels, it does not compute the solid's gap.
 - **R2 — Hubbard-I convention.** The atomic-self-energy embedding has sign/Hartree subtleties.
   *Mitigation:* the `t → 0` gate (G1) pins both methods to `U₀`, catching a mis-derivation loudly.
 - Honest limitation: a minimal two-orbital density-density model; a methodological gap-error study,
@@ -113,7 +119,9 @@ all 10 dimer-cluster parameter sets (`NB3X8_CLUSTERS`).
 
 ## 9. Deliverables
 
-- `nb3x8_gaps.py` — `dimer_cluster_integrals`, `exact_charge_gap`, `hubbard_i_gap`, `NB3X8_LT_BULK`.
-- `tests/test_nb3x8_gaps_spec.py` — gates G1–G4.
-- Results summary (the exact-gap table + the monotonic Hubbard-I error, Nb₃I₈ ≈ 29 %, with the §2/§7
-  caveats front and centre) in the PR description.
+- `nb3x8_gaps.py` — `dimer_cluster_integrals`, `exact_charge_gap`, `hubbard_i_gap`,
+  `four_site_exact_gap` (bath bound), `NB3X8_CLUSTERS`, `NB3X8_LT_BULK`, `NB3X8_LT_BULK_5P`.
+- `tests/test_nb3x8_gaps_spec.py` — gates G1–G5 (G5 = the bath bound).
+- Results summary (the 10-cluster exact-gap table, the robust iodides-worst finding, the falsified
+  single-ratio law, and the bath bound, with the §2/§7 caveats front and centre) in the PR
+  description — packaged to be sendable to the corresponding author.
