@@ -125,12 +125,15 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
 
 - [x] **Exact Nb₃X₈ cluster gaps vs Hubbard-I** *(scientific study, not a method rung)* — the Nb₃X₈
   bilayer downfolds to an exactly-diagonalizable generalized Hubbard dimer; from the paper's cRPA
-  parameters, exact ED gives charge gaps (Nb₃I₈ 842, Br 1086, Cl 1312, F 2581 meV) the paper never
-  reported, and the Hubbard-I error grows monotonically as U₀/|t| falls — <1% for the strongly-
-  correlated F/Cl but **29% (244 meV) for the weakly-correlated Nb₃I₈**. Both →U₀ as t→0 (validated).
-  Honest scope: isolated cluster (impurity-solver error, not the solid's gap). Gates G1–G4 in
-  `tests/test_nb3x8_gaps_spec.py`; `nb3x8_gaps.py`. → [`SPEC_nb3x8_gaps.md`](SPEC_nb3x8_gaps.md)
-  (data from `arXiv:2501.10320`, Table I).
+  parameters, exact ED gives charge gaps the paper never reported (Nb₃I₈ bulk 842 / bilayer 1961 …
+  Nb₃F₈ bulk 2581 / bilayer 3979 meV). **Tested across all 10 dimer-cluster sets** (LT bulk, LT
+  bilayer, HT bulk): robust finding — strongly-correlated clusters (F, HT Cl/Br) near-exact (<2%),
+  iodides worst (Hubbard-I underestimates by ~29% bulk / ~12% bilayer). **Negative result recorded:**
+  the clean single-parameter U₀/|t| law from the 4-point subset does *not* survive (Spearman −0.86,
+  non-monotone) — the error is multi-parameter. Both →U₀ as t→0 (validated). Scope: isolated cluster
+  (impurity-solver error, not the solid's gap). Gates G1–G4 in `tests/test_nb3x8_gaps_spec.py`;
+  `nb3x8_gaps.py`. → [`SPEC_nb3x8_gaps.md`](SPEC_nb3x8_gaps.md) (data from `arXiv:2501.10320`,
+  Tables I & IV).
 
 ## Killed
 

@@ -15,11 +15,16 @@ This study computes, from the paper's own ab-initio cRPA parameters (Table I, LT
     dispersion),
 and quantifies the Hubbard-I error across the correlation-tuned family.
 
-Finding (see specs/SPEC_nb3x8_gaps.md): Hubbard-I is essentially exact for the strongly-correlated
-members (Nb3F8, Nb3Cl8) but **underestimates the charge gap of the weakly-correlated Nb3I8 by ~29%
-(~244 meV)**; the error grows monotonically as U0/|t| falls -- exactly where an atomic-limit
-self-energy must fail. Both methods agree (-> U0) in the atomic limit t -> 0, which validates the
-machinery.
+Finding (see specs/SPEC_nb3x8_gaps.md), across all 10 dimer-cluster parameter sets (LT bulk, LT
+bilayer, HT bulk):
+  * Strongly-correlated clusters (Nb3F8, HT-phase Nb3Cl8/Nb3Br8) -- Hubbard-I is near-exact (< 2%).
+  * The **iodides are consistently the worst**: Hubbard-I underestimates the gap by ~29% (bulk) and
+    ~12% (bilayer) -- largest hopping, weakest on-site U.
+  * BUT the error is **not** a clean single-parameter function of U0/|t| (Spearman ~ -0.86 over the
+    full set, not -1): the 4-point LT-bulk trend that looked monotonic does not survive the extended
+    dataset -- both t and U_s_perp matter. The robust statement is material-level (iodides worst),
+    not a single-ratio scaling law.
+Both methods agree (-> U0) in the atomic limit t -> 0, which validates the machinery.
 
 HONEST SCOPE: this is the *isolated* two-orbital cluster. The paper's cluster-DMFT embeds it in a
 self-consistent bath, so this quantifies the impurity-solver (Hubbard-I) error *on the cluster*, not
@@ -41,6 +46,21 @@ NB3X8_LT_BULK = {
     "Nb3Cl8": dict(U0=1451.4, t=-136.0, Us=400.1),
     "Nb3Br8": dict(U0=1186.6, t=-169.4, Us=342.0),
     "Nb3I8":  dict(U0=787.0,  t=-218.2, Us=258.5),
+}
+
+# All dimer-cluster parameter sets that carry an inter-layer dimer (Tables I & IV; monolayers have no
+# dimer, so are excluded). Keys: <halide> <phase/thickness>. Spans U0/|t| ~ 3.6 (I bulk) to ~800 (F BL).
+NB3X8_CLUSTERS = {
+    "F  LT-bulk": dict(U0=2590.5, t=-4.9,   Us=714.6),
+    "Cl LT-bulk": dict(U0=1451.4, t=-136.0, Us=400.1),
+    "Br LT-bulk": dict(U0=1186.6, t=-169.4, Us=342.0),
+    "I  LT-bulk": dict(U0=787.0,  t=-218.2, Us=258.5),
+    "F  LT-bil":  dict(U0=3988.8, t=-5.0,   Us=1987.7),
+    "Cl LT-bil":  dict(U0=2697.6, t=-136.2, Us=1570.9),
+    "Br LT-bil":  dict(U0=2396.0, t=-169.2, Us=1482.3),
+    "I  LT-bil":  dict(U0=1928.7, t=-218.4, Us=1349.0),
+    "Cl HT-bulk": dict(U0=1401.0, t=-17.11, Us=336.8),   # Table IV (HT phase)
+    "Br HT-bulk": dict(U0=1129.1, t=-20.56, Us=276.5),
 }
 
 
@@ -82,12 +102,19 @@ def hubbard_i_gap(U0: float, t: float, Us: float) -> float:
 
 
 if __name__ == "__main__":
-    print("Nb3X8 bilayer-cluster charge gaps (meV), from arXiv:2501.10320 cRPA parameters")
-    print(f"{'compound':8} {'U0/|t|':>7} {'exact':>8} {'Hubbard-I':>10} {'HubI error':>11} {'%':>7}")
-    for name, p in NB3X8_LT_BULK.items():
+    from scipy.stats import spearmanr
+
+    print("Nb3X8 dimer-cluster charge gaps (meV), from arXiv:2501.10320 cRPA parameters")
+    print(f"{'set':11} {'U0/|t|':>7} {'exact':>8} {'Hubbard-I':>10} {'HubI error':>11} {'%':>7}")
+    rows = []
+    for name, p in sorted(NB3X8_CLUSTERS.items(), key=lambda kv: kv[1]["U0"] / abs(kv[1]["t"])):
         ge, gh = exact_charge_gap(**p), hubbard_i_gap(**p)
-        print(f"{name:8} {p['U0']/abs(p['t']):7.1f} {ge:8.1f} {gh:10.1f} "
+        rows.append((p["U0"] / abs(p["t"]), abs(gh - ge) / ge))
+        print(f"{name:11} {p['U0']/abs(p['t']):7.1f} {ge:8.1f} {gh:10.1f} "
               f"{gh - ge:11.1f} {(gh - ge) / ge * 100:6.1f}%")
-    print("\nFinding: Hubbard-I is exact for the strongly-correlated F/Cl but underestimates the "
-          "weakly-\ncorrelated Nb3I8 gap by ~29% -- the atomic self-energy fails where hybridization "
-          "competes with U.")
+    rho = spearmanr([r[0] for r in rows], [r[1] for r in rows]).correlation
+    print(f"\nSpearman(U0/|t| vs |error|) = {rho:.3f}  (strong but imperfect: the single-ratio law "
+          "does NOT hold)")
+    print("Robust finding: strongly-correlated clusters (F, HT Cl/Br) are near-exact (<2%); the "
+          "iodides\nare consistently worst (bulk ~29%, bilayer ~12%). The error is multi-parameter, "
+          "not a clean U0/|t| law.")

@@ -1,10 +1,12 @@
 # SPEC: Exact Nb₃X₈ cluster gaps expose where Hubbard-I breaks down (weakly-correlated Nb₃I₈)
 
-**Status:** CLOSED — gates G1–G4 PASS (2026-06-30); `nb3x8_gaps.py` merged. Exact cluster charge gaps
-(meV): Nb₃I₈ 842, Nb₃Br₈ 1086, Nb₃Cl₈ 1312, Nb₃F₈ 2581. Hubbard-I error grows monotonically as
-U₀/|t| falls (0.2% → 0.8% → 5.2% → 29%); Hubbard-I underestimates the weakly-correlated Nb₃I₈ gap by
-29% (244 meV). Both → U₀ as t→0 (validated). Scope: isolated cluster, impurity-solver error (not the
-solid's gap).
+**Status:** CLOSED — gates G1–G4 PASS (2026-07-01); `nb3x8_gaps.py` merged. **Revised by the full
+10-cluster dataset (LT bulk + LT bilayer + HT bulk).** Robust finding: strongly-correlated clusters
+(Nb₃F₈, HT-phase Cl/Br) are near-exact (<2%); the iodides are consistently worst — Hubbard-I
+underestimates Nb₃I₈ by 29% (bulk) / 12% (bilayer). **Recorded negative result:** the clean
+single-parameter "error ∝ U₀/|t|" law from the 4-point LT-bulk subset does **not** survive the full
+set (Spearman −0.86, non-monotone) — the error is multi-parameter (t and U_s⊥). Both → U₀ as t→0
+(validated). Scope: isolated cluster (impurity-solver error, not the solid's gap).
 
 > A spec is a *falsifiable hypothesis*, not a contract: if implementation shows a gate is wrong,
 > change the gate and record why (that mismatch is the finding).
@@ -16,11 +18,15 @@ solid's gap).
 The Nb₃X₈ family downfolds, per bilayer, to a generalized Hubbard dimer (two trimer orbitals; on-site
 `U₀`, inter-layer hopping `t`, inter-site density-density `U_s⊥`) — a four-spin-orbital cluster the
 source paper solves with the **Hubbard-I** approximation. That cluster is *exactly diagonalizable*.
-Claim: exact diagonalization gives charge gaps the paper never reported, and the Hubbard-I error on
-the same cluster **grows monotonically as correlation weakens (U₀/|t| falls)** — negligible for the
-strongly-correlated Nb₃F₈/Nb₃Cl₈ but ≈ 29 % (≈ 244 meV) for the weakly-correlated Nb₃I₈ — while both
-methods agree (→ U₀) in the atomic limit `t → 0`. The claim is false if the atomic-limit agreement
-fails, or if the Hubbard-I error does not grow toward weak coupling / is small for Nb₃I₈.
+Claim (tested across all 10 dimer-cluster parameter sets — LT bulk, LT bilayer, HT bulk): exact
+diagonalization gives charge gaps the paper never reported, and Hubbard-I is near-exact (< 2 %) for
+the strongly-correlated clusters (Nb₃F₈, HT Cl/Br) but **underestimates the weakly-correlated iodides
+substantially** — ≈ 29 % (bulk) / 12 % (bilayer) — while both methods agree (→ U₀) at `t → 0`.
+**Recorded negative result:** the tidy single-parameter "error ∝ U₀/|t|" law from the 4-point LT-bulk
+subset does *not* survive the full dataset (Spearman ≈ −0.86, non-monotone) — the error depends on `t`
+and `U_s⊥` together, so only the material-level statement (iodides worst) is robust. The claim is
+false if the atomic-limit agreement fails, or if the iodides are not the worst / Hubbard-I is
+small-error for Nb₃I₈.
 
 ## 2. Background and honest framing
 
@@ -50,7 +56,8 @@ both equal `U₀`.
 ## 4. Public interface
 
 ```
-nb3x8_gaps.NB3X8_LT_BULK                                   # {compound: {U0, t, Us}} (meV, Table I)
+nb3x8_gaps.NB3X8_CLUSTERS                                  # all 10 sets {name: {U0, t, Us}} (meV)
+nb3x8_gaps.NB3X8_LT_BULK                                   # the 4 LT-bulk compounds (Table I)
 nb3x8_gaps.dimer_cluster_integrals(U0, t, Us) -> ModelIntegrals
 nb3x8_gaps.exact_charge_gap(U0, t, Us) -> float           # meV
 nb3x8_gaps.hubbard_i_gap(U0, t, Us) -> float              # meV
@@ -58,24 +65,29 @@ nb3x8_gaps.hubbard_i_gap(U0, t, Us) -> float              # meV
 
 ## 5. Acceptance criteria (validation gates)
 
-Gates in `tests/test_nb3x8_gaps_spec.py` (test-first). PySCF FCI; NumPy; no block2.
+Gates in `tests/test_nb3x8_gaps_spec.py` (test-first). PySCF FCI; NumPy; SciPy; no block2. Run over
+all 10 dimer-cluster parameter sets (`NB3X8_CLUSTERS`).
 
-- **G1 — atomic-limit validation.** For every compound's `(U₀, U_s⊥)` at `t → 0`, both
+- **G1 — atomic-limit validation.** For every cluster's `(U₀, U_s⊥)` at `t → 0`, both
   `exact_charge_gap` and `hubbard_i_gap` equal `U₀` to `< 1e-3` meV. (Confirms the machinery: the
   atomic Mott gap is `U₀`.)
-- **G2 — exact gaps (the new numbers).** The exact charge gaps match the computed values to `< 1` meV:
-  Nb₃I₈ 842, Nb₃Br₈ 1086, Nb₃Cl₈ 1312, Nb₃F₈ 2581 meV. All positive (insulating).
-- **G3 — the finding (definition of done).** The Hubbard-I error `|Δ_HubI − Δ_exact| / Δ_exact` grows
-  monotonically as `U₀/|t|` decreases across F → Cl → Br → I, is `< 1 %` for Nb₃F₈ and Nb₃Cl₈, and is
-  `> 20 %` (measured 29 %) for the weakly-correlated Nb₃I₈. Hubbard-I **underestimates** the Nb₃I₈ gap
-  (`Δ_HubI < Δ_exact`).
-- **G4 — physical consistency.** The Hubbard-I error correlates with correlation strength: ordering
-  the compounds by `U₀/|t|` orders them by `|error|` (Spearman = 1), and the exact gap is monotone in
-  `U₀` across the family.
+- **G2 — exact gaps (the new numbers).** The exact charge gaps match the computed values to `< 1` meV
+  for all 10 clusters (e.g. Nb₃I₈ bulk 842, bilayer 1961; Nb₃F₈ bulk 2581, bilayer 3979 meV). All
+  positive (insulating).
+- **G3 — the robust material-level finding (definition of done).** Strongly-correlated clusters
+  (Nb₃F₈ LT, HT-phase Cl/Br) have `|error| < 2 %`; the iodides are the worst — Hubbard-I
+  **underestimates** Nb₃I₈ bulk by `> 20 %` (≈ 29 %) and bilayer by `> 10 %` (≈ 12 %) — and Nb₃I₈-bulk
+  is the single largest error over the whole set.
+- **G4 — the recorded negative result.** The tidy single-parameter law does **not** hold across the
+  full dataset: `Spearman(U₀/|t|, |error|)` is strongly negative but **not** −1
+  (`−1 < ρ < −0.7`, measured −0.86), and `|error|` is **non-monotone** in `U₀/|t|` — the error depends
+  on `t` and `U_s⊥` together, not a single ratio.
 
-> Definition of done: **G3** (with G1 as the validation anchor). If a compound breaks the monotonic
-> error trend, that is the finding — record it and check whether a non-density-density term or the
-> bath matters there.
+> Definition of done: **G3**. If a compound breaks the material-level finding (an iodide is *not* the
+> worst, or a strongly-correlated cluster is *not* near-exact), that is the finding — record it and
+> check whether a non-density-density term or the bath matters there. (The single-ratio law already
+> broke on the extended dataset — G4 — which is why the robust claim is material-level, not a scaling
+> law.)
 
 ## 6. Implementation plan (test-first)
 
