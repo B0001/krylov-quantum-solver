@@ -114,6 +114,14 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   ground-peak height = |⟨HF|E_0⟩|², so a poor reference gives a weak peak. Gates G1–G4 in
   `tests/test_rodeo_spec.py`; `rodeo.py`. → [`SPEC_rodeo.md`](SPEC_rodeo.md) (repro of
   `arXiv:2009.04092`; expected-value simulation, exact statevector).
+- [x] **Quantum imaginary-time evolution (QITE)** — reach the ground state by replacing the
+  non-unitary step e^{-ΔτH} with a unitary e^{-iΔτÂ}, Â from the McLachlan system
+  S a = b (S_IJ=Re⟨σ_Iσ_J⟩, b_I=Im⟨σ_I H⟩). Exact ITE monotone/variational →FCI; full-domain QITE
+  reproduces it and reaches FCI on H₂ (update equations correct); step error → 0 with Δτ. **Finding:**
+  a weight-≤2 domain stalls at Hartree–Fock (+20.5 mHa) — H₂'s correlation is a weight-4 operator, so
+  QITE accuracy is set by the domain (Motta's locality). Gates G1–G4 in `tests/test_qite_spec.py`;
+  `qite.py`. → [`SPEC_qite.md`](SPEC_qite.md) (repro of `arXiv:1901.07653`; exact statevector, full
+  4ⁿ domain so H₂-scale).
 
 ## Killed
 
