@@ -123,6 +123,15 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   `qite.py`. → [`SPEC_qite.md`](SPEC_qite.md) (repro of `arXiv:1901.07653`; exact statevector, full
   4ⁿ domain so H₂-scale).
 
+- [x] **Exact Nb₃X₈ cluster gaps vs Hubbard-I** *(scientific study, not a method rung)* — the Nb₃X₈
+  bilayer downfolds to an exactly-diagonalizable generalized Hubbard dimer; from the paper's cRPA
+  parameters, exact ED gives charge gaps (Nb₃I₈ 842, Br 1086, Cl 1312, F 2581 meV) the paper never
+  reported, and the Hubbard-I error grows monotonically as U₀/|t| falls — <1% for the strongly-
+  correlated F/Cl but **29% (244 meV) for the weakly-correlated Nb₃I₈**. Both →U₀ as t→0 (validated).
+  Honest scope: isolated cluster (impurity-solver error, not the solid's gap). Gates G1–G4 in
+  `tests/test_nb3x8_gaps_spec.py`; `nb3x8_gaps.py`. → [`SPEC_nb3x8_gaps.md`](SPEC_nb3x8_gaps.md)
+  (data from `arXiv:2501.10320`, Table I).
+
 ## Killed
 
 - [-] **Hₙ to larger n, *cheaply*** (ramp + D=100/200/400) — → [`SPEC_hchain_largen.md`](SPEC_hchain_largen.md).
