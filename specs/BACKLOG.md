@@ -86,6 +86,21 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   low shots. Gates G1–G4 in `tests/test_qksd_noise_spec.py` (no new code — reuses the noise
   machinery). → [`SPEC_qksd_noise.md`](SPEC_qksd_noise.md) (repro of QKSD sampling-error analysis,
   `arXiv` Lee-Lee-Huh / Kirby 2024; idealized i.i.d. shot noise).
+- [x] **Nb₃X₈ cluster charge gaps through the simulated-hardware pipeline** *(capstone
+  study/composition, not a method rung)* — the materials thread and the device-validated ODMD
+  stack compose end-to-end: Δ = E(3)+E(1)−2E(2), one depolarizing-immune ground-state ODMD run
+  per particle sector on genuinely-Trotterized Hadamard-test circuits under an Aer device noise
+  model. Ladder (Nb₃I₈ LT-bulk, exact 842.44 meV): statevector ODMD exact to 1e-10; circuit
+  eigenphases at reps=1 miss by **−101 meV (12%) — sector Trotter biases do NOT cancel in the
+  gap** (order-2 ratio 4.65; near-commuting Nb₃F₈: 0.1 meV — the contrast); circuit-exact
+  Richardson(2,4) lands 0.27 meV; the noisy device (cx=1e-4, 32768 shots) with Richardson(1,2)
+  measures the gap to a **median error of 10.4 meV = 1.2%** (9.6× below raw reps=1).
+  **Crossover finding:** at cx=3e-4 the noise floor exceeds the reps=2 bias and Richardson stops
+  paying (16.3 vs 9.6 meV) — `SPEC_trotter_odmd` R1 demonstrated on a material. Gates G1–G4 in
+  `tests/test_nb3x8_device_gap_spec.py`; `nb3x8_device_gap.py` (pure composition).
+  → [`SPEC_nb3x8_device_gap.md`](SPEC_nb3x8_device_gap.md) (ISOLATED-CLUSTER gap — upper bound
+  on the ~600–650 meV broadened solid, per the corrected `SPEC_nb3x8_gaps.md`; simulated device;
+  nearly-free charged sectors — a pipeline demonstration, not a correlated-electron benchmark).
 - [x] **Device-noise ODMD — eigenphases are depolarizing-immune (until the noise edge)** — a
   global depolarizing channel damps the signal s_k → f^k·s_k, multiplying every DMD eigenvalue
   by f but leaving its **phase** untouched: ODMD is *exactly* damping-invariant (< 1e-6 Ha even
