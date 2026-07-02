@@ -86,6 +86,19 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   low shots. Gates G1–G4 in `tests/test_qksd_noise_spec.py` (no new code — reuses the noise
   machinery). → [`SPEC_qksd_noise.md`](SPEC_qksd_noise.md) (repro of QKSD sampling-error analysis,
   `arXiv` Lee-Lee-Huh / Kirby 2024; idealized i.i.d. shot noise).
+- [x] **Certified two-sided energy brackets (Temple/Weinstein on Krylov Ritz states)** — every
+  number in this repo was a variational *upper* bound; now each Krylov solve carries a rigorous
+  **lower** bound too, from ONE extra expectation ⟨Ψ₀|H²|Ψ₀⟩: Temple's inequality on the QKSD
+  ground eigenstate gives a certified bracket [E_Temple, E_Ritz] containing the exact
+  reachable-sector energy at **every** system × depth tested (H₂/H₄/LiH/N₂ CAS(6,6) × M=2…24,
+  zero escapes), closing to µHa width (N₂: 3.8 µHa at M=16). **Findings:** certification costs
+  only ~2.7× the uncertified Ritz error at the same depth (gate < 5×); the oracle-free mode
+  ε = θ₁ − σ₁ is valid at M ≥ 6 on all systems but its premise ε ≤ E₁ *fails at M ≤ 4* (the
+  Krylov space must resolve the excited state before it can self-certify — the recorded
+  boundary); Temple beats Weinstein ~430× on N₂. Gates G1–G4 in
+  `tests/test_temple_bracket_spec.py`; `temple_bounds.py`.
+  → [`SPEC_temple_bracket.md`](SPEC_temple_bracket.md) (repro of Temple 1928 / Pollak–Martinazzo
+  applied to QKSD data; sector-restricted, exact statevector, ⟨H²⟩ hardware cost not modeled).
 - [x] **Excited-state ODMD via noise-edge thresholding** — the *same* survival-amplitude signal
   carries the low-lying spectrum in its higher DMD eigenphases (no extra measurements): noiseless
   E₁/gap < 1e-5 Ha (H₄ K=24, N₂ CAS(6,6) K=48). Under shot noise the ground-state spec's relative
