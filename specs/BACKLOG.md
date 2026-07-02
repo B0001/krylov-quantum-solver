@@ -86,6 +86,29 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   low shots. Gates G1–G4 in `tests/test_qksd_noise_spec.py` (no new code — reuses the noise
   machinery). → [`SPEC_qksd_noise.md`](SPEC_qksd_noise.md) (repro of QKSD sampling-error analysis,
   `arXiv` Lee-Lee-Huh / Kirby 2024; idealized i.i.d. shot noise).
+- [x] **Excited-state ODMD via noise-edge thresholding** — the *same* survival-amplitude signal
+  carries the low-lying spectrum in its higher DMD eigenphases (no extra measurements): noiseless
+  E₁/gap < 1e-5 Ha (H₄ K=24, N₂ CAS(6,6) K=48). Under shot noise the ground-state spec's relative
+  5σ·σ_max floor loses the excited mode in 100% of seeds; replacing it with the absolute
+  random-matrix noise edge c·σ(√d+√m) recovers the H₄ gap to **5.8 mHa at 10⁵ shots/element —
+  ~31×/21× below noisy QKSD `solve_excited` at M=16/24** (matched per-element σ, and QKSD is
+  noiselessly converged there, so noise — not depth — is its limit). **Finding (the visibility
+  law):** mode n is recoverable iff p_n·√(dm) clears the noise edge, so depth buys excited
+  visibility as √K (K=16: 74% unresolved; K=48: 0%); dark/weakly-overlapped states stay invisible
+  (the rodeo/SKQD physics, now quantitative). Gates G1–G4 in `tests/test_odmd_excited_spec.py`;
+  `odmd.py` (`noise_edge`/`odmd_spectrum`/`sample_odmd_spectrum`).
+  → [`SPEC_odmd_excited.md`](SPEC_odmd_excited.md) (single observable; the MP edge on *structured*
+  Hankel noise is a calibrated heuristic, c=1.2).
+- [x] **ODMD — ground state from the survival amplitude alone** — the complex overlap time series
+  s_k = ⟨φ₀|e^(−ikτH)|φ₀⟩ (the *first row* of the S matrix QKSD already measures; **no Hamiltonian
+  elements at all**) recovers FCI via SVD-truncated Hankel DMD: < 1e-5 Ha noiseless at K=20 on
+  H₂/H₄/N₂ CAS(6,6), and at matched measured-element count + shots the median error beats KQD by
+  ~57× (10⁴ shots) / ~10× (10⁵) on N₂ — the λ-scaled H-measurement noise simply never enters.
+  **Findings:** ODMD is *non-variational* (dips ~2.6 mHa below FCI at K=8 — never quote it as a
+  bound), and the SVD truncation IS the robustness (removing it inflates the noisy median ~900×).
+  Gates G1–G4 in `tests/test_odmd_spec.py`; `odmd.py`. → [`SPEC_odmd.md`](SPEC_odmd.md) (repro of
+  `arXiv:2306.01858`; complex-quadrature signal, exact statevector, i.i.d. shot noise; advantage
+  measured against this repo's LCU/Hadamard KQD noise model — MSD narrows it).
 - [x] **Mirror subspace diagonalization (MSD)** — estimates H from central finite-differences of
   shifted-time overlaps instead of per-Pauli measurement, so sampling variance scales with the
   stencil 1-norm fd1 not the Hamiltonian 1-norm λ. With an energy-level shift + order-8 stencil,
