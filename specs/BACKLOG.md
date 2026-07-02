@@ -86,6 +86,25 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   low shots. Gates G1–G4 in `tests/test_qksd_noise_spec.py` (no new code — reuses the noise
   machinery). → [`SPEC_qksd_noise.md`](SPEC_qksd_noise.md) (repro of QKSD sampling-error analysis,
   `arXiv` Lee-Lee-Huh / Kirby 2024; idealized i.i.d. shot noise).
+- [x] **Circuit-real ODMD + Richardson Trotter-bias removal** *(and a found+fixed silent-exactness
+  bug)* — probing this spec exposed that `Operator()`/`Statevector.evolve()` evaluate an opaque
+  `PauliEvolutionGate` via its **exact matrix**, ignoring the SuzukiTrotter synthesis: the repo's
+  "Trotterized" statevector path (`TrotterKrylovSolver`) had been doing **exact evolution all
+  along** (`order`/`reps` were no-ops; the old "within Trotter error" gate passed vacuously —
+  QCIVET's failure mode in a new coat). Fixed by materializing the synthesized circuit in
+  `build_trotter_step`; G1 is the regression gate (pre-fix deviation ~1e-16 vs gated > 0.05).
+  With circuits now real: ODMD returns the ground eigenphase of U_trot to < 5e-11 Ha (DMD adds
+  no approximation of its own); the eigenphase bias vs FCI obeys the order-2 law (ratios
+  4.65/4.14 on H₂, 4.12/4.03 on H₄; 19.3→1.0 / 12.0→0.72 mHa over reps=1→4); two-point
+  Richardson removes it to 0.046/0.0065 mHa (22×/112× below the fine bias) and beats the plain
+  estimate ~9× under 10⁶-shot noise. **Boundary:** the price is circuit *depth* (reps=4 → 4×),
+  and large-δt pairs leave higher-order residue (H₂ reps 1+2: 0.9 mHa) — extrapolate the fine
+  pair, only when bias > noise. Krylov-subspace paths self-correct Trotter basis error (H is
+  measured exactly), so the raw-eigenphase bias is the worst case. Gates G1–G4 in
+  `tests/test_trotter_odmd_spec.py`; `trotter_odmd.py` + the `trotter_krylov.py` fix.
+  → [`SPEC_trotter_odmd.md`](SPEC_trotter_odmd.md) (repro of Trotter effective-Hamiltonian theory
+  `arXiv:1912.08854` + extrapolated eigenphases cf. `arXiv:2212.14144`; statevector circuits, no
+  device noise).
 - [x] **Certified two-sided energy brackets (Temple/Weinstein on Krylov Ritz states)** — every
   number in this repo was a variational *upper* bound; now each Krylov solve carries a rigorous
   **lower** bound too, from ONE extra expectation ⟨Ψ₀|H²|Ψ₀⟩: Temple's inequality on the QKSD

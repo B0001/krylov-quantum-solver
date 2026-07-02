@@ -31,12 +31,22 @@ from hybrid_quantum_solver.quantum_krylov_solver import KrylovStep, solve_genera
 def build_trotter_step(
     hamiltonian: SparsePauliOp, dt: float, order: int = 2, reps: int = 1
 ) -> QuantumCircuit:
-    """One Trotter step exp(-i H dt) as a circuit (Suzuki-Trotter of the full Hamiltonian)."""
-    qc = QuantumCircuit(hamiltonian.num_qubits)
-    qc.append(
-        PauliEvolutionGate(hamiltonian, time=dt, synthesis=SuzukiTrotter(order=order, reps=reps)),
-        range(hamiltonian.num_qubits),
+    """One Trotter step exp(-i H dt) as a MATERIALIZED Suzuki-Trotter circuit.
+
+    The synthesized definition is inlined instead of appending the opaque ``PauliEvolutionGate``:
+    ``Operator()`` and ``Statevector.evolve()`` evaluate the opaque gate through its EXACT matrix,
+    silently ignoring the attached synthesis -- which made every statevector-simulated "Trotter"
+    study in this repo exact evolution in disguise (``order``/``reps`` were no-ops, and the old
+    "within Trotter error" test passed vacuously; the qDRIFT/QCIVET failure mode in a new coat).
+    Materializing guarantees every consumer -- statevector, ``Operator``, Aer, the
+    ancilla-controlled hardware path -- sees the same genuinely Trotterized unitary.
+    Regression gate: specs/SPEC_trotter_odmd.md G1 (``tests/test_trotter_odmd_spec.py``).
+    """
+    gate = PauliEvolutionGate(
+        hamiltonian, time=dt, synthesis=SuzukiTrotter(order=order, reps=reps)
     )
+    qc = QuantumCircuit(hamiltonian.num_qubits)
+    qc.compose(gate.definition, inplace=True)
     return qc
 
 
