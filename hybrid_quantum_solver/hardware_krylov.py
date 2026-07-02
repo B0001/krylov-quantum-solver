@@ -154,6 +154,15 @@ class HardwareKrylovSolver:
         return 0.5 * (H + H.conj().T), 0.5 * (S + S.conj().T)
 
     # -- public API ----------------------------------------------------------
+    def measure_signal(self, n: int) -> np.ndarray:
+        """First overlap row S_0k = <phi0|U^k|phi0>, k = 0..n-1 -- the ODMD survival signal.
+
+        The same ancilla Hadamard tests as ``solve`` (ZNE applies if configured), but only the
+        n overlap elements: no Hamiltonian observables enter, so no lambda-scaled noise does
+        either. Consumed by ``device_odmd`` (specs/SPEC_device_odmd.md).
+        """
+        return np.array([self._measure_pair(0, k)[0] for k in range(n)])
+
     def solve(self, krylov_dim: int) -> KrylovStep:
         if krylov_dim < 1:
             raise ValueError("krylov_dim must be >= 1")

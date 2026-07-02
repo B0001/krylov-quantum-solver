@@ -86,6 +86,22 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   low shots. Gates G1–G4 in `tests/test_qksd_noise_spec.py` (no new code — reuses the noise
   machinery). → [`SPEC_qksd_noise.md`](SPEC_qksd_noise.md) (repro of QKSD sampling-error analysis,
   `arXiv` Lee-Lee-Huh / Kirby 2024; idealized i.i.d. shot noise).
+- [x] **Device-noise ODMD — eigenphases are depolarizing-immune (until the noise edge)** — a
+  global depolarizing channel damps the signal s_k → f^k·s_k, multiplying every DMD eigenvalue
+  by f but leaving its **phase** untouched: ODMD is *exactly* damping-invariant (< 1e-6 Ha even
+  at f=0.7, where KQD on identically damped rows drifts 6.4 mHa noiselessly and fails by
+  **~2600×/~150×** under 10⁵-shot noise at f=0.9/0.7). Local gate noise is *not* global: on the
+  full Aer hardware stack (transpiled ancilla-controlled Trotter circuits, `hardware_krylov`
+  Hadamard tests, depolarizing NoiseModel) the H₂ eigenphase survives **70% amplitude loss with
+  0.05 mHa error** (cx=3e-4), and immunity ends exactly where the visibility law says — at
+  cx=1e-3 the signal (2% retained) falls under the shot floor → 5 mHa. **Mechanism finding:**
+  `odmd_energy`'s unit-modulus window misidentifies damped modes (3.75× worse); the device
+  estimator = noise-edge cutoff + wide window + amplitude floor (pure composition, no new DMD
+  code). Gates G1–G4 in `tests/test_device_odmd_spec.py`; `device_odmd.py` +
+  `HardwareKrylovSolver.measure_signal`. → [`SPEC_device_odmd.md`](SPEC_device_odmd.md)
+  (simulated device — no coherent errors/crosstalk/drift; energies are eigenphases of the
+  *Trotterized* unitary, quote vs the circuit eigenphase or Richardson-remove per
+  `SPEC_trotter_odmd`).
 - [x] **Circuit-real ODMD + Richardson Trotter-bias removal** *(and a found+fixed silent-exactness
   bug)* — probing this spec exposed that `Operator()`/`Statevector.evolve()` evaluate an opaque
   `PauliEvolutionGate` via its **exact matrix**, ignoring the SuzukiTrotter synthesis: the repo's
