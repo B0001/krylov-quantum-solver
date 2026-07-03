@@ -86,6 +86,20 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   low shots. Gates G1–G4 in `tests/test_qksd_noise_spec.py` (no new code — reuses the noise
   machinery). → [`SPEC_qksd_noise.md`](SPEC_qksd_noise.md) (repro of QKSD sampling-error analysis,
   `arXiv` Lee-Lee-Huh / Kirby 2024; idealized i.i.d. shot noise).
+- [x] **Coverage-gated error bars for ODMD (union bootstrap from a single signal)** — a real
+  experiment gets one noisy signal and no ground truth; the union of a parametric bootstrap
+  (refit → rebuild → re-noise at the *known* σ) and BOP-DMD-style bagging (random Hankel-column
+  subsets, cf. arXiv:2107.10878) yields a 90% CI with measured coverage **0.895–1.000 on every
+  system × budget** (H₂/H₄/N₂ CAS(6,6) × 10⁴/10⁵ shots, 200 trials each) at a conservatism cost
+  of 1.9–2.9× the median error. **Findings:** each arm alone is broken in a complementary regime
+  — the parametric bootstrap is anti-conservative up to 18× (coverage 0.05!) because the DMD fit
+  absorbs realized noise and never sees threshold rank-switching (mean-shift bias correction
+  doesn't fix it — probed 0.03), while bagging under-spreads few-mode signals (H₂ 0.785); and
+  **no resampling of one signal can see model-misspecification bias** — at K=8 (8.7 mHa
+  truncation bias) coverage collapses to 0.000, gated as the boundary: pair every interval with
+  a depth-convergence check. Gates G1–G4 in `tests/test_odmd_uq_spec.py`; `odmd_uq.py`.
+  → [`SPEC_odmd_uq.md`](SPEC_odmd_uq.md) (known-σ Gaussian noise, α=0.1, K=24; conservative by
+  design — an anti-conservative error bar is worse than none).
 - [x] **Nb₃X₈ cluster charge gaps through the simulated-hardware pipeline** *(capstone
   study/composition, not a method rung)* — the materials thread and the device-validated ODMD
   stack compose end-to-end: Δ = E(3)+E(1)−2E(2), one depolarizing-immune ground-state ODMD run
