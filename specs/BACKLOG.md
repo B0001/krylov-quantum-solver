@@ -86,6 +86,20 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   low shots. Gates G1–G4 in `tests/test_qksd_noise_spec.py` (no new code — reuses the noise
   machinery). → [`SPEC_qksd_noise.md`](SPEC_qksd_noise.md) (repro of QKSD sampling-error analysis,
   `arXiv` Lee-Lee-Huh / Kirby 2024; idealized i.i.d. shot noise).
+- [x] **ODMD spectroscopy — Green's-function poles and weights from survival amplitudes** — a
+  new observable class: the Lehmann representation is ODMD-shaped, so the survival amplitude of
+  a_i|ref⟩ / a†_i|ref⟩ yields the photoemission / inverse-photoemission spectrum A(ω): DMD poles
+  = ionization/affinity lines (machine-exact, ≤ 1e-13 Ha on strong lines), Vandermonde
+  amplitudes = spectral weights (degeneracy-aggregated, < 1e-4 vs exact Lehmann). The Nb₃I₈
+  dimer's A(ω) shows both Hubbard bands and its band gap min(ω⁺)−max(ω⁻) reproduces the capstone
+  **842.44 meV to the last digit** (the cross-spec pin). **Findings:** HF-referenced weights
+  differ from true Lehmann by ~2% on H₄ (real, bounded, gated); **intensities are
+  damping-immune along with energies** (< 1e-6 at f=0.7 — uniform damping enters |λ| only,
+  extending the device-ODMD phase immunity to the whole spectrum); the weakest satellite
+  (w≈0.002) needed K=32 — the visibility law. Gates G1–G4 in `tests/test_odmd_spectral_spec.py`;
+  `odmd_spectral.py`. → [`SPEC_odmd_spectral.md`](SPEC_odmd_spectral.md) (exact statevector
+  signals; degenerate lines merge with summed weight; repro-adjacent — real-time a_i|ψ⟩
+  propagation is established (Kosugi–Matsushita PRA 101, 012330), ODMD supplies the extraction).
 - [x] **Coverage-gated error bars for ODMD (union bootstrap from a single signal)** — a real
   experiment gets one noisy signal and no ground truth; the union of a parametric bootstrap
   (refit → rebuild → re-noise at the *known* σ) and BOP-DMD-style bagging (random Hankel-column
