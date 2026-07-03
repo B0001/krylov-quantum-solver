@@ -86,6 +86,20 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   low shots. Gates G1–G4 in `tests/test_qksd_noise_spec.py` (no new code — reuses the noise
   machinery). → [`SPEC_qksd_noise.md`](SPEC_qksd_noise.md) (repro of QKSD sampling-error analysis,
   `arXiv` Lee-Lee-Huh / Kirby 2024; idealized i.i.d. shot noise).
+- [x] **The visibility law, made predictive (a calibrated shot-cost law)** — the rule recorded
+  qualitatively in three specs becomes an experiment-planning tool: for the unnormalized
+  correlator, a line of weight w costs **shots* ∝ 1/(w²K)** (σ* = w√(dm)/(c(√d+√m))). Gated:
+  log-log slope **−2.000** over four orders of magnitude in w (eight orders in shots — the
+  Nb₃I₈ optical line costs ~2 shots/element, the near-dark Nb₃F₈ line ~2·10⁸); **one
+  calibration on Nb₃Br₈ predicts every other line to ~10%**, including all three components of
+  the multi-line H₄ removal signal; the edge component scales as 1/K (3.83 vs law 4).
+  **Findings/boundaries:** line *attribution* needs a tolerance below the line spacing or the
+  strong neighbor masquerades (45× too-early apparent detection — gated); tight attribution
+  adds a pole-accuracy cost at shallow K (61% at K=8, 4% at K=32 — G3 split accordingly, the
+  SDD-honest revision); false-positive rate 0.5%. Gates G1–G4 in
+  `tests/test_visibility_law_spec.py`; `visibility_law.py`.
+  → [`SPEC_visibility_law.md`](SPEC_visibility_law.md) (known-σ Gaussian noise; prices
+  detection, not precision; c calibrated, not derived; fold device damping into w first).
 - [x] **Spin spectroscopy — the interlayer exchange J of the Nb₃X₈ dimers** — the response
   trilogy's third channel: the staggered-magnetization kick S₁ᶻ−S₂ᶻ (cannot move charge) exposes
   exactly the state P leaves dark — the m=0 triplet — as a **single line at ω = J**, pinned by

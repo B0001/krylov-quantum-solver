@@ -22,6 +22,12 @@ reproduce Full Configuration Interaction (FCI) to sub-milli-Hartree accuracy on 
 > documented in [`REFACTOR_PLAN.md`](REFACTOR_PLAN.md). This README describes only what is now
 > validated by the test suite.
 
+On top of this pipeline sits the spec-gated **ODMD suite** — ground/excited energies from the
+survival amplitude alone, certified two-sided brackets, Trotter/device-noise circuit paths,
+single-signal error bars, and photoemission/optical/spin spectroscopy, applied end-to-end to the
+Nb₃X₈ dimer clusters. The ladder, the material scorecard, and the recorded boundaries:
+[`docs/ODMD_SUITE.md`](docs/ODMD_SUITE.md).
+
 ## Method
 
 1. **Classical pre-processing** (`hybrid_quantum_solver/chemistry_gateway.py`) — PySCF HF/CASCI
