@@ -86,6 +86,20 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   low shots. Gates G1–G4 in `tests/test_qksd_noise_spec.py` (no new code — reuses the noise
   machinery). → [`SPEC_qksd_noise.md`](SPEC_qksd_noise.md) (repro of QKSD sampling-error analysis,
   `arXiv` Lee-Lee-Huh / Kirby 2024; idealized i.i.d. shot noise).
+- [x] **Spin spectroscopy — the interlayer exchange J of the Nb₃X₈ dimers** — the response
+  trilogy's third channel: the staggered-magnetization kick S₁ᶻ−S₂ᶻ (cannot move charge) exposes
+  exactly the state P leaves dark — the m=0 triplet — as a **single line at ω = J**, pinned by
+  the closed form √(((U₀−Us)/2)²+4t²) − (U₀−Us)/2. The family's interlayer exchange constants
+  (unreported in `arXiv:2501.10320`): **J = 0.051 / 66.2 / 119.1 / 245.9 meV (F/Cl/Br/I)**.
+  **Findings:** the Heisenberg superexchange 4t²/(U₀−Us) fails progressively — 0% (F) → 6.3% →
+  14.1% → **46.5% (I): the iodide is beyond the Heisenberg regime**; channel complementarity is
+  exact (spin and optical lines ≥ 528 meV apart — symmetry partitions the spectrum); the
+  local-moment fraction ‖Sᶻ|ψ₀⟩‖² falls 1.000 → 0.759 F→I (charge fluctuations eat a quarter of
+  the iodide's moment). 100% machinery reuse (`absorption_lines`; Sᶻ|ψ₀⟩ is an exact eigenstate,
+  re-exercising the degenerate-reference fix on a second operator). Gates G1–G4 in
+  `tests/test_odmd_spin_spec.py`; `odmd_spin.py`. → [`SPEC_odmd_spin.md`](SPEC_odmd_spin.md)
+  (isolated-dimer interlayer J only — no kagome in-plane exchange; Nb₃F₈'s 0.051 meV is below
+  the model's own neglected terms — quote as ≈0).
 - [x] **Optical absorption & exciton binding via ODMD** *(+ the eigenstate-kick hang, found and
   fixed)* — the two-particle side of ODMD spectroscopy: kicking ψ₀ with a same-sector operator
   (μ̂ for HeH⁺ — machine-exact lines, the bright transition cross-pins `SPEC_qksd_properties`'
