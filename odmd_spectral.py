@@ -78,7 +78,15 @@ def reference_signal(mh: MolecularHamiltonian, psi_raw, n: int = 24):
     pops = np.abs(V.conj().T @ psi) ** 2
     reach = w_eig[pops > 1e-10].real
     mu = float(0.5 * (reach.max() + reach.min()))
-    tau = float(np.pi / max(reach.max() - reach.min(), 1e-12))
+    width = float(reach.max() - reach.min())
+    full_width = float(w_eig.max() - w_eig.min())
+    if width < 1e-9 * max(full_width, 1.0):
+        # The reference is (numerically) an EIGENSTATE -- e.g. an operator kick that lands on
+        # the single symmetry-allowed state (P|psi0> on the inversion-symmetric dimer). The
+        # signal is exactly constant; evolving it with tau = pi/width would demand ~1/width
+        # expm_multiply substeps (the pre-fix hang -- see specs/SPEC_odmd_optical.md G2).
+        return np.ones(n, dtype=complex), float(np.pi / max(full_width, 1e-12)), mu, nrm2
+    tau = float(np.pi / width)
     Hs = (H - mu * sp.identity(H.shape[0], format="csc")).tocsc()
     s = np.array([psi.conj() @ expm_multiply(-1j * (k * tau) * Hs, psi) for k in range(n)])
     return s, tau, mu, nrm2

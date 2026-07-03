@@ -86,6 +86,21 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   low shots. Gates G1–G4 in `tests/test_qksd_noise_spec.py` (no new code — reuses the noise
   machinery). → [`SPEC_qksd_noise.md`](SPEC_qksd_noise.md) (repro of QKSD sampling-error analysis,
   `arXiv` Lee-Lee-Huh / Kirby 2024; idealized i.i.d. shot noise).
+- [x] **Optical absorption & exciton binding via ODMD** *(+ the eigenstate-kick hang, found and
+  fixed)* — the two-particle side of ODMD spectroscopy: kicking ψ₀ with a same-sector operator
+  (μ̂ for HeH⁺ — machine-exact lines, the bright transition cross-pins `SPEC_qksd_properties`'
+  0.85² = 0.7224; P = n₁−n₂ for the dimers) gives the absorption spectrum with selection rules
+  as missing lines. On the inversion-symmetric Nb₃X₈ dimers **the whole optical spectrum is one
+  bright line** (the odd singlet at exactly U₀ — gated as a selection rule), so the optical gap
+  is analytic and the **exciton binding Δc − Δopt collapses from 0.986·Us (F, atomic limit) to
+  0.263·Us (I)** — the exciton unbinds with hopping; oscillator weight spans 1.1e-4 → 0.96
+  (a 4-orders polarizability ladder). Numbers `arXiv:2501.10320` did not report. **Found
+  defect:** `odmd_spectral.reference_signal` hung (~10¹⁷ expm substeps) when a kick lands on an
+  exact eigenstate — width 0 → τ = π·10¹²; fixed with a degenerate-reference short-circuit,
+  gated (G2), pinned spectral gates re-run green. Gates G1–G4 in
+  `tests/test_odmd_optical_spec.py`; `odmd_optical.py`.
+  → [`SPEC_odmd_optical.md`](SPEC_odmd_optical.md) (isolated-dimer optics, P as dipole stand-in;
+  cluster gap difference, not a solid-state exciton).
 - [x] **ODMD spectroscopy — Green's-function poles and weights from survival amplitudes** — a
   new observable class: the Lehmann representation is ODMD-shaped, so the survival amplitude of
   a_i|ref⟩ / a†_i|ref⟩ yields the photoemission / inverse-photoemission spectrum A(ω): DMD poles
