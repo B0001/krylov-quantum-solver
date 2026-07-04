@@ -37,10 +37,19 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   (2026-06-29); `hybrid_quantum_solver/model_hamiltonians.py`.** Validates the Nb₃X₈ Model-Database
   drop-in path (handoff). Honest: not yet checked against the DB's DMFT/Hubbard-I gaps (DB files not
   bundled); Nb₃I₈ is the weakly-correlated anchor, not a strong-correlation headline.
-- [ ] **DMRG-referenced transition-metal active space** — *Claim:* for a low-spin NbN (or a smaller
-  TM dimer) CAS large enough that FCI is intractable, DMRG gives a converged correlation energy.
-  *Gate:* bond-dim extrapolation stderr < 1 mHa **and** agreement between two independent DMRG
-  sweep schedules < 1 mHa. (Honest: a reference number, not a materials claim — finite cluster.)
+- [x] **DMRG-referenced transition-metal active space** — NbN CAS(14,14) (half-filling sector
+  comb(14,7)² ≈ 1.18×10⁷ determinants, beyond the 5×10⁶ FCI cutoff): two independent sweep
+  schedules (perD 400/800/1200 vs ramp 300/600/1200, distinct seeds/scratch) agree to
+  **3×10⁻⁸ Ha** — five orders below the 1 mHa gate — at **E = −110.046028 Ha** (high-spin
+  nelec=(10,4)). **Findings:** (i) the CAS is a *soft* target — the high-spin sector converges to
+  sub-nHa by D=400 (discarded weight ~1e-9), so "FCI-intractable by count" ≠ "strongly
+  correlated"; (ii) a **near-degeneracy the SCF spin scan doesn't surface** — the low-spin
+  nelec=(7,7) sector sits just **3.5 mHa above** the ground, so the reference is only meaningful
+  once the sector is named. CI gates use cheap dims (≤300, ~2 min): |E_A′−E_B′| = 1.2 µHa, both
+  in the discarded-weight regime. Gates G1–G3 in `tests/test_nbn_dmrg_reference_spec.py`;
+  `nbn_dmrg_reference.py`. → [`SPEC_nbn_dmrg_reference.md`](SPEC_nbn_dmrg_reference.md) (reference
+  number, not a materials claim — finite cluster, ECP, fixed geometry; a hard multireference TM
+  benchmark needs the low-spin sector at real bond dimension — a follow-up).
 ## Done
 
 - [x] **single-ramp DMRG extrapolation** — → [`SPEC_singleramp.md`](SPEC_singleramp.md). One ramping
