@@ -58,7 +58,51 @@ approximation; once broadening is restored, exact diagonalization and Hubbard-I 
 one-nearest-neighbour "bath bound" gives only a ~5 % shift and is *misleading* — it under-samples the
 coordination.)
 
-## 3. Conclusion
+## 3. Beyond the charge gap: optical, excitonic, and magnetic constants of the same clusters
+
+The same exactly-solvable cluster fixes three more observables the paper did not report, two of
+them in closed form. On the inversion-symmetric dimer the polarization `P = n₁ − n₂` is odd and
+the singlet sector contains exactly **one** odd state (the ionic-odd combination, at energy
+exactly `U₀`), so the entire optical spectrum is a single line and
+
+```
+Δ_opt = U₀ − E₀ ,          E₀ = (U₀+U_s⊥)/2 − √( ((U₀−U_s⊥)/2)² + 4 t_s⊥² )
+J     = √( ((U₀−U_s⊥)/2)² + 4 t_s⊥² ) − (U₀−U_s⊥)/2        (singlet–triplet splitting)
+```
+
+with the charge gaps of Section 1 this gives the **exciton binding** `E_b = Δ_c − Δ_opt` and the
+**inter-layer exchange** `J` for every parameter set (meV; `⟨(S₁ᶻ−S₂ᶻ)²⟩` is the local-moment
+fraction, `‖P|ψ₀⟩‖²` the total oscillator weight of the one bright line):
+
+| set             | U₀/\|t_s⊥\| | Δ_opt | E_b = Δ_c − Δ_opt | E_b/U_s⊥ | J | 4t²/(U₀−U_s⊥) err | moment | osc. wt |
+|-----------------|-----------:|------:|------:|------:|--------:|-------:|------:|--------:|
+| Nb₃I₈  LT-bulk  |   3.6 |  774 |   68 | 0.26 | 245.9 | +46.5 % | 0.759 | 0.96 |
+| Nb₃Br₈ LT-bulk  |   7.0 |  964 |  122 | 0.36 | 119.1 | +14.1 % | 0.890 | 0.44 |
+| Nb₃I₈  LT-bil   |   8.8 |  814 | 1147 | 0.85 | 234.4 | +40.4 % | 0.776 | 0.89 |
+| Nb₃Cl₈ LT-bulk  |  10.7 | 1118 |  194 | 0.49 |  66.2 |  +6.3 % | 0.944 | 0.22 |
+| Nb₃Br₈ LT-bil   |  14.2 | 1025 | 1256 | 0.85 | 111.7 | +12.2 % | 0.902 | 0.39 |
+| Nb₃Cl₈ LT-bil   |  19.8 | 1189 | 1361 | 0.87 |  62.4 |  +5.5 % | 0.950 | 0.20 |
+| Nb₃Br₈ HT-bulk  |  54.9 |  855 |  237 | 0.86 |   2.0 |  +0.2 % | 0.998 | 9.2e-3 |
+| Nb₃Cl₈ HT-bulk  |  81.9 | 1065 |  304 | 0.90 |   1.1 |  +0.1 % | 0.999 | 4.1e-3 |
+| Nb₃F₈  LT-bulk  |   529 | 1876 |  705 | 0.99 |  0.05 |  +0.0 % | 1.000 | 1.1e-4 |
+| Nb₃F₈  LT-bil   |   798 | 2001 | 1978 | 0.99 |  0.05 |  +0.0 % | 1.000 | 1.0e-4 |
+
+Observations (cluster-level, same standing as Section 1):
+
+- **The exciton unbinds with hopping in the LT-bulk series** — `E_b/U_s⊥` falls 0.99 → 0.26 from
+  F to I — but is *not* a single-ratio law either: the **bilayers** keep `E_b/U_s⊥ ≈ 0.85` even
+  for the iodide, because their inter-site `U_s⊥` is much larger. The bilayer excitons are
+  eV-scale (1.1–2.0 eV).
+- **The inter-layer exchange is large for the iodides** (`J ≈ 235–246 meV`) and the perturbative
+  superexchange formula `4t²/(U₀−U_s⊥)` overestimates it by **40–47 %** there — the iodide dimer
+  is well beyond the Heisenberg regime — while it is essentially exact for the HT phases and the
+  fluorides. Correspondingly the local moment is reduced by ~24 % in the iodides.
+- **A selection-rule statement that is exact for the cluster:** all optical weight sits in one
+  line (the odd singlet); the triplet is dipole-dark and appears only in the spin channel. The
+  oscillator weight itself spans four orders of magnitude across the family — the iodide dimer
+  is ~10⁴× more polarizable than the fluoride.
+
+## 4. Conclusion
 
 - **Reference numbers:** exact charge gaps for the Nb₃X₈ bilayer clusters (Section 1) — possibly a
   useful cross-check for the downfolded models.
@@ -69,11 +113,21 @@ coordination.)
 - Net: a null / confirming result. The interesting turn was methodological — the isolated-cluster gap
   looked like a 29 % Hubbard-I failure until band broadening was put back, at which point it
   dissolved.
+- **New reference constants (Section 3):** exact optical gaps, exciton bindings, and inter-layer
+  exchange couplings for all ten parameter sets, two of them in closed form — cheap to cross-check
+  against any future downfolding revision, and possibly useful anchors for optics/magnetism work
+  on these materials.
 
 ## Caveats
 
 - Two-orbital density-density model (the paper reports non-density-density terms of a few meV); no
-  phonons or long-range Coulomb tail beyond the strong inter-layer term.
+  phonons or long-range Coulomb tail beyond the strong inter-layer term. In particular the
+  fluorides' `J ≈ 0.05 meV` sits *below* those neglected terms and should be read as "≈ 0".
+- Section 3's optical/exciton/exchange constants are **isolated-cluster** numbers like Section 1's
+  gaps: in-plane (kagome) exchange and inter-dimer screening/broadening are absent, and `P = n₁−n₂`
+  stands in for the dipole of a geometry-free model (trends physical, absolute intensities
+  model-defined). They are reference values for the downfolded Hamiltonian, not solid-state
+  predictions.
 - The coordination / 1-D-chain estimates are proxies for the full 3-D lattice, not a self-consistent
   cluster-DMFT; they bound the solid gap and its trend, they do not reproduce the paper's DMFT.
 - DMRG cross-checked against FCI where FCI is tractable (and it corrected an FCI convergence failure at
@@ -87,4 +141,8 @@ atomic self-energy embedded in the dimer dispersion. Coordination scan and 1-D S
 construction on larger clusters (FCI up to ~L=12; DMRG/block2 to L=20). Parameters verbatim from
 Table I (LT) and Table IV (HT) of arXiv:2501.10320. Code and test-gated derivation (including the
 `t → 0 → U₀` validation and the coordination-collapse check) are in `nb3x8_gaps.py` /
-`tests/test_nb3x8_gaps_spec.py`; the numbers regenerate with `python nb3x8_gaps.py`.
+`tests/test_nb3x8_gaps_spec.py`; the numbers regenerate with `python nb3x8_gaps.py`. Section 3:
+closed forms + test-gated derivations in `odmd_optical.py` / `odmd_spin.py`
+(`tests/test_odmd_optical_spec.py`, `tests/test_odmd_spin_spec.py`, including the selection-rule
+and atomic-limit gates); the tables regenerate with `python odmd_optical.py` and
+`python odmd_spin.py`.
