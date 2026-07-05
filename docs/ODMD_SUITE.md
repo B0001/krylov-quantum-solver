@@ -42,6 +42,22 @@ isolated-cluster values are **upper bounds** on the broadened solid — quote ac
 
 ¹ below the model's own neglected non-density-density terms.
 
+## Running it on real hardware
+
+`run_hardware_odmd.py` takes the suite to an actual device (or a device-noise Aer simulation).
+It measures the H₂ survival signal by ancilla Hadamard tests (reps 1+2), prints a transpiled
+resource table, then runs the full stack — `odmd_energy` → Richardson (SPEC 4) → single-signal
+error bar (SPEC 7) — against the circuit eigenphase and FCI. `--backend aer` works now;
+`--backend <ibm_name>` submits via qiskit-ibm-runtime (needs a saved account — the script prints
+the one-line setup if none is found); `--dry-run` stops at the resource table.
+
+**Hardware-readiness finding (from `--dry-run`):** the ancilla-controlled construction is deep —
+H₂ at K=8 transpiles to ~3.4k two-qubit gates (reps 1) / ~6.6k (reps 2), beyond today's NISQ
+reach. In Aer the K=8 pipeline still recovers the circuit eigenphase to <0.01 mHa and Richardson
+lands within ~1 mHa of FCI, so the *algorithm* is correct — **circuit depth, not the method, is
+the bottleneck**. Levers: smaller K (depth ~ controlled-U^{K−1}), reps=1-only, or a shallower
+signal scheme. The dry-run resource table is how you price a device run before spending queue time.
+
 ## Defects found (and permanently gated) along the way
 
 1. **The silently-exact Trotter path** — `Operator()`/`Statevector.evolve()` ignore an opaque
