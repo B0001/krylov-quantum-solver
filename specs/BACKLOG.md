@@ -62,6 +62,20 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   benchmark needs the low-spin sector at real bond dimension — a follow-up).
 ## Done
 
+- [x] **Nb₃X₈ magnetic heat capacity & entropy — Schottky anomaly + the R ln 2 plateau** *(thermo
+  study, reproduction)* — completes the thermodynamic triad (χ(T) → C(T), S(T)) from the same exact
+  N=2 trace. **Two findings:** (i) the magnetic Schottky peak sits at **T ≈ 0.352 J for the whole
+  family** (pinned by the analytic two-level singlet/triplet result), a J-scale fingerprint whose
+  ratio to the χ(T) peak is **universal & material-independent** — C-peak/χ-peak = 0.564/0.564/0.580
+  ≈ 0.3515/0.625 (both exact two-level features); (ii) the localized-moment entropy plateau **R ln 4
+  /dimer (= R ln 2/cluster)** is clean *only* when the charge scale E_s ≫ J — its flatness and its
+  deviation from ln 4 worsen strictly Cl→Br→I (0.061→0.207→0.253; −1.3%→+1.6%→+17%) as E_s/J =
+  16.9→8.1→3.1 shrinks, so the iodide has **no clean plateau** — the *same* charge-scale boundary
+  that bounds the Bleaney–Bowers regime, now read off the entropy. Numbers `arXiv:2501.10320` did
+  not report. 100% reuse (`n2_spectrum`, `chi_max_temperature`). Gates G1–G4 in
+  `tests/test_nb3x8_thermo_spec.py`; `nb3x8_thermo.py`.
+  → [`SPEC_nb3x8_thermo.md`](SPEC_nb3x8_thermo.md) (reproduction of the two-level Schottky/entropy
+  laws with ab-initio params; isolated dimer, no lattice/phonon C, no 90 K transition).
 - [x] **single-ramp DMRG extrapolation** — → [`SPEC_singleramp.md`](SPEC_singleramp.md). One ramping
   run via block2 `get_dmrg_results()` agrees with the per-D protocol < 0.1 mHa, lands at FCI, and
   uses half the sweeps (gates G1–G3 in `tests/test_singleramp_spec.py`). `protocol="ramp"`.
@@ -253,6 +267,20 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   `tests/test_temple_bracket_spec.py`; `temple_bounds.py`.
   → [`SPEC_temple_bracket.md`](SPEC_temple_bracket.md) (repro of Temple 1928 / Pollak–Martinazzo
   applied to QKSD data; sector-restricted, exact statevector, ⟨H²⟩ hardware cost not modeled).
+- [x] **Certified brackets on a spectral GAP (no FCI oracle)** — the Temple ground-energy bracket,
+  lifted to the object spectroscopy actually measures: the reachable gap Δ = E₁−E₀ gets a two-sided
+  interval from Krylov data alone, **Δ_hi = θ₁−τ₀** (Cauchy interlacing θ₁≥E₁ + Temple τ₀≤E₀) and
+  **Δ_lo = (θ₁−σ₁)−θ₀** (Weinstein self-ε), at one extra ⟨H²⟩ on the first-excited Ritz state. The
+  exact reachable gap is inside at **every M ≥ 6 across H₄ / LiH / N₂ CAS(6,6) (zero escapes)** and
+  the interval **closes with depth** (H₄ 342→0.7, N₂ CAS(6,6) 391→37 mHa over M=6…24). **Finding /
+  boundary:** certification inherits the temple_bracket M≤4 boundary *exactly* — at M=4 the Weinstein
+  premise ε₁≤E₁ fails for the multireference cases (H₄, N₂) and the **lower** certificate escapes;
+  the asymmetry is the mechanism — the upper certificate (interlacing+Temple) holds at every depth,
+  the lower is premise-sensitive because a real-time Krylov space has no lower bound on E₂ to anchor
+  a rigorous E₁ floor. 100% primitive reuse (`eigenstates`, `temple_bounds`). Gates G1–G4 in
+  `tests/test_certified_gaps_spec.py`; `certified_gaps.py`.
+  → [`SPEC_certified_gaps.md`](SPEC_certified_gaps.md) (extends Temple/Kato–Weinstein to gaps;
+  sector-restricted, exact statevector, premise checkable-not-self-verifiable).
 - [x] **Excited-state ODMD via noise-edge thresholding** — the *same* survival-amplitude signal
   carries the low-lying spectrum in its higher DMD eigenphases (no extra measurements): noiseless
   E₁/gap < 1e-5 Ha (H₄ K=24, N₂ CAS(6,6) K=48). Under shot noise the ground-state spec's relative
