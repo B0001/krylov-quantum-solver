@@ -62,6 +62,23 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   benchmark needs the low-spin sector at real bond dimension — a follow-up).
 ## Done
 
+- [x] **Nb₃X₈ strain / pressure response — Grüneisen parameters in the hopping** *(prediction toward
+  strain-tuning experiments)* — with |t| as the compression knob (uniaxial strain ↑ the dimerization
+  overlap), the leading response γ = dln X/dln|t| of the exact dimer. **Three findings:** (i) the
+  **spin gap stiffens everywhere** (γ_J > 0) and runs monotonically from the atomic-limit **2**
+  (Nb₃F₈, J∝t²) toward **1** (strong hopping) — 2.00→1.89→1.78→1.52, the halide series tracing the
+  correlation crossover (closed-form dJ/dt == finite-diff); (ii) the **charge gap is non-monotonic**
+  (a minimum at |t\*|=271→152→122→76 meV) and the family **straddles it** — γ_gap < 0 for F/Cl (below
+  their minima, compression softens the Mott gap), > 0 for Br/I (above) — so spin & charge respond
+  *oppositely only for the light halides*; (iii) **the sharp prediction:** Nb₃Cl₈ sits almost exactly
+  at its charge-gap minimum (|t|=136 ≈ |t\*|=152), so its strain response is **spin-charge decoupled**
+  — strong γ_J≈1.9, near-zero |γ_gap|<0.05 (>30× split): straining Nb₃Cl₈ moves its singlet-triplet
+  gap (and, ∝J, its χ-max and Schottky peak) while barely touching its Mott gap. χ/Schottky Grüneisen
+  == γ_J to <0.02% (Cl/Br), the iodide deviating 3–6% — the recurring E_s/J charge boundary. 100%
+  reuse (`exact_charge_gap`, `dimer_exchange_analytic`, `chi_max_temperature`,
+  `schottky_peak_temperature`). Gates G1–G4 in `tests/test_nb3x8_strain_spec.py`; `nb3x8_strain.py`.
+  → [`SPEC_nb3x8_strain.md`](SPEC_nb3x8_strain.md) (isolated dimer, |t| the sole strain proxy, linear
+  response; experimental hook: strain-tunable Nb₃Cl₈, `arXiv:2601.14524`).
 - [x] **Nb₃X₈ magnetic heat capacity & entropy — Schottky anomaly + the R ln 2 plateau** *(thermo
   study, reproduction)* — completes the thermodynamic triad (χ(T) → C(T), S(T)) from the same exact
   N=2 trace. **Two findings:** (i) the magnetic Schottky peak sits at **T ≈ 0.352 J for the whole
