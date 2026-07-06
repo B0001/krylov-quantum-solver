@@ -45,3 +45,6 @@ env/
 data/
 # block2 DMRG scratch (benchmark_dmrg.py)
 .dmrg_tmp/
+
+# Loki Mode scratch/trust-layer state
+.loki/
