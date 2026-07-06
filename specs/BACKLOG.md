@@ -62,6 +62,20 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   benchmark needs the low-spin sector at real bond dimension — a follow-up).
 ## Done
 
+- [x] **Nb₃X₈ magnetic heat capacity & entropy — Schottky anomaly + the R ln 2 plateau** *(thermo
+  study, reproduction)* — completes the thermodynamic triad (χ(T) → C(T), S(T)) from the same exact
+  N=2 trace. **Two findings:** (i) the magnetic Schottky peak sits at **T ≈ 0.352 J for the whole
+  family** (pinned by the analytic two-level singlet/triplet result), a J-scale fingerprint whose
+  ratio to the χ(T) peak is **universal & material-independent** — C-peak/χ-peak = 0.564/0.564/0.580
+  ≈ 0.3515/0.625 (both exact two-level features); (ii) the localized-moment entropy plateau **R ln 4
+  /dimer (= R ln 2/cluster)** is clean *only* when the charge scale E_s ≫ J — its flatness and its
+  deviation from ln 4 worsen strictly Cl→Br→I (0.061→0.207→0.253; −1.3%→+1.6%→+17%) as E_s/J =
+  16.9→8.1→3.1 shrinks, so the iodide has **no clean plateau** — the *same* charge-scale boundary
+  that bounds the Bleaney–Bowers regime, now read off the entropy. Numbers `arXiv:2501.10320` did
+  not report. 100% reuse (`n2_spectrum`, `chi_max_temperature`). Gates G1–G4 in
+  `tests/test_nb3x8_thermo_spec.py`; `nb3x8_thermo.py`.
+  → [`SPEC_nb3x8_thermo.md`](SPEC_nb3x8_thermo.md) (reproduction of the two-level Schottky/entropy
+  laws with ab-initio params; isolated dimer, no lattice/phonon C, no 90 K transition).
 - [x] **single-ramp DMRG extrapolation** — → [`SPEC_singleramp.md`](SPEC_singleramp.md). One ramping
   run via block2 `get_dmrg_results()` agrees with the per-D protocol < 0.1 mHa, lands at FCI, and
   uses half the sweeps (gates G1–G3 in `tests/test_singleramp_spec.py`). `protocol="ramp"`.
