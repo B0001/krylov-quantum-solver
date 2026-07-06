@@ -253,6 +253,20 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   `tests/test_temple_bracket_spec.py`; `temple_bounds.py`.
   → [`SPEC_temple_bracket.md`](SPEC_temple_bracket.md) (repro of Temple 1928 / Pollak–Martinazzo
   applied to QKSD data; sector-restricted, exact statevector, ⟨H²⟩ hardware cost not modeled).
+- [x] **Certified brackets on a spectral GAP (no FCI oracle)** — the Temple ground-energy bracket,
+  lifted to the object spectroscopy actually measures: the reachable gap Δ = E₁−E₀ gets a two-sided
+  interval from Krylov data alone, **Δ_hi = θ₁−τ₀** (Cauchy interlacing θ₁≥E₁ + Temple τ₀≤E₀) and
+  **Δ_lo = (θ₁−σ₁)−θ₀** (Weinstein self-ε), at one extra ⟨H²⟩ on the first-excited Ritz state. The
+  exact reachable gap is inside at **every M ≥ 6 across H₄ / LiH / N₂ CAS(6,6) (zero escapes)** and
+  the interval **closes with depth** (H₄ 342→0.7, N₂ CAS(6,6) 391→37 mHa over M=6…24). **Finding /
+  boundary:** certification inherits the temple_bracket M≤4 boundary *exactly* — at M=4 the Weinstein
+  premise ε₁≤E₁ fails for the multireference cases (H₄, N₂) and the **lower** certificate escapes;
+  the asymmetry is the mechanism — the upper certificate (interlacing+Temple) holds at every depth,
+  the lower is premise-sensitive because a real-time Krylov space has no lower bound on E₂ to anchor
+  a rigorous E₁ floor. 100% primitive reuse (`eigenstates`, `temple_bounds`). Gates G1–G4 in
+  `tests/test_certified_gaps_spec.py`; `certified_gaps.py`.
+  → [`SPEC_certified_gaps.md`](SPEC_certified_gaps.md) (extends Temple/Kato–Weinstein to gaps;
+  sector-restricted, exact statevector, premise checkable-not-self-verifiable).
 - [x] **Excited-state ODMD via noise-edge thresholding** — the *same* survival-amplitude signal
   carries the low-lying spectrum in its higher DMD eigenphases (no extra measurements): noiseless
   E₁/gap < 1e-5 Ha (H₄ K=24, N₂ CAS(6,6) K=48). Under shot noise the ground-state spec's relative
