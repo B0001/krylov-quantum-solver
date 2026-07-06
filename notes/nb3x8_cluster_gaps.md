@@ -102,7 +102,57 @@ Observations (cluster-level, same standing as Section 1):
   oscillator weight itself spans four orders of magnitude across the family — the iodide dimer
   is ~10⁴× more polarizable than the fluoride.
 
-## 4. Conclusion
+## 4. Finite-temperature magnetic susceptibility χ(T) of the same clusters
+
+The same N=2 spectrum gives the magnetic susceptibility by the Van Vleck trace
+`χ(T) = ⟨S_z,tot²⟩_thermal / T` (reduced units, k_B=1, meV; g=2 for the emu conversion
+`χ[emu/mol] = 0.12931·χ_reduced[meV⁻¹]`). This is textbook magnetochemistry — the isotropic
+S=½ dimer is the **Bleaney–Bowers** system `χ_BB(T) = (2/T)/(3+e^{J/T})` (Bleaney & Bowers, Proc.
+R. Soc. A 214, 451, 1952), with the finite-T deviations being the exact two-site **Hubbard-dimer**
+thermodynamics (Carrascal et al., arXiv:1502.05038; Anderson, Phys. Rev. 115, 2, 1959). It is
+**not** a new phenomenon, and χ(T) of Nb₃Cl₈ is already measured (Sheckelton et al., Inorg. Chem.
+Front. 4, 481, 2017, incl. the ~90 K singlet transition; Haraguchi et al., Inorg. Chem. 56, 3483,
+2017) and modeled (Grytsiuk/Katsnelson/van Loon/Rösner, arXiv:2305.04854). What the exact cluster
+adds is the **family-wide table from the ab-initio-downfolded (t, U₀, U_s⊥)**, and a clean
+statement of *where the pure-spin picture breaks*.
+
+| set             | J (meV) | E_s (meV) | E_s/J | θ_CW (meV) | χ(300K) emu/mol | μ_eff(300K) | T₅%/E_s | T₅%/J |
+|-----------------|--------:|----------:|------:|-----------:|----------------:|------------:|--------:|------:|
+| Nb₃I₈  LT-bulk  |   245.9 |   774.4 |   3.1 | −61.5 | 7.4e-7 | 0.021 | 0.407 |   1.28 |
+| Nb₃Br₈ LT-bulk  |   119.1 |   963.7 |   8.1 | −29.8 | 9.7e-5 | 0.241 | 0.430 |   3.48 |
+| Nb₃I₈  LT-bil   |   234.4 |   814.1 |   3.5 | −58.6 | 1.2e-6 | 0.026 | 0.411 |   1.43 |
+| Nb₃Cl₈ LT-bulk  |    66.2 |  1117.5 |  16.9 | −16.6 | 6.3e-4 | 0.613 | 0.438 |   7.38 |
+| Nb₃Br₈ LT-bil   |   111.7 |  1025.4 |   9.2 | −27.9 | 1.3e-4 | 0.277 | 0.432 |   3.96 |
+| Nb₃Cl₈ LT-bil   |    62.4 |  1189.1 |  19.1 | −15.6 | 7.1e-4 | 0.651 | 0.438 |   8.35 |
+| Nb₃Br₈ HT-bulk  |     2.0 |   854.6 |   432 |  −0.50 | 2.5e-3 | 1.213 | 0.444 |    192 |
+| Nb₃Cl₈ HT-bulk  |     1.1 |  1065.3 |   969 |  −0.28 | 2.5e-3 | 1.218 | 0.444 |    430 |
+| Nb₃F₈  LT-bulk  |    0.05 |  1876.0 | 36643 | −0.013 | 2.5e-3 | 1.224 | 0.444 |  16276 |
+| Nb₃F₈  LT-bil   |    0.05 |  2001.1 | 40046 | −0.012 | 2.5e-3 | 1.224 | 0.444 |  17788 |
+
+(θ_CW = −J/4 exactly, from the high-T expansion; E_s = the first ionic singlet above the triplet;
+T₅% = the temperature where the exact χ departs from Bleaney–Bowers by 5 %. χ(300 K) here in
+emu/mol.)
+
+Observations (cluster-level):
+
+- **The pure-spin (Bleaney–Bowers) description breaks at the charge scale, not the exchange
+  scale.** The 5 %-deviation temperature is `T₅% ≈ 0.40·E_s` across the *entire* family
+  (0.407–0.444), i.e. set by the first ionic singlet E_s, essentially independent of J. So the
+  Heisenberg dimer is a good model for χ(T) whenever `T ≲ 0.4·E_s` — and since every E_s ≥ 774 meV
+  (≫ 300 K = 26 meV), **all members are in the good-Bleaney–Bowers regime at and well above room
+  temperature.** This supports using a spin-only dimer model to interpret Nb₃X₈ susceptibility.
+- **In *reduced* (T/J) terms the iodides are the marginal case:** E_s/J ≈ 3 means charge and spin
+  scales are least separated, so Nb₃I₈ departs from Bleaney–Bowers at only T₅/J ≈ 1.3, versus
+  ~3–8 for the bromides/chlorides and ~10⁴ for the fluorides — the same "iodides are the most
+  correlated / least Heisenberg-like" ordering seen in the exchange-J and exciton-binding trends
+  (Section 3).
+- **Room-temperature moments span the correlation crossover:** the weakly-coupled fluorides and
+  HT phases sit near the free-coupled-pair Curie value (μ_eff ≈ 1.22, χ ≈ 2.5×10⁻³ emu/mol),
+  while the strongly-dimerized iodides are essentially diamagnetic-looking singlets at 300 K
+  (μ_eff ≈ 0.02) — directly comparable to SQUID data, and consistent with the Nb₃Cl₈ singlet
+  behaviour reported by Sheckelton and Haraguchi.
+
+## 5. Conclusion
 
 - **Reference numbers:** exact charge gaps for the Nb₃X₈ bilayer clusters (Section 1) — possibly a
   useful cross-check for the downfolded models.

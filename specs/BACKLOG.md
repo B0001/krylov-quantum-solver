@@ -95,6 +95,20 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   low shots. Gates G1–G4 in `tests/test_qksd_noise_spec.py` (no new code — reuses the noise
   machinery). → [`SPEC_qksd_noise.md`](SPEC_qksd_noise.md) (repro of QKSD sampling-error analysis,
   `arXiv` Lee-Lee-Huh / Kirby 2024; idealized i.i.d. shot noise).
+- [x] **Finite-T magnetic susceptibility χ(T) of the Nb₃X₈ dimers** *(thermodynamic study,
+  reproduction)* — exact N=2 Boltzmann trace over the same downfolded cluster gives χ(T),
+  Curie–Weiss θ, and room-T moments for all 10 sets from the cRPA parameters (numbers
+  `arXiv:2501.10320` didn't tabulate). **Finding:** the pure-spin Bleaney–Bowers law holds up to
+  a temperature set by the **charge scale E_s (first ionic singlet), not J** — the 5%-deviation
+  onset is **T ≈ 0.40·E_s universally** (0.407–0.444 across the family), so the iodides
+  (E_s/J ≈ 3, spin/charge least separated) break BB at the lowest reduced temperature (T₅/J ≈ 1.3
+  vs > 3 for Br, > 10³ for F, strictly ordered I<Br<Cl<F). θ_CW = −J/4 (gated); room-T (300 K):
+  fluorides/HT near free-pair Curie (χ≈1.9e-2 meV⁻¹, μ_eff≈1.22), iodides deep singlet
+  (χ≈6e-6, μ_eff≈0.02). Gates G1–G4 in `tests/test_nb3x8_susceptibility_spec.py`;
+  `nb3x8_susceptibility.py`. → [`SPEC_nb3x8_susceptibility.md`](SPEC_nb3x8_susceptibility.md)
+  (**reproduction** of Bleaney–Bowers 1952 / the exact Hubbard-dimer thermodynamics
+  `arXiv:1502.05038` with ab-initio params; prior Nb₃X₈ χ(T) exists — Sheckelton 2017, Haraguchi
+  2017, Grytsiuk/Rösner `arXiv:2305.04854`; isolated single dimer, no 90 K transition).
 - [x] **The visibility law, made predictive (a calibrated shot-cost law)** — the rule recorded
   qualitatively in three specs becomes an experiment-planning tool: for the unnormalized
   correlator, a line of weight w costs **shots* ∝ 1/(w²K)** (σ* = w√(dm)/(c(√d+√m))). Gated:
