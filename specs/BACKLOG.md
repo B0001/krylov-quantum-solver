@@ -298,6 +298,22 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   `tests/test_certified_gaps_spec.py`; `certified_gaps.py`.
   → [`SPEC_certified_gaps.md`](SPEC_certified_gaps.md) (extends Temple/Kato–Weinstein to gaps;
   sector-restricted, exact statevector, premise checkable-not-self-verifiable).
+- [x] **Oracle-free trustworthiness certificate for the certified gap** — removes the open
+  limitation of [`SPEC_certified_gaps.md`](SPEC_certified_gaps.md): its lower certificate rested on
+  a premise (ε₁≤E₁) verifiable only against an FCI oracle. Replace the oracle with **cross-depth
+  consistency** — a bracket is *corroborated* iff it overlaps the deep-anchor (intersection of the
+  deepest brackets); a premise failure inflates/shifts the bracket so it no longer overlaps, and is
+  caught with no FCI. **The certificate is ADAPTIVE, not a blanket "distrust shallow M":** on H₄/N₂
+  it rejects M=4 (where certified_gaps escapes) but on LiH it *accepts* M=4 (premise already holds
+  there) — it distinguishes real failures from merely-shallow-but-valid brackets. The self-checked
+  interval (intersection of corroborated brackets) is validated to **contain the exact reachable
+  gap** on all three (H₄/LiH/N₂) while a naive all-depth intersection is empty (the M=4 outlier).
+  **Boundary:** necessary-not-sufficient — the deep anchor is trusted, and a consistently-biased
+  sequence is invisible (the `SPEC_odmd_uq` model-misspecification blind spot); pairs with a
+  depth-convergence check. 100% reuse (`gap_bracket_ladder`). Gates G1–G4 in
+  `tests/test_gap_selfcheck_spec.py`; `gap_selfcheck.py`.
+  → [`SPEC_gap_selfcheck.md`](SPEC_gap_selfcheck.md) (oracle-free self-verification; exact
+  statevector; closes the certified_gaps premise-verifiability gap).
 - [x] **Excited-state ODMD via noise-edge thresholding** — the *same* survival-amplitude signal
   carries the low-lying spectrum in its higher DMD eigenphases (no extra measurements): noiseless
   E₁/gap < 1e-5 Ha (H₄ K=24, N₂ CAS(6,6) K=48). Under shot noise the ground-state spec's relative
