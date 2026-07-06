@@ -9,11 +9,24 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
 
 ## Open
 
-- [~] **Hₙ to larger n, done right** — *Claim:* the TDL fit tightens at large n **with adequate D**
-  (≈ 400/800/1600) **or** a bulk per-site estimator `(E(n) − E(n−Δ))/Δ`. *Gate:* leave-one-out
-  shift < 0.1 mHa/atom. (Supersedes the cheap version below.) → [`SPEC_hchain_largen2.md`](SPEC_hchain_largen2.md)
-  **CI falsifiers G1–G3 green (2026-06-29); `bulk_per_site_energy` merged. Headline (leave-one-out
-  < 0.1 mHa/atom) is a pending driver-level large-n ramp run — not yet executed/recorded, so Open.**
+- [x] **Nb₃X₈ vs magnetometry — a parameter-free prediction against the lab** *(the profitable turn:
+  internal cross-check → falsifiable prediction against experiment)* — the ab-initio interlayer
+  singlet–triplet gap J (from the same downfolded bilayer as [`SPEC_odmd_spin.md`](SPEC_odmd_spin.md),
+  cRPA params, **no fit**) predicts the *scale and ordering* of the **measured** magnetic-singlet
+  transitions of Nb₃Cl₈ (~90 K, Sheckelton 2017 / `arXiv:1701.05528`) and Nb₃Br₈ (~382 K, Haraguchi
+  2017): the exact dimer χ(T) peaks at k_BT_max ≈ 0.625 J → 479 K (Cl) < 862 K (Br), reproducing the
+  observed Cl<Br ordering within an order of magnitude (G2). **THE FINDING (G3, DoD):** the isolated
+  dimer **overpredicts Tc by 5.3× (Cl) / 2.3× (Br)** — an overcoupling that *weakens monotonically
+  down the series*, the isolated-cluster→cooperative-lattice renormalization; and it exposes **two
+  distinct couplings** — −J/4 = −192 K overshoots the measured Curie–Weiss θ_W = −13.1 K by 15×, so
+  the interlayer J sets Tc while a separate weak *in-plane* exchange (absent from the bilayer dimer)
+  sets θ_W. Numbers the cluster papers never reported. **Boundary (G4):** Nb₃I₈ has no
+  interlayer-singlet transition (moment-retaining ground state) — excluded; the predictor sets
+  *scales*, not a first-order cooperative transition. 100% primitive reuse (`susceptibility`,
+  `dimer_exchange_analytic`) + a cited experimental table. Gates G1–G4 in
+  `tests/test_nb3x8_magnetometry_spec.py`; `nb3x8_magnetometry.py`.
+  → [`SPEC_nb3x8_magnetometry.md`](SPEC_nb3x8_magnetometry.md) (comparison vs measured references,
+  not a fit; isolated bilayer dimer, density-density only).
 - [ ] **Be₂ toward experiment** — *Claim:* core-valence correlation + a cc-pVxZ→CBS extrapolation
   moves the FCI/DMRG well depth from ~305 cm⁻¹ toward the experimental 929.7. *Gate (reproduction):*
   `|D_e − 930| < 100 cm⁻¹` at CBS+CV; `R_e` within 0.1 Å of 2.45. (Honest: reproduces a settled
@@ -26,9 +39,6 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   Krylov is slow on the strongly-correlated Mott chain (L≥6, large U). Gates G1–G4 in
   `tests/test_hubbard_bethe_spec.py`; `model_hamiltonians.py`.
   → [`SPEC_hubbard_bethe.md`](SPEC_hubbard_bethe.md) (repro of Lieb & Wu 1968, exact analytic ref).
-- [ ] **GPU backend on real hardware** — *Claim:* `device="gpu"` reproduces CPU energies and reaches
-  larger qubit counts. *Gate (on an NVIDIA node):* `|E_gpu − E_cpu| < 1e-6 Ha` at 16q; completes a
-  28q statevector run. (Code exists, CPU-validated; needs a GPU node — see `tests/test_gpu_backend.py`.)
 - [~] **Nb₃X₈ / Hubbard model loader** — *Claim:* a tight-binding hopping matrix + Hubbard/cRPA
   interaction maps onto the universal `(h1, eri, e_core, nelec, norb)` interface and the
   number-conserving solver reproduces the analytic 2-site Hubbard dimer `(U−√(U²+16t²))/2` and PySCF
