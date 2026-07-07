@@ -329,6 +329,20 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   `tests/test_certified_dipole_spec.py`; `certified_dipole.py`.
   → [`SPEC_certified_dipole.md`](SPEC_certified_dipole.md) (Davis–Kahan on QKSD + certified gap;
   sector-restricted, exact statevector, inherits the certified_gaps premise).
+- [x] **Certified error bars on a RELATIVE energy (reaction / dissociation)** — the certified arc
+  reaches chemistry's currency: relative energies. Δ = E(B)−E(A) gets a rigorous interval
+  [τ_B−ρ_A, ρ_B−τ_A] by composing the Temple/Ritz brackets at two geometries — no FCI. On the H4
+  symmetric stretch (0.9→2.3 Å) the exact Δ = **8.2255 eV** is inside at every depth (**zero
+  escapes**), two-sided and < 0.01 eV wide at M=20. **The finding — the error bar localizes at the
+  strongly-correlated endpoint:** the equilibrium bracket closes ~25× faster than the stretched
+  (0.001 vs 0.025 eV at M=6), and at intermediate M the stretched Temple lower bound goes vacuous →
+  Δ carries a **one-sided (upper-only)** certificate there before closing two-sided — the harder
+  geometry sets the temple premise regime, exactly as [`SPEC_certified_gaps.md`](SPEC_certified_gaps.md)
+  / `gap_selfcheck` chart. Reaches experiment (reaction/dissociation energies are measured; the
+  certificate contains the *in-basis* FCI, basis error separate). 100% reuse (`krylov_bracket`).
+  Gates G1–G4 in `tests/test_certified_thermochem_spec.py`; `certified_thermochem.py`.
+  → [`SPEC_certified_thermochem.md`](SPEC_certified_thermochem.md) (composition of two temple
+  brackets; sector-restricted, exact statevector, in-basis).
 - [x] **Excited-state ODMD via noise-edge thresholding** — the *same* survival-amplitude signal
   carries the low-lying spectrum in its higher DMD eigenphases (no extra measurements): noiseless
   E₁/gap < 1e-5 Ha (H₄ K=24, N₂ CAS(6,6) K=48). Under shot noise the ground-state spec's relative
