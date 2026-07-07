@@ -373,6 +373,17 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   in `tests/test_precision_cost_spec.py`; `precision_cost.py`.
   → [`SPEC_precision_cost.md`](SPEC_precision_cost.md) (reproduction-adjacent scaling laws; the
   composition on real shifted λ's is new; absolute T-gate cost out of scope).
+- [x] **Cost advisor — a per-molecule near-term-vs-FT verdict** *(the bridge, closed into a decision
+  tool)* — turns [`SPEC_precision_cost.md`](SPEC_precision_cost.md) into an engineering artifact:
+  `advise(λ_meas, λ_DF, ε, ρ)` returns which is cheaper (near-term certified Krylov vs FT-QPE) at
+  target accuracy ε, under a common cost model whose only free parameter is the honest unknown
+  ρ = cost_per_query/cost_per_shot. The verdict flips exactly at ε*(ρ) ∝ 1/ρ; the flip-ρ at fixed ε
+  is N/Q; and `robust_over_rho` gives a cross-validated recommendation. **Quantified verdict:** for
+  N₂ CAS(6,6) at chemical accuracy the flip-ρ is **~2×10⁵** — FT is cheaper unless a query costs more
+  than ~2×10⁵ shots (ρ is never hidden — it's an explicit input). Reuses `precision_cost`. Gates
+  G1–G4 in `tests/test_cost_advisor_spec.py`; `cost_advisor.py`.
+  → [`SPEC_cost_advisor.md`](SPEC_cost_advisor.md) (resource-count decision under a stated cost
+  model; true ρ hardware-specific, not computed).
 - [x] **Excited-state ODMD via noise-edge thresholding** — the *same* survival-amplitude signal
   carries the low-lying spectrum in its higher DMD eigenphases (no extra measurements): noiseless
   E₁/gap < 1e-5 Ha (H₄ K=24, N₂ CAS(6,6) K=48). Under shot noise the ground-state spec's relative
