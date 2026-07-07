@@ -314,6 +314,21 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   `tests/test_gap_selfcheck_spec.py`; `gap_selfcheck.py`.
   → [`SPEC_gap_selfcheck.md`](SPEC_gap_selfcheck.md) (oracle-free self-verification; exact
   statevector; closes the certified_gaps premise-verifiability gap).
+- [x] **Certified error bars on a molecular PROPERTY (dipole)** — extends the certified arc from
+  energies/gaps to the observables spectroscopy reports. Rigorous interval [μ ± half_width] on the
+  ground-state dipole from Krylov data, via Davis–Kahan sinθ ≤ σ₀/Δ_lo — where **Δ_lo is exactly the
+  certified gap lower bound** of [`SPEC_certified_gaps.md`](SPEC_certified_gaps.md) — and the SHARP
+  fluctuation bound half_width = 2σ_A·s + W_A·s² (using the dipole fluctuation σ_A, not ‖μ‖: LiH
+  σ_A≈1.1 vs ‖μ_z‖≈6.9, ~6× tighter). **Zero FCI-dipole escapes** on HeH⁺/LiH; the interval closes
+  to **−1.818 ± 0.065 a.u.** at M=24 (exact −1.817). **The finding — a property certificate INHERITS
+  the gap certificate:** half_width is finite iff s<1 iff σ₀<Δ_lo, so it is vacuous exactly where
+  Δ_lo is weak (LiH M=8–16) and sharp where healthy (M≥20) — pair with `gap_selfcheck` to know when
+  Δ_lo is trustworthy. **Bug caught:** the reference must be the HF-*reachable* ground, not the
+  global lowest eigenvector (a different particle-number sector for the charged HeH⁺ — G1 pins it).
+  100% reuse (`gap_bracket`, `_mean_and_variance`, `build_dipole_operators`). Gates G1–G4 in
+  `tests/test_certified_dipole_spec.py`; `certified_dipole.py`.
+  → [`SPEC_certified_dipole.md`](SPEC_certified_dipole.md) (Davis–Kahan on QKSD + certified gap;
+  sector-restricted, exact statevector, inherits the certified_gaps premise).
 - [x] **Excited-state ODMD via noise-edge thresholding** — the *same* survival-amplitude signal
   carries the low-lying spectrum in its higher DMD eigenphases (no extra measurements): noiseless
   E₁/gap < 1e-5 Ha (H₄ K=24, N₂ CAS(6,6) K=48). Under shot noise the ground-state spec's relative
