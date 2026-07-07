@@ -358,6 +358,21 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   bias. Reuses `_mean_and_variance`. Gates G1–G4 in `tests/test_certified_noise_spec.py`;
   `certified_noise.py`. → [`SPEC_certified_noise.md`](SPEC_certified_noise.md) (Monte-Carlo coverage;
   the probabilistic counterpart to the exact-statevector certified arc).
+- [x] **The precision-cost crossover — near-term certified (1/ε²) vs FT-QPE (1/ε)** *(bridges the
+  repo's two halves)* — certifying the energy to precision ε costs the near-term arc N=(z·λ_meas/ε)²
+  shot-measurements (standard limit, exponent −2, from `certified_noise`) vs FT-QPE
+  Q=π·λ_DF/(2ε) queries (Heisenberg, exponent −1), so the resource ratio ~1/ε and **FT wins the
+  exponent**. **The finding — the FT win is the exponent, not the constant:** the *raw* qubitization
+  λ_DF does NOT uniformly beat the measurement 1-norm — for **N₂ CAS(6,6) λ_DF=24.94 > λ_meas=22.84**
+  — so double factorization alone doesn't shrink the FT constant below measurement; only the
+  **symmetry shift** ([`SPEC_scdf_lambda.md`](SPEC_scdf_lambda.md)) drops λ_DF to 0.97/1.83/4.00,
+  below λ_meas for every molecule by a margin that *grows* with size (2.8×→5.7×) — the shift is
+  load-bearing, not a nicety. R@1.6mHa ~ 4·10³–3·10⁴; crossover ε* parametrized by the per-query
+  cost. **Boundary:** shots-vs-queries needs a common cost model (per-query T-cost = chem-ft, not
+  computed); the exponent gap is unit-independent. Reuses `df_lambda`/`symmetry_shift`. Gates G1–G4
+  in `tests/test_precision_cost_spec.py`; `precision_cost.py`.
+  → [`SPEC_precision_cost.md`](SPEC_precision_cost.md) (reproduction-adjacent scaling laws; the
+  composition on real shifted λ's is new; absolute T-gate cost out of scope).
 - [x] **Excited-state ODMD via noise-edge thresholding** — the *same* survival-amplitude signal
   carries the low-lying spectrum in its higher DMD eigenphases (no extra measurements): noiseless
   E₁/gap < 1e-5 Ha (H₄ K=24, N₂ CAS(6,6) K=48). Under shot noise the ground-state spec's relative
