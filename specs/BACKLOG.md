@@ -343,6 +343,21 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   Gates G1–G4 in `tests/test_certified_thermochem_spec.py`; `certified_thermochem.py`.
   → [`SPEC_certified_thermochem.md`](SPEC_certified_thermochem.md) (composition of two temple
   brackets; sector-restricted, exact statevector, in-basis).
+- [x] **The certified energy bracket under shot noise — a probabilistic certificate** *(the hardware
+  capstone of the certified arc)* — re-grounds the whole arc (all rungs rest on ⟨H⟩, ⟨H²⟩) under
+  i.i.d. shot noise (stderrs set by the 1-norms λ_H, λ_{H²}). **Two surprising findings:** (i)
+  **sampling breaks the certificate** — at converged depth the raw bracket covers E₀ only ~0.40 of
+  the time and the *variational upper bound holds ~0.49* (a coin flip), because ρ₀→E₀ makes symmetric
+  noise land below E₀ half the time (the tighter the Ritz state, the more fragile); (ii) **shots do
+  NOT buy coverage** — raw coverage is *N-independent* (identical at N=10⁴/10⁶/10⁸): the variational
+  knife-edge is structural, not a finite-sample effect. **The repair:** z·se inflation restores
+  coverage ≥0.9 (≈0.98 at z=2, conservative like `odmd_uq`), and the inflated half-width scales as
+  z·λ_H/√N (54→5.4→0.54 mHa as N×100) — **inflation buys coverage, shots buy tightness** (the
+  shot-cost law, cf. the visibility law). **Boundary:** λ_{H²}≫λ_H (H4: 63 vs 10) so the Temple lower
+  bound is the noise-expensive side; idealized i.i.d. Gaussian, oracle gap, can't see systematic
+  bias. Reuses `_mean_and_variance`. Gates G1–G4 in `tests/test_certified_noise_spec.py`;
+  `certified_noise.py`. → [`SPEC_certified_noise.md`](SPEC_certified_noise.md) (Monte-Carlo coverage;
+  the probabilistic counterpart to the exact-statevector certified arc).
 - [x] **Excited-state ODMD via noise-edge thresholding** — the *same* survival-amplitude signal
   carries the low-lying spectrum in its higher DMD eigenphases (no extra measurements): noiseless
   E₁/gap < 1e-5 Ha (H₄ K=24, N₂ CAS(6,6) K=48). Under shot noise the ground-state spec's relative
