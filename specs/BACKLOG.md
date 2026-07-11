@@ -456,6 +456,15 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   headline was corrected by the TDL step (the honest turn). Gates G1–G6 in
   `tests/test_nb3x8_gaps_spec.py`; `nb3x8_gaps.py`. → [`SPEC_nb3x8_gaps.md`](SPEC_nb3x8_gaps.md)
   (data from `arXiv:2501.10320`, Tables I & IV).
+- [x] **ScreenLoop — screening with *zero false eliminations*** — *Claim:* eliminating candidates only
+  when their certified bracket is strictly disjoint from the target region can never discard a true
+  hit, a guarantee no point-estimate screener can make. *Gate (the check that could kill it):* on a
+  50-candidate space with exhaustive ground truth, `screen` eliminates **0** of the 11 true hits
+  (pilot precision and through refinement) while `point_estimate_screen` eliminates > 0 on the *same*
+  space with the *same* oracle; the loop reaches the exhaustive-at-full-precision hit set for < half
+  the cost. Soundness is *relative to* bracket validity — a lying oracle voids it (stated, not hidden).
+  Gates 1–5 in `tests/test_screenloop_spec.py`; `screenloop/`.
+  → [`SPEC_screenloop.md`](SPEC_screenloop.md).
 
 ## Killed
 
