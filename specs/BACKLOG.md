@@ -486,28 +486,33 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   verdict (which method is cheaper at a given ρ) flips. Cheap: pure re-scoring, no new physics.
   Deliberately NOT done inside `SPEC_shift_both_sides` — it would move numbers pinned by another
   spec's committed gates.
-- [ ] **`nb3x8_device_gap` G2 passes by numerical accident — a flaky capstone gate** — *Claim:*
-  `trotter_odmd.build_trotter_odmd_problem` picks the circuit eigenphase as
-  `min(-angle(λ)/τ)` over eigenvectors with `pops_u > 1e-8`, where `pops_u` comes from
-  `np.linalg.eig` on a **near-degenerate unitary** (‖W†W−I‖ ≈ 5e-4). For Nb₃F₈ sector nelec=2 the
-  HF reference is **nearly orthogonal to the sector ground state** (exact overlap 1.36e-5; in the
-  Trotterized basis ~2.5e-13, i.e. *below* the 1e-8 cut, and the whole degenerate cluster sums to
-  2.5e-13 — so clustering does not rescue it). The gate
-  `assert abs(circuit_gap(**f8, reps=1) - exact_gap(**f8)) < 1.0` therefore passes **only** on runs
-  where floating-point noise lifts that ~1e-13 population above the cut; when it does not,
-  `np.min` returns the *other* branch and the gap is wrong by exactly π/τ × the sector weight
-  (observed: 3751.9 meV vs the 2π/τ = 3752.005 wrap quantum). **Measured flake rate is
-  context-dependent and NOT rare: 3/5 under `pytest` (the gate's real context), 2/2 observed
-  `make gates` runs, but only 2/20 in a bare script** — so it is run-to-run floating-point
-  nondeterminism (it hit `OMP_NUM_THREADS=1` and `=8` alike), and in its actual gate context the
-  gate is closer to a coin flip than to a rare flake. The bad runs return exactly
-  −1171.1000 meV, matching the observed `make gates` failure to the digit. *Gate that would settle it:* assert
-  `circuit_gap` is invariant across thread counts / repeated runs (it is not, today); then decide
-  whether an HF reference with 1e-5 ground overlap can legitimately anchor the sector — if not, the
-  capstone's sector-2 claim needs restating, not the threshold nudging. **Do not "fix" by loosening
-  the tolerance or raising the 1e-8 cut** — that would hide the finding. Also latent: `np.min` over
-  the principal branch can select *unphysical* eigenphases outside the reachable band (an e=−1657.45
-  image exists in the same spectrum).
+- [ ] **`nb3x8_device_gap` G2: a Trotter-leakage resolution floor, exposed as a flaky gate** —
+  *The finding (two compounding causes, both measured):* **(1)** the Trotter synthesis is
+  **nondeterministic across processes** — `unitary_deviation` for Nb₃F₈ sector nelec=2, reps=1 comes
+  out **1.045e-2 or 5.964e-3** depending on the run (Pauli ordering), despite the spec docstring
+  claiming determinism. **(2)** The HF reference's population on that sector's ground state is only
+  **1.36e-5**, while Trotter leakage from the two dominant states (population ~0.5 each) contributes
+  a spurious ~‖U−U_exact‖² ≈ **1.1e-4 / 3.6e-5** at the *same* eigenphase. At reps=1 the leakage
+  **exceeds the genuine signal**, so the ground eigenphase's computed population is whatever the two
+  leave after cancellation (observed anywhere from 1e-5 to 2.5e-13). When it falls under the
+  `pops_u > 1e-8` cut in `trotter_odmd.build_trotter_odmd_problem`, `min(-angle(λ)/τ)` takes the
+  other branch and the gap is wrong by exactly π/τ × the sector weight — **−1171.1000 meV** against
+  the correct 2580.7, i.e. off by 3751.9 ≈ the 2π/τ = 3752.005 wrap quantum.
+  *Measured:* 3/5 failures under `pytest`, 2/2 under `make gates`, 2/20 in a bare script — a coin
+  flip in its real context, not CI noise. **reps=2 and reps=4 are perfectly stable (5/5)** — leakage
+  5.0e-6 / 2.9e-7 falls below the 1.4e-5 signal — which is exactly why `test_G3`'s Richardson
+  (reps 2,4) never flakes and only the reps=1 line does.
+  *The general law worth gating:* **an eigenphase is resolvable only if the reference's population on
+  it exceeds the Trotter leakage floor ‖U−U_exact‖².** The failing assertion
+  (`abs(circuit_gap(**f8, reps=1) - exact_gap(**f8)) < 1.0`) is testing a quantity **below the
+  method's own resolution floor**.
+  *Do NOT* fix by loosening the tolerance, raising the 1e-8 cut, or anchoring the branch selection to
+  the exact ground eigenvector — the last would use the answer to pick the branch and hide the fact
+  that ODMD could not resolve it. *Candidate fix:* restate the near-commuting F₈ contrast at reps=2
+  (resolvable: 2580.7804 vs exact 2580.8024) and make the Trotter synthesis deterministic; record the
+  leakage floor as the finding.
+  *Also latent:* `np.min` over the principal branch can select **unphysical** eigenphases outside the
+  reachable band (an e = −1657.45 image exists in the same spectrum).
 
 ## Killed
 
