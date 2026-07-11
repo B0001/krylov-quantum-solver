@@ -51,7 +51,7 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["hybrid_quantum_solver*", "certchem*", "chemcheck*"]
+include = ["hybrid_quantum_solver*", "certchem*", "chemcheck*", "shallowforge*"]
 
 [tool.ruff]
 # orchestrate_hybrid_pipeline.py is a quarantined "what-not-to-do" regression fixture (see

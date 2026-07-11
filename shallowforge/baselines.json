@@ -1,0 +1,12 @@
+{
+  "manifest_version": "shallowforge-1",
+  "reference_dt": 0.1,
+  "baseline": "first_order_trotter_reps1_naive_order",
+  "note": "Frozen CX/step for the strict first-order Trotter naive baseline that ShallowForge rungs are measured against. FINDING: the PRD (spec-shallow-evolution-compiler.md) calls the baseline 'first-order Trotter' yet cites '~6,500 CX/step' for N2 CAS(6,6). That ~6,500 figure is actually SECOND-order Trotter (6534 CX == ChemCheck T3 resource count from benchmark_resources.py). Strict first-order reps-1 is 3268. We freeze the first-order value as the baseline so that R2 (higher-order Suzuki) registers as a measurable improvement rather than being the baseline itself; the second-order count is recorded alongside for continuity with the published headline.",
+  "systems": {
+    "T0": {"num_qubits": 4, "baseline_cx_per_step": 36},
+    "T1": {"num_qubits": 8, "baseline_cx_per_step": 1088},
+    "T2": {"num_qubits": 10, "baseline_cx_per_step": 1930},
+    "T3": {"num_qubits": 12, "baseline_cx_per_step": 3268, "second_order_reps1_cx_per_step": 6534, "published_headline_note": "6534 (second-order) is the widely-quoted ~6,500 figure"}
+  }
+}
