@@ -14,12 +14,14 @@ THE FINDINGS (specs/SPEC_precision_cost.md), on real molecular 1-norms (H2, H2O,
     Heisenberg gap). At chemical accuracy (1.6 mHa) R ~ 4e3 - 3e4 -- FT is far cheaper in resource
     COUNT, and the gap widens as eps -> 0.
   * THE FT WIN IS THE EXPONENT, NOT THE CONSTANT. The RAW qubitization lambda_DF does NOT uniformly
-    beat the measurement 1-norm lambda_meas: for N2 CAS(6,6) lambda_DF = 24.94 > lambda_meas = 22.84.
+    beat the measurement 1-norm lambda_meas: for N2 CAS(6,6) lambda_DF = 24.94 > lambda_meas = 14.30.
     Double factorization alone does not shrink the FT constant below measurement.
   * THE SYMMETRY SHIFT EARNS THE CONSTANT. The number-operator shift (`scdf_lambda`) drops
     lambda_DF to 0.97 / 1.83 / 4.00 -- below lambda_meas for EVERY molecule, by a margin that GROWS
-    with system size (2.8x H2 -> 5.7x N2). So FT wins the exponent unconditionally and the constant
+    with system size (1.9x H2 -> 3.6x N2). So FT wins the exponent unconditionally and the constant
     only after the shift; the shift is not a nicety but load-bearing for the FT resource advantage.
+    (RE-SCORED 2026-07-11: lambda_meas now excludes the zero-variance identity term -- the original
+    figures 22.84 and 2.8x->5.7x carried 30-46% identity mass. specs/SPEC_lambda_meas_identity.md.)
 
 HONEST SCOPE: comparing shot-measurements to qubitization queries needs a common cost model -- the
 per-query T-gate cost of the block encoding is NOT computed here (that is `ft_resource_estimator`,
@@ -37,9 +39,25 @@ from df_factorization import df_lambda, double_factorize, symmetry_shift
 from hybrid_quantum_solver.molecular_hamiltonian import MolecularHamiltonian
 
 
-def measurement_lambda(mh: MolecularHamiltonian) -> float:
-    """lambda_meas = sum |Pauli coefficients| of the qubit Hamiltonian (the shot-noise 1-norm)."""
-    return float(np.abs(mh.qubit_hamiltonian.coeffs).sum())
+def measurement_lambda(mh: MolecularHamiltonian, include_identity: bool = False) -> float:
+    """lambda_meas: sum |Pauli coefficients| over the NON-identity terms (the shot-noise 1-norm).
+
+    The identity term is a constant of ZERO variance -- it costs zero shots -- so it must not
+    enter the shot count N = (z lambda / eps)^2. This function originally summed EVERY
+    coefficient, identity included, overstating the near-term cost by the identity fraction
+    (30-46% of the 1-norm for H2/H2O/N2) and flipping one advisor verdict (H2 at rho=1e4).
+    ``include_identity=True`` reproduces the old inflated value for archaeology.
+    See specs/SPEC_lambda_meas_identity.md.
+    """
+    op = mh.qubit_hamiltonian
+    if include_identity:
+        return float(np.abs(op.coeffs).sum())
+    total = 0.0
+    for coeff, pauli in zip(op.coeffs, op.paulis):
+        if set(pauli.to_label()) == {"I"}:
+            continue
+        total += abs(complex(coeff))
+    return float(total)
 
 
 def qubitization_lambda(h1, eri, norb: int, nelec=None, shift: bool = False) -> float:

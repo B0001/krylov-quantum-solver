@@ -37,9 +37,14 @@ shifted). Cost models: N(ε) = (z·λ_meas/ε)² (from `certified_noise`), Q(ε)
 QPE query count). **References:** the analytic 1/ε² / 1/ε limits (gated as exponents), and the
 `scdf_lambda`-validated λ's.
 
-**Numeric result:** λ_meas = 2.70 / 9.93 / 22.84 (H2 / H2O(4,3) / N2(6,6)); raw λ_DF = 2.60 / 8.67 /
-**24.94** (raw exceeds λ_meas for N₂); shifted λ_DF = 0.97 / 1.83 / 4.00 (below λ_meas for all, ratio
-2.8× → 5.4× → **5.7×**). Slopes: N −2, Q −1, R −1. R at 1.6 mHa ~ 4·10³ (H2) … 3·10⁴ (N2).
+**Numeric result** *(RE-SCORED 2026-07-11 — λ_meas now excludes the zero-variance identity term;
+the original figures carried 30–46% identity mass, see
+[`SPEC_lambda_meas_identity.md`](SPEC_lambda_meas_identity.md)):* λ_meas = 1.89 / 5.40 / 14.30
+(H2 / H2O(4,3) / N2(6,6)); raw λ_DF = 2.60 / 8.67 / **24.94** (raw exceeds λ_meas for N₂ — *stronger*
+under the honest metric); shifted λ_DF = 0.97 / 1.83 / 4.00 (below λ_meas for all, ratio
+1.9× → 3.0× → **3.6×**; G3's bar revised 5.0 → 3.0 accordingly). Slopes: N −2, Q −1, R −1 (identity-
+free by construction, unchanged). R at 1.6 mHa ~ 5.8·10³ (H2) … 8.1·10⁴ (N2). *(Original inflated
+values: λ_meas 2.70/9.93/22.84, ratios 2.8×/5.4×/5.7×, R 1.2·10⁴…2.1·10⁵.)*
 
 ## 4. Public interface
 

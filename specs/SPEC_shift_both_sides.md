@@ -53,10 +53,12 @@ bridge really does overstate FT — but by **2.7–5.7×**, not the 4–14× the
 flip-ρ is **1.44×10⁴** against the one-sided **8.14×10⁴** (not the drafted 1.5×10⁴ vs 2.1×10⁵, both
 of which carried identity mass). G5 pins this so the artifact cannot silently return.
 
-**Consequence for the repo:** `precision_cost.measurement_lambda` overstates the near-term shot cost
-for *raw and shifted alike*, so the published `precision_cost`/`cost_advisor` crossovers inherit the
-same bias. Left in place here (changing it would move committed numbers in another spec's gates);
-`shift_both_sides.shot_lambda` is the honest one. → BACKLOG follow-up.
+**Consequence for the repo:** `precision_cost.measurement_lambda` overstated the near-term shot cost
+for *raw and shifted alike*, so the published `precision_cost`/`cost_advisor` crossovers inherited
+the same bias. Initially left in place here (changing it moves committed numbers in another spec's
+gates); **now fixed** by [`SPEC_lambda_meas_identity.md`](SPEC_lambda_meas_identity.md) — identity
+excluded by default, the precision_cost G3 bar revised 5.0 → 3.0 with the reason recorded, and one
+advisor verdict honestly flipped (H₂ at ρ=10⁴, FT → near-term).
 
 ## 4. Public interface
 

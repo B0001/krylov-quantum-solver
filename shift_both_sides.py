@@ -10,8 +10,9 @@ fair game for EITHER method. Shift both sides and the FT advantage shrinks.
 
 THE HONEST METRIC (and the finding). The shot count is N = (z lambda / eps)^2 where lambda must sum
 only the NON-IDENTITY Pauli coefficients: the identity term is a constant with ZERO variance, so it
-costs zero shots. The repo's `precision_cost.measurement_lambda` sums ALL coefficients, identity
-included -- it overstates near-term cost. That matters here because a large part of what the shift
+costs zero shots. The repo's `precision_cost.measurement_lambda` summed ALL coefficients, identity
+included -- overstating near-term cost (fixed since specs/SPEC_lambda_meas_identity.md; this module
+found it). That matters here because a large part of what the shift
 does to the qubit Hamiltonian is dump weight INTO the identity term (N2: identity 8.55 -> 0.10 Ha).
 Scoring the shift with the identity-inclusive 1-norm therefore FLATTERS it:
 
@@ -45,8 +46,8 @@ def shot_lambda(mh, *, include_identity: bool = False) -> float:
     """The measurement 1-norm that actually costs shots: sum |c_P| over NON-identity Paulis P.
 
     The identity term is a constant of zero variance -- it consumes no shots. Set
-    ``include_identity=True`` to reproduce `precision_cost.measurement_lambda` (which sums every
-    coefficient, and so overstates the shot cost).
+    ``include_identity=True`` to reproduce the identity-inclusive 1-norm (what
+    `precision_cost.measurement_lambda` computed before SPEC_lambda_meas_identity fixed it).
     """
     op = mh.qubit_hamiltonian
     total = 0.0

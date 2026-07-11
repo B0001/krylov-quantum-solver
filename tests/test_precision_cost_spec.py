@@ -74,14 +74,18 @@ def test_G2_ft_win_is_the_exponent_not_the_raw_constant():
 def test_G3_symmetry_shift_earns_the_constant_growing_with_size():
     """The symmetry shift (scdf_lambda) drops lambda_DF below lambda_meas for EVERY molecule, by a
     ratio that grows with system size (H2 < H2O < N2) -- the shift is load-bearing for the FT
-    constant advantage, not a nicety."""
+    constant advantage, not a nicety.
+
+    REVISED (specs/SPEC_lambda_meas_identity.md): the N2 bar was > 5.0 ("~5.7x"), measured with
+    the identity term wrongly included in lambda_meas. Honestly scored the margin is 3.58x --
+    still growing with size, still load-bearing, but the old bar was measuring identity mass."""
     ratios = {}
     for name, (atom, norb, nel) in _MOLS.items():
         lm, _, ls = _lambdas(atom, norb, nel)
         assert ls < lm, (name, ls, lm)                        # shifted DF beats measurement
         ratios[name] = lm / ls
     assert ratios["H2"] < ratios["H2O"] < ratios["N2"], ratios  # advantage grows with size
-    assert ratios["N2"] > 5.0, ratios["N2"]                    # ~5.7x for N2
+    assert ratios["N2"] > 3.0, ratios["N2"]                    # ~3.6x for N2 (honest metric)
 
 
 def test_G4_crossover_exists_and_ratio_diverges():
