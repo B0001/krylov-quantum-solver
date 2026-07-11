@@ -23,6 +23,7 @@ from certchem import (
     FloorViolationError,
     Mode,
     certified_energy,
+    certified_gap,
     floor_guard,
 )
 from hybrid_quantum_solver import build_molecular_hamiltonian
@@ -125,3 +126,47 @@ def test_n2_quickstart_example_runs():
     from certchem.examples import n2_quickstart
 
     n2_quickstart.main()  # raises if HF is not above the certified bracket, etc.
+
+
+# --- certified_gap (contract surface for SenseForge) ------------------------------------
+
+
+def test_certified_gap_bracket_wraps_primitive_and_holds_invariant():
+    # H4 chain has a real reachable-sector gap; krylov_dim>=6 for the lower certificate premise.
+    mol = GOLDEN["H4"][0]
+    result = certified_gap(mol, "sto-3g", (4, 4), "fundamental", krylov_dim=8)
+    assert isinstance(result, CertifiedResult)
+    b = result.bracket
+    assert b.lower_hartree <= b.best_estimate_hartree <= b.upper_hartree
+    assert b.lower_hartree > 0.0  # a physical excitation gap is positive
+    assert "interlacing" in result.certificate.method
+
+    # Cross-check the wrapped numbers against the underlying certified_gaps primitive.
+    from certified_gaps import gap_bracket
+    from hybrid_quantum_solver import build_molecular_hamiltonian
+
+    mh = build_molecular_hamiltonian(atom=mol, basis="sto-3g",
+                                     active_electrons=4, active_orbitals=4)
+    # Independent solve, so compare loosely — the excited-state Temple bound amplifies BLAS
+    # run-to-run jitter to ~1e-8 (far below the ~0.66 Ha gap). This confirms the wrapper wraps
+    # gap_bracket; it is NOT a determinism claim for the gap path.
+    gb = gap_bracket(mh, 8)
+    assert b.lower_hartree == pytest.approx(gb.gap_lower, abs=1e-5)
+    assert b.upper_hartree == pytest.approx(gb.gap_upper, abs=1e-5)
+
+
+def test_certified_gap_fast_returns_positive_float():
+    mol = GOLDEN["H4"][0]
+    g = certified_gap(mol, "sto-3g", (4, 4), "fundamental", mode=Mode.FAST, krylov_dim=8)
+    assert isinstance(g, float)
+    assert g > 0.0
+
+
+def test_certified_gap_rejects_unknown_gap_type():
+    with pytest.raises(ValueError):
+        certified_gap(GOLDEN["H4"][0], "sto-3g", (4, 4), "optical", krylov_dim=8)
+
+
+def test_certified_gap_respects_caps():
+    with pytest.raises(CapExceededError):
+        certified_gap(GOLDEN["H4"][0], "cc-pVQZ", (4, 4), "fundamental")

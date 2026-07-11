@@ -111,6 +111,15 @@ def _estimate(mh, krylov_dim: int, eps: float | None) -> tuple[float, float, flo
     return br.upper, br.lower, br.upper, br.variance
 
 
+def _estimate_gap(mh, krylov_dim: int, e1: float | None) -> tuple[float, float, float]:
+    """Certified reachable-sector gap. Returns (best_gap, gap_lower, gap_upper), all Ha."""
+    from certified_gaps import gap_bracket
+
+    gb = gap_bracket(mh, krylov_dim, e1=e1)
+    best = gb.theta1 - gb.theta0  # Ritz gap, provably inside [gap_lower, gap_upper]
+    return best, gb.gap_lower, gb.gap_upper
+
+
 def certified_energy(
     molecule: Any,
     basis: str,
@@ -161,6 +170,65 @@ def certified_energy(
             floor_check="pass",
             krylov_dim=krylov_dim,
             convergence=convergence,
+            solver_version=solver_version(),
+            manifest=None,
+        ),
+    )
+
+
+#: Gap types this module can certify. Only the fundamental reachable-sector gap in M1.
+_SUPPORTED_GAP_TYPES = frozenset({"fundamental"})
+
+
+def certified_gap(
+    molecule: Any,
+    basis: str,
+    cas: tuple[int, int],
+    gap_type: str = "fundamental",
+    mode: Mode = Mode.CERTIFIED,
+    *,
+    krylov_dim: int = DEFAULT_KRYLOV_DIM,
+    e1: float | None = None,
+) -> CertifiedResult | float:
+    """Certified bracket on a spectral gap (excitation energy) of ``molecule``.
+
+    ``gap_type="fundamental"`` is Δ = E₁ − E₀ of the HF-reachable sector (the only gap M1
+    certifies). ``Mode.CERTIFIED`` returns a floor-checked bracket built from interlacing +
+    Temple + Weinstein (``certified_gaps.gap_bracket``); ``Mode.FAST`` returns the bare Ritz gap.
+    The lower certificate's premise is only valid for ``krylov_dim >= 6`` (see certified_gaps.py).
+    """
+    if gap_type not in _SUPPORTED_GAP_TYPES:
+        raise ValueError(
+            f"gap_type {gap_type!r} not supported; M1 certifies {sorted(_SUPPORTED_GAP_TYPES)}"
+        )
+    check_caps(molecule, basis, cas)
+    mh = _build_mh(molecule, basis, cas)
+
+    best, lower, upper = _estimate_gap(mh, krylov_dim, e1)
+
+    if mode is Mode.FAST:
+        return float(best)
+
+    if lower == float("-inf") or upper == float("inf"):
+        raise ConvergenceError(
+            "gap certificate is vacuous (infinite bound); raise krylov_dim (>=6) or supply e1",
+            partial={"krylov_dim": krylov_dim, "gap_lower": lower, "gap_upper": upper},
+        )
+
+    # Chokepoint: a certified gap can never sink below its own certified lower bound.
+    floor_guard(best, lower)
+
+    return CertifiedResult(
+        bracket=Bracket(
+            lower_hartree=_q_lower(lower),
+            upper_hartree=_q_upper(upper),
+            best_estimate_hartree=_q_nearest(best),
+        ),
+        certificate=Certificate(
+            method="certified_gap: interlacing + temple + weinstein",
+            floor_check="pass",
+            krylov_dim=krylov_dim,
+            convergence="converged",
             solver_version=solver_version(),
             manifest=None,
         ),

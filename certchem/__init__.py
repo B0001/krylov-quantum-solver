@@ -18,12 +18,13 @@ from .contract import (
     FloorViolationError,
     Mode,
 )
-from .core import certified_energy, floor_guard, solver_version
+from .core import certified_energy, certified_gap, floor_guard, solver_version
 from .limits import ALLOWED_BASES, MAX_SPIN_ORBITALS, check_caps
 
 __all__ = [
     "Mode",
     "certified_energy",
+    "certified_gap",
     "floor_guard",
     "solver_version",
     "Bracket",
