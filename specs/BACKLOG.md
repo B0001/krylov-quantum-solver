@@ -496,9 +496,11 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   `assert abs(circuit_gap(**f8, reps=1) - exact_gap(**f8)) < 1.0` therefore passes **only** on runs
   where floating-point noise lifts that ~1e-13 population above the cut; when it does not,
   `np.min` returns the *other* branch and the gap is wrong by exactly π/τ × the sector weight
-  (observed: 3751.9 meV vs the 2π/τ = 3752.005 wrap quantum). **Measured flake rate: 2/20 runs
-  (~10%)**, hitting both `OMP_NUM_THREADS=1` and `=8` on the same iteration — so it is run-to-run
-  floating-point nondeterminism, *not* a thread-count effect. The bad runs return exactly
+  (observed: 3751.9 meV vs the 2π/τ = 3752.005 wrap quantum). **Measured flake rate is
+  context-dependent and NOT rare: 3/5 under `pytest` (the gate's real context), 2/2 observed
+  `make gates` runs, but only 2/20 in a bare script** — so it is run-to-run floating-point
+  nondeterminism (it hit `OMP_NUM_THREADS=1` and `=8` alike), and in its actual gate context the
+  gate is closer to a coin flip than to a rare flake. The bad runs return exactly
   −1171.1000 meV, matching the observed `make gates` failure to the digit. *Gate that would settle it:* assert
   `circuit_gap` is invariant across thread counts / repeated runs (it is not, today); then decide
   whether an HF reference with 1e-5 ground overlap can legitimately anchor the sector — if not, the
