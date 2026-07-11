@@ -44,13 +44,17 @@ class Tier:
     aspirational: bool = False
 
 
+# two_qubit_gates_per_trotter_step re-frozen 2026-07-11: build_trotter_step now orders Pauli
+# terms canonically (specs/SPEC_trotter_resolution_floor.md), which deterministically synthesizes
+# 4-6 FEWER CX per step than the hash-dependent ordering the original freeze ran under
+# (70/2174/3858/6534 -> 66/2170/3852/6528). The Hamiltonians (and their sha256 pins) are unchanged.
 TIERS: dict[str, Tier] = {
     "T0": Tier(
         name="T0", system="H2 / STO-3G (sanity floor)",
         atom="H 0 0 0; H 0 0 0.74", basis="sto3g",
         active_electrons=None, active_orbitals=None, spin_orbitals=4,
         fci_reference_hartree=-1.137283834,
-        two_qubit_gates_per_trotter_step=70, hamiltonian_pauli_terms=15,
+        two_qubit_gates_per_trotter_step=66, hamiltonian_pauli_terms=15,
         hamiltonian_sha256="26e50a294c09a23e602a52683e0006cf472d9aee6baf1a40e45ca2abf660558e",
         classically_simulable=True,
     ),
@@ -59,7 +63,7 @@ TIERS: dict[str, Tier] = {
         atom="H 0 0 0; H 0 0 0.9; H 0 0 1.8; H 0 0 2.7", basis="sto3g",
         active_electrons=None, active_orbitals=None, spin_orbitals=8,
         fci_reference_hartree=-2.180316614,
-        two_qubit_gates_per_trotter_step=2174, hamiltonian_pauli_terms=185,
+        two_qubit_gates_per_trotter_step=2170, hamiltonian_pauli_terms=185,
         hamiltonian_sha256="2fe671eae4ae3b1ba43e3f669ac7bd87237c51d36e961d82cbe870ad85f2a1e8",
         classically_simulable=True,
     ),
@@ -68,7 +72,7 @@ TIERS: dict[str, Tier] = {
         atom="Li 0 0 0; H 0 0 1.6", basis="sto3g",
         active_electrons=2, active_orbitals=5, spin_orbitals=10,
         fci_reference_hartree=-7.882096600,
-        two_qubit_gates_per_trotter_step=3858, hamiltonian_pauli_terms=276,
+        two_qubit_gates_per_trotter_step=3852, hamiltonian_pauli_terms=276,
         hamiltonian_sha256="52794491d99533ae5848da27e56ff307198375d191d271c5c82939409d9ff663",
         classically_simulable=True,
     ),
@@ -77,7 +81,7 @@ TIERS: dict[str, Tier] = {
         atom="N 0 0 0; N 0 0 1.1", basis="sto3g",
         active_electrons=6, active_orbitals=6, spin_orbitals=12,
         fci_reference_hartree=-107.623101772,
-        two_qubit_gates_per_trotter_step=6534, hamiltonian_pauli_terms=383,
+        two_qubit_gates_per_trotter_step=6528, hamiltonian_pauli_terms=383,
         hamiltonian_sha256="382de579ca32d5e877b5292a169642bed38117085b342bb05772f4166c928460",
         classically_simulable=False,  # ~6,500 CX/step — the current hardware wall
     ),
