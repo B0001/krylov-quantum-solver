@@ -27,6 +27,7 @@ from certchem import (
     floor_guard,
 )
 from hybrid_quantum_solver import build_molecular_hamiltonian
+from pytest_invariants import invariant
 
 # name -> (geometry, cas, tolerance in Ha). Small, exactly-referenceable systems.
 GOLDEN = {
@@ -43,23 +44,60 @@ def _fci(mol, cas):
     return mh.ground_state_energy()
 
 
+def _fci_of(name):
+    """Zero-arg FCI reference for a golden system (resolved lazily by the invariant plugin)."""
+    return lambda: _fci(GOLDEN[name][0], GOLDEN[name][1])
+
+
+def _bracket(result):
+    return (result.bracket.lower_hartree, result.bracket.upper_hartree)
+
+
 # --- Task 3 & 6: golden regression gate --------------------------------------------------
+# Containment + floor are the two invariants this repo hand-rolled everywhere; here they are
+# expressed once via the pytest-invariants plugin (portfolio #20, dogfood task 4). The
+# parametrized test keeps the accuracy/floor-pass checks; containment and the variational-floor
+# lower bound are the decorated tests below — deletions + decorators, same coverage.
 
 
 @pytest.mark.parametrize("name", list(GOLDEN))
-def test_golden_bracket_contains_fci_within_tol(name):
+def test_golden_estimate_within_tol_and_floor_passes(name):
     mol, cas, tol = GOLDEN[name]
     result = certified_energy(mol, "sto-3g", cas)
     assert isinstance(result, CertifiedResult)
     fci = _fci(mol, cas)
     b = result.bracket
-    # (a) bracket contains FCI
-    assert b.lower_hartree <= fci <= b.upper_hartree, f"{name}: FCI {fci} outside {b}"
-    # (b) estimate close to FCI
     assert abs(b.best_estimate_hartree - fci) <= tol, f"{name}: estimate off by > {tol}"
-    # (c) floor passed (holding the object is the proof)
     assert result.certificate.floor_check == "pass"
     assert b.width >= 0.0
+
+
+@invariant.contains(_fci_of("H2"), key=_bracket, provenance="FCI (exact diag) H2/STO-3G")
+def test_h2_bracket_contains_fci():
+    mol, cas, _ = GOLDEN["H2"]
+    return certified_energy(mol, "sto-3g", cas)
+
+
+@invariant.contains(_fci_of("H4"), key=_bracket, provenance="FCI (exact diag) H4/STO-3G")
+def test_h4_bracket_contains_fci():
+    mol, cas, _ = GOLDEN["H4"]
+    return certified_energy(mol, "sto-3g", cas)
+
+
+@invariant.contains(_fci_of("LiH"), key=_bracket, provenance="FCI (exact diag) LiH/STO-3G")
+def test_lih_bracket_contains_fci():
+    mol, cas, _ = GOLDEN["LiH"]
+    return certified_energy(mol, "sto-3g", cas)
+
+
+@invariant.lower_bound(
+    _fci_of("H2"),
+    key=lambda r: r.bracket.best_estimate_hartree,
+    provenance="variational floor = FCI ground state, H2/STO-3G",
+)
+def test_h2_estimate_respects_variational_floor():
+    mol, cas, _ = GOLDEN["H2"]
+    return certified_energy(mol, "sto-3g", cas)
 
 
 # --- Task 7: Mode.FAST ------------------------------------------------------------------
