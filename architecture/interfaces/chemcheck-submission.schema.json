@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chemcheck.example/schemas/submission.schema.json",
+  "title": "ChemCheck submission",
+  "description": "One submission = one device x one benchmark version. Mode A needs device_spec only; Mode B additionally needs runs. Immutable boundary between vendors and the scorer (ADR-0006).",
+  "type": "object",
+  "required": ["benchmark_version", "device_spec"],
+  "properties": {
+    "benchmark_version": { "type": "string", "pattern": "^chemcheck-\\d{4}\\.\\d+$" },
+    "device_spec": {
+      "type": "object",
+      "required": ["name", "qubit_count", "two_qubit_error", "connectivity", "native_gates"],
+      "properties": {
+        "name": { "type": "string" },
+        "qubit_count": { "type": "integer", "minimum": 1 },
+        "two_qubit_error": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "one_qubit_error": { "type": "number" },
+        "t1_us": { "type": "number" },
+        "t2_us": { "type": "number" },
+        "connectivity": { "type": "string", "enum": ["all_to_all", "heavy_hex", "grid", "linear", "custom"] },
+        "connectivity_edges": {
+          "type": "array",
+          "description": "Required when connectivity == custom",
+          "items": { "type": "array", "prefixItems": [{ "type": "integer" }, { "type": "integer" }], "minItems": 2, "maxItems": 2 }
+        },
+        "native_gates": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+      }
+    },
+    "runs": {
+      "type": "array",
+      "description": "Mode B payload. >=3 runs per tier required for the reproducibility check.",
+      "items": {
+        "type": "object",
+        "required": ["tier", "compiled_circuit_qasm3", "manifest", "shots", "measurements"],
+        "properties": {
+          "tier": { "type": "string", "enum": ["T0", "T1", "T2", "T3", "T4"] },
+          "compiled_circuit_qasm3": { "type": "string", "description": "Submitted for re-verification against the tier Hamiltonian." },
+          "manifest": { "$ref": "compiler-manifest.schema.json" },
+          "shots": { "type": "integer", "minimum": 1 },
+          "measurements": {
+            "type": "object",
+            "description": "Time-series expectation data consumed by the ODMD extractor.",
+            "required": ["times", "signal_real", "signal_imag"],
+            "properties": {
+              "times": { "type": "array", "items": { "type": "number" } },
+              "signal_real": { "type": "array", "items": { "type": "number" } },
+              "signal_imag": { "type": "array", "items": { "type": "number" } }
+            }
+          },
+          "error_mitigation": {
+            "type": "object",
+            "description": "Must be declared; raw and mitigated scores are both reported.",
+            "properties": {
+              "methods": { "type": "array", "items": { "type": "string" } },
+              "classical_postprocessing_flops_estimate": { "type": "number" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

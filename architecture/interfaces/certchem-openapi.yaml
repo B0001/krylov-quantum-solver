@@ -1,0 +1,295 @@
+openapi: 3.1.0
+info:
+  title: CertChem API
+  version: 0.1.0
+  description: >
+    Quantum-chemistry quantities with rigorous two-sided bounds.
+    All certified guarantees are stated with respect to the requested
+    active space and basis, not the exact non-relativistic limit.
+servers:
+  - url: https://api.certchem.example/v1
+security:
+  - ApiKeyAuth: []
+
+paths:
+  /energy:
+    post:
+      summary: Ground-state energy with optional certified bracket
+      operationId: computeEnergy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EnergyRequest' }
+      responses:
+        '200':
+          description: Result computed synchronously (cache hit or fast job)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnergyResult' }
+        '202':
+          description: Job accepted for asynchronous execution
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobAccepted' }
+        '422': { $ref: '#/components/responses/CapExceeded' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /reaction:
+    post:
+      summary: Reaction energy with worst-case propagated bracket
+      operationId: computeReaction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReactionRequest' }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReactionResult' }
+          description: Result
+        '202':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobAccepted' }
+          description: Queued
+        '422': { $ref: '#/components/responses/CapExceeded' }
+
+  /gap:
+    post:
+      summary: Excitation or spin gap with certified bracket
+      operationId: computeGap
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GapRequest' }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GapResult' }
+          description: Result
+        '202':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobAccepted' }
+          description: Queued
+        '422': { $ref: '#/components/responses/CapExceeded' }
+
+  /jobs/{jobId}:
+    get:
+      summary: Poll an asynchronous job
+      operationId: getJob
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Job status; embeds result when state == succeeded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobStatus' }
+        '404': { description: Unknown job id }
+
+  /limits:
+    get:
+      summary: Machine-readable statement of current caps
+      operationId: getLimits
+      security: []
+      responses:
+        '200':
+          description: Current validated system classes and hard caps
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Limits' }
+
+components:
+  securitySchemes:
+    ApiKeyAuth: { type: apiKey, in: header, name: X-Api-Key }
+
+  responses:
+    CapExceeded:
+      description: >
+        Request is outside the validated envelope. Never degraded silently:
+        the response names the violated cap.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: Per-key rate limit exceeded
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Molecule:
+      type: object
+      required: [charge, multiplicity]
+      properties:
+        xyz: { type: string, description: XYZ block; authoritative geometry }
+        smiles:
+          type: string
+          description: >
+            Accepted as convenience; converted via RDKit and flagged
+            geometry_not_optimized unless pre_optimize=true.
+        charge: { type: integer }
+        multiplicity: { type: integer, minimum: 1 }
+        pre_optimize: { type: boolean, default: false }
+      oneOf:
+        - required: [xyz]
+        - required: [smiles]
+
+    ActiveSpace:
+      type: object
+      required: [electrons, orbitals]
+      properties:
+        electrons: { type: integer, minimum: 2 }
+        orbitals:
+          type: integer
+          minimum: 1
+          description: Spatial orbitals; 2×orbitals ≤ spin-orbital cap (see /limits)
+
+    EnergyRequest:
+      type: object
+      required: [molecule, basis, active_space]
+      properties:
+        molecule: { $ref: '#/components/schemas/Molecule' }
+        basis: { type: string, enum: [sto-3g, 6-31g] }
+        active_space: { $ref: '#/components/schemas/ActiveSpace' }
+        mode: { type: string, enum: [fast, certified], default: certified }
+
+    Bracket:
+      type: object
+      required: [lower_bound_hartree, upper_bound_hartree]
+      properties:
+        lower_bound_hartree: { type: number }
+        upper_bound_hartree: { type: number }
+        bracket_width_hartree:
+          type: number
+          description: Exposed so clients can filter loose bounds; never tightened heuristically.
+
+    Certificate:
+      type: object
+      required: [method, floor_check, solver_version, convergence]
+      properties:
+        method: { type: string, example: temple_bound + variational_floor }
+        floor_check: { type: string, enum: [pass] }
+        krylov_dim: { type: integer }
+        convergence: { type: string, enum: [converged, converged_marginal] }
+        solver_version: { type: string }
+        scope_statement:
+          type: string
+          const: >-
+            Certified with respect to the requested active space and basis,
+            not the exact non-relativistic limit.
+
+    EnergyResult:
+      type: object
+      required: [certified, best_estimate_hartree, job_id, wall_time_s]
+      properties:
+        certified: { type: boolean }
+        best_estimate_hartree: { type: number }
+        bracket:
+          allOf: [{ $ref: '#/components/schemas/Bracket' }]
+          description: Present iff certified == true.
+        certificate:
+          allOf: [{ $ref: '#/components/schemas/Certificate' }]
+          description: Present iff certified == true.
+        cache_hit: { type: boolean }
+        job_id: { type: string, format: uuid }
+        wall_time_s: { type: number }
+
+    ReactionRequest:
+      type: object
+      required: [species, basis, mode]
+      properties:
+        species:
+          type: array
+          minItems: 2
+          items:
+            type: object
+            required: [coefficient, molecule, active_space]
+            properties:
+              coefficient: { type: number, description: Stoichiometric; negative = reactant }
+              molecule: { $ref: '#/components/schemas/Molecule' }
+              active_space: { $ref: '#/components/schemas/ActiveSpace' }
+        basis: { type: string, enum: [sto-3g, 6-31g] }
+        mode: { type: string, enum: [certified], description: Reactions are certified-only. }
+
+    ReactionResult:
+      type: object
+      required: [certified, delta_e_bracket, per_species]
+      properties:
+        certified: { type: boolean, const: true }
+        delta_e_bracket:
+          allOf: [{ $ref: '#/components/schemas/Bracket' }]
+          description: Worst-case interval propagation; widths add across species.
+        per_species:
+          type: array
+          items: { $ref: '#/components/schemas/EnergyResult' }
+        certificate: { $ref: '#/components/schemas/Certificate' }
+
+    GapRequest:
+      type: object
+      required: [molecule, basis, active_space, gap_type]
+      properties:
+        molecule: { $ref: '#/components/schemas/Molecule' }
+        basis: { type: string, enum: [sto-3g, 6-31g] }
+        active_space: { $ref: '#/components/schemas/ActiveSpace' }
+        gap_type: { type: string, enum: [singlet_triplet, first_excitation] }
+        mode: { type: string, enum: [fast, certified], default: certified }
+
+    GapResult:
+      type: object
+      required: [certified, best_estimate_hartree]
+      properties:
+        certified: { type: boolean }
+        best_estimate_hartree: { type: number }
+        bracket: { $ref: '#/components/schemas/Bracket' }
+        certificate: { $ref: '#/components/schemas/Certificate' }
+
+    JobAccepted:
+      type: object
+      required: [job_id, state]
+      properties:
+        job_id: { type: string, format: uuid }
+        state: { type: string, const: queued }
+        poll_url: { type: string, format: uri }
+
+    JobStatus:
+      type: object
+      required: [job_id, state]
+      properties:
+        job_id: { type: string, format: uuid }
+        state: { type: string, enum: [queued, running, succeeded, failed, timed_out] }
+        result:
+          description: Present when state == succeeded; shape matches the originating endpoint.
+          oneOf:
+            - $ref: '#/components/schemas/EnergyResult'
+            - $ref: '#/components/schemas/ReactionResult'
+            - $ref: '#/components/schemas/GapResult'
+        error: { $ref: '#/components/schemas/Error' }
+
+    Limits:
+      type: object
+      properties:
+        max_spin_orbitals: { type: integer, example: 16 }
+        bases: { type: array, items: { type: string } }
+        sync_timeout_s: { type: integer, example: 600 }
+        queued_timeout_s: { type: integer, example: 7200 }
+        benchmark_version: { type: string, example: goldensuite-2026.1 }
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [cap_exceeded, floor_violation, rate_limited, invalid_input, internal]
+        message: { type: string }
+        violated_cap: { type: string, description: Present when code == cap_exceeded }
