@@ -465,6 +465,45 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   the cost. Soundness is *relative to* bracket validity — a lying oracle voids it (stated, not hidden).
   Gates 1–5 in `tests/test_screenloop_spec.py`; `screenloop/`.
   → [`SPEC_screenloop.md`](SPEC_screenloop.md).
+- [x] **Shift BOTH sides — the bridge overstated FT's advantage** — the BLISS/SCDF number-operator
+  shift that the bridge banked on the FT side (λ_DF) **also lowers the measurement 1-norm λ_meas**,
+  so it cuts the near-term shot cost too; comparing raw-λ_meas against shifted-λ_DF was an
+  inconsistency. **THE FINDING:** the draft's headline (λ_meas −54/−51/−73%, crossover 4–14×) was
+  scored with the *wrong* 1-norm — `precision_cost.measurement_lambda` sums **every** Pauli
+  coefficient *including identity*, but the identity is a zero-variance constant that costs **zero
+  shots**, and a large part of what the shift does is dump weight into it (N₂: 8.55 → 0.10 Ha). On
+  the honest identity-excluded 1-norm the reductions are **42.9/39.4/57.9%** and the fair crossover
+  moves **2.7–5.7×**, not 4–14× (N₂ flip-ρ 8.14e4 → 1.44e4). The claim survives, smaller; G1's bar
+  was revised 40%→35% because H₂O honestly reduces by 39.4%. Gates G1–G5 in
+  `tests/test_shift_both_sides_spec.py`; `shift_both_sides.py`.
+  → [`SPEC_shift_both_sides.md`](SPEC_shift_both_sides.md).
+- [ ] **λ_meas includes the identity term — the published crossovers inherit the bias** *(follow-up
+  from `SPEC_shift_both_sides`)* — *Claim:* `precision_cost.measurement_lambda` sums all Pauli
+  coefficients, identity included, so it **overstates** the near-term shot cost N = (z λ/ε)² for raw
+  and shifted alike; every `precision_cost` / `cost_advisor` crossover number inherits it. *Gate:*
+  swap in `shift_both_sides.shot_lambda` (identity-excluded) and show the published flip-ρ / ε* move
+  by the identity fraction (H₂ 30%, H₂O 46%, N₂ 37% of the raw 1-norm) — and that no *qualitative*
+  verdict (which method is cheaper at a given ρ) flips. Cheap: pure re-scoring, no new physics.
+  Deliberately NOT done inside `SPEC_shift_both_sides` — it would move numbers pinned by another
+  spec's committed gates.
+- [ ] **`nb3x8_device_gap` G2 passes by numerical accident — a flaky capstone gate** — *Claim:*
+  `trotter_odmd.build_trotter_odmd_problem` picks the circuit eigenphase as
+  `min(-angle(λ)/τ)` over eigenvectors with `pops_u > 1e-8`, where `pops_u` comes from
+  `np.linalg.eig` on a **near-degenerate unitary** (‖W†W−I‖ ≈ 5e-4). For Nb₃F₈ sector nelec=2 the
+  HF reference is **nearly orthogonal to the sector ground state** (exact overlap 1.36e-5; in the
+  Trotterized basis ~2.5e-13, i.e. *below* the 1e-8 cut, and the whole degenerate cluster sums to
+  2.5e-13 — so clustering does not rescue it). The gate
+  `assert abs(circuit_gap(**f8, reps=1) - exact_gap(**f8)) < 1.0` therefore passes **only** on runs
+  where floating-point noise lifts that ~1e-13 population above the cut; when it does not,
+  `np.min` returns the *other* branch and the gap is wrong by exactly π/τ × the sector weight
+  (observed: 3751.9 meV vs the 2π/τ = 3752.005 wrap quantum). Observed RED under `make gates`,
+  GREEN standalone — reproducible by varying `OMP_NUM_THREADS`. *Gate that would settle it:* assert
+  `circuit_gap` is invariant across thread counts / repeated runs (it is not, today); then decide
+  whether an HF reference with 1e-5 ground overlap can legitimately anchor the sector — if not, the
+  capstone's sector-2 claim needs restating, not the threshold nudging. **Do not "fix" by loosening
+  the tolerance or raising the 1e-8 cut** — that would hide the finding. Also latent: `np.min` over
+  the principal branch can select *unphysical* eigenphases outside the reachable band (an e=−1657.45
+  image exists in the same spectrum).
 
 ## Killed
 
