@@ -477,42 +477,42 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   was revised 40%→35% because H₂O honestly reduces by 39.4%. Gates G1–G5 in
   `tests/test_shift_both_sides_spec.py`; `shift_both_sides.py`.
   → [`SPEC_shift_both_sides.md`](SPEC_shift_both_sides.md).
-- [ ] **λ_meas includes the identity term — the published crossovers inherit the bias** *(follow-up
-  from `SPEC_shift_both_sides`)* — *Claim:* `precision_cost.measurement_lambda` sums all Pauli
-  coefficients, identity included, so it **overstates** the near-term shot cost N = (z λ/ε)² for raw
-  and shifted alike; every `precision_cost` / `cost_advisor` crossover number inherits it. *Gate:*
-  swap in `shift_both_sides.shot_lambda` (identity-excluded) and show the published flip-ρ / ε* move
-  by the identity fraction (H₂ 30%, H₂O 46%, N₂ 37% of the raw 1-norm) — and that no *qualitative*
-  verdict (which method is cheaper at a given ρ) flips. Cheap: pure re-scoring, no new physics.
-  Deliberately NOT done inside `SPEC_shift_both_sides` — it would move numbers pinned by another
-  spec's committed gates.
-- [ ] **`nb3x8_device_gap` G2: a Trotter-leakage resolution floor, exposed as a flaky gate** —
-  *The finding (two compounding causes, both measured):* **(1)** the Trotter synthesis is
-  **nondeterministic across processes** — `unitary_deviation` for Nb₃F₈ sector nelec=2, reps=1 comes
-  out **1.045e-2 or 5.964e-3** depending on the run (Pauli ordering), despite the spec docstring
-  claiming determinism. **(2)** The HF reference's population on that sector's ground state is only
-  **1.36e-5**, while Trotter leakage from the two dominant states (population ~0.5 each) contributes
-  a spurious ~‖U−U_exact‖² ≈ **1.1e-4 / 3.6e-5** at the *same* eigenphase. At reps=1 the leakage
-  **exceeds the genuine signal**, so the ground eigenphase's computed population is whatever the two
-  leave after cancellation (observed anywhere from 1e-5 to 2.5e-13). When it falls under the
-  `pops_u > 1e-8` cut in `trotter_odmd.build_trotter_odmd_problem`, `min(-angle(λ)/τ)` takes the
-  other branch and the gap is wrong by exactly π/τ × the sector weight — **−1171.1000 meV** against
-  the correct 2580.7, i.e. off by 3751.9 ≈ the 2π/τ = 3752.005 wrap quantum.
-  *Measured:* 3/5 failures under `pytest`, 2/2 under `make gates`, 2/20 in a bare script — a coin
-  flip in its real context, not CI noise. **reps=2 and reps=4 are perfectly stable (5/5)** — leakage
-  5.0e-6 / 2.9e-7 falls below the 1.4e-5 signal — which is exactly why `test_G3`'s Richardson
-  (reps 2,4) never flakes and only the reps=1 line does.
-  *The general law worth gating:* **an eigenphase is resolvable only if the reference's population on
-  it exceeds the Trotter leakage floor ‖U−U_exact‖².** The failing assertion
-  (`abs(circuit_gap(**f8, reps=1) - exact_gap(**f8)) < 1.0`) is testing a quantity **below the
-  method's own resolution floor**.
-  *Do NOT* fix by loosening the tolerance, raising the 1e-8 cut, or anchoring the branch selection to
-  the exact ground eigenvector — the last would use the answer to pick the branch and hide the fact
-  that ODMD could not resolve it. *Candidate fix:* restate the near-commuting F₈ contrast at reps=2
-  (resolvable: 2580.7804 vs exact 2580.8024) and make the Trotter synthesis deterministic; record the
-  leakage floor as the finding.
-  *Also latent:* `np.min` over the principal branch can select **unphysical** eigenphases outside the
-  reachable band (an e = −1657.45 image exists in the same spectrum).
+- [x] **λ_meas includes the identity term — the published crossovers inherit the bias** *(follow-up
+  from `SPEC_shift_both_sides`)* — fixed in place: `precision_cost.measurement_lambda` now excludes
+  the zero-variance identity term by default (`include_identity=True` retained for archaeology).
+  Re-scored: λ_meas 2.70/9.93/22.84 → 1.89/5.40/14.30 (identity was 30/46/37% of the 1-norm); the
+  shift margin 2.8/5.4/5.7× → 1.9/3.0/3.6× (precision_cost G3 bar revised 5.0 → 3.0, reason
+  recorded); ε\* and R move by (λ_old/λ_new)². **THE FINDING: one qualitative verdict flips** —
+  H₂ at ρ=10⁴ goes FT → near-term; the conjecture recorded here earlier ("no qualitative verdict
+  flips") was **wrong**. Every structural finding of `SPEC_precision_cost` survives (raw λ_DF > λ_meas
+  for N₂ holds *more strongly*; margin still grows with size). Gates G1–G4 in
+  `tests/test_lambda_meas_identity_spec.py`.
+  → [`SPEC_lambda_meas_identity.md`](SPEC_lambda_meas_identity.md).
+- [x] **`nb3x8_device_gap` G2: a Trotter-leakage resolution floor, exposed as a flaky gate** —
+  resolved by [`SPEC_trotter_resolution_floor.md`](SPEC_trotter_resolution_floor.md). Root cause,
+  measured: **(1)** Trotter synthesis was **nondeterministic across processes** — the Pauli term
+  order followed Python hash randomization (observed orderings ≡ coeff-asc/coeff-desc; F8 sector-2
+  reps=1 deviation 1.045e-2 vs 5.964e-3), and SuzukiTrotter products depend on term order; **(2)**
+  the F8 sector-2 reps=1 eigenphase sits **below the method's resolution floor** — genuine reference
+  population 1.36e-5 < Trotter leakage dev² ≈ 3.6e-5–1.1e-4 — so its computed population was
+  interference noise (1e-5…2.5e-13) and the extracted branch flipped by the 2π/τ wrap quantum
+  (−1171.1 vs +2580.7 meV; flake rate 3/5 pytest, 2/2 make gates). **Fix:** canonical term ordering
+  (largest-|coeff| first) in `build_trotter_step` — device_gap now 4/4 green on every run — plus the
+  law as a gated invariant: *an eigenphase is resolvable only if the reference population exceeds
+  ‖U−U_exact‖²* (`trotter_resolution_floor.is_resolvable`; the ordering-spread probe: 3756.7 meV at
+  reps=1 = the wrap quantum, 5.5 meV at reps=2). **Casualties honestly recorded:** the spec's prose
+  values were hash artifacts (I8 bias −100.9/12%/4.65 → deterministic −292.9/35%/4.29) and G4's
+  noise crossover moved a decade (cx=3e-4 → 1e-3; Richardson still pays at 3e-4 and 6e-4) — the
+  crossover *exists* as claimed, its recorded location was never reproducible. Latent `np.min`
+  unphysical-branch issue remains recorded below. Gates G1–G4 in
+  `tests/test_trotter_resolution_floor_spec.py`; `trotter_resolution_floor.py`.
+- [ ] **`trotter_odmd` eigenphase selection can pick unphysical branches** — *(latent, from the
+  resolution-floor work)* `build_trotter_odmd_problem` line ~84 takes `min(-angle(λ)/τ)` over the
+  principal branch; eigenphases outside the reachable band exist in the same spectrum (an e =
+  −1657.45 meV image for F8 sector-2, |e| > width/2) and `np.min` would select one if it ever
+  cleared the population cut. Untriggered under canonical ordering. *Gate:* restrict selection to
+  the physical band |e| ≤ width/2 and assert the F8/I8 eigenphases are unchanged — pure hardening,
+  no physics.
 
 ## Killed
 

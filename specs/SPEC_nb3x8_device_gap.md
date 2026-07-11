@@ -65,17 +65,26 @@ Pure composition — every primitive is already spec-pinned.
   four LT-bulk materials (measured ≤ 4e-10), and the Nb₃I₈ `exact_gap` reproduces the recorded
   842.44 meV (< 0.5 meV) — the cross-spec pin to `SPEC_nb3x8_gaps.md`.
 - **G2 — sector Trotter biases do NOT cancel in the gap (the recorded finding).** Nb₃I₈:
-  `|circuit_gap(reps=1) − exact| > 50 meV` (measured −100.9, i.e. 12% of the gap!) with the
-  order-2 ratio `bias(1)/bias(2)` ∈ [3.3, 5.5] (measured 4.65); contrast Nb₃F₈:
+  `|circuit_gap(reps=1) − exact| > 50 meV` (measured −292.9, i.e. 35% of the gap!) with the
+  order-2 ratio `bias(1)/bias(2)` ∈ [3.3, 5.5] (measured 4.29); contrast Nb₃F₈:
   `|bias(reps=1)| < 1 meV` (measured 0.10 — tiny hopping → near-commuting Hamiltonian).
-- **G3 — Richardson fixes the circuit-exact gap.** Reps-(2,4): residual < 1 meV (measured 0.27)
-  and > 5× below the reps=4 bias (measured 19×); reps-(1,2): residual < 10 meV (measured 4.7).
+- **G3 — Richardson fixes the circuit-exact gap.** Reps-(2,4): residual < 1 meV
+  and > 5× below the reps=4 bias; reps-(1,2): residual < 10 meV.
 - **G4 — the device measurement and the bias-vs-noise crossover (DEFINITION OF DONE).** At
-  cx = 1e-4: median `|device_gap_richardson − exact| < 15 meV` (measured 10.4 — 1.2% of the
-  gap) and > 5× below the raw reps=1 device gap error (measured 99.7 → 9.6×). At cx = 3e-4 the
-  noise floor exceeds the reps=2 bias and Richardson stops paying
-  (`median rich ≥ median plain(reps=2)`, measured 16.3 vs 9.6) — `SPEC_trotter_odmd` R1
+  cx = 1e-4: median `|device_gap_richardson − exact| < 15 meV` and > 5× below the raw reps=1
+  device gap error. Richardson still pays through the mid-noise regime (cx = 3e-4: 16.7 < 60.7
+  meV; 6e-4: 39.0 < 43.8) and stops at cx = 1e-3 (154.1 > 39.8) — `SPEC_trotter_odmd` R1
   ("extrapolate only when bias > noise") demonstrated on a material.
+
+**REVISION (2026-07-11, [`SPEC_trotter_resolution_floor.md`](SPEC_trotter_resolution_floor.md)):**
+the values first recorded here (I8 bias −100.9 / 12% / ratio 4.65; crossover at cx = 3e-4) were
+measured under **hash-ordering-nondeterministic Trotter synthesis** and are unreproducible under
+any canonical term ordering — the synthesis order followed Python hash randomization, which also
+made G2's Nb₃F₈ assertion a coin flip (the F8 reps=1 eigenphase sits *below the Trotter resolution
+floor*: genuine reference population 1.4e-5 < leakage dev² ≈ 3.6e-5, so its branch was
+order-dependent). With deterministic (largest-|coeff|-first) ordering the gates above are green on
+every run; the crossover *exists* exactly as claimed, one noise decade higher. The G1/G3 gate
+windows never moved.
 
 ## 6. Implementation plan (test-first)
 

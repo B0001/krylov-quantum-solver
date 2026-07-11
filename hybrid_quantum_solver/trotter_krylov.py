@@ -28,6 +28,22 @@ from hybrid_quantum_solver.molecular_hamiltonian import MolecularHamiltonian
 from hybrid_quantum_solver.quantum_krylov_solver import KrylovStep, solve_generalized_eig
 
 
+def canonical_term_order(hamiltonian: SparsePauliOp) -> SparsePauliOp:
+    """Reorder Pauli terms canonically: largest |coefficient| first, label as tiebreak.
+
+    Suzuki-Trotter products depend on the term order, and the order coming out of the
+    Jordan-Wigner/simplify pipeline follows Python's randomized hashing -- so without this,
+    the synthesized unitary (and its Trotter error) differed BETWEEN PROCESSES (observed:
+    Nb3F8 sector-2 reps=1 deviation 5.96e-3 or 1.04e-2 depending on the run, which coin-
+    flipped a spec gate). Largest-first is the best of the orderings measured in
+    specs/SPEC_trotter_resolution_floor.md and reproduces the historical green-run values.
+    """
+    labels = [p.to_label() for p in hamiltonian.paulis]
+    coeffs = [complex(c) for c in hamiltonian.coeffs]
+    idx = sorted(range(len(labels)), key=lambda i: (-abs(coeffs[i]), labels[i]))
+    return SparsePauliOp.from_list([(labels[i], coeffs[i]) for i in idx])
+
+
 def build_trotter_step(
     hamiltonian: SparsePauliOp, dt: float, order: int = 2, reps: int = 1
 ) -> QuantumCircuit:
@@ -41,9 +57,13 @@ def build_trotter_step(
     Materializing guarantees every consumer -- statevector, ``Operator``, Aer, the
     ancilla-controlled hardware path -- sees the same genuinely Trotterized unitary.
     Regression gate: specs/SPEC_trotter_odmd.md G1 (``tests/test_trotter_odmd_spec.py``).
+
+    Terms are canonically ordered first (see :func:`canonical_term_order`) so the circuit is
+    deterministic across processes. Gate: specs/SPEC_trotter_resolution_floor.md G1.
     """
     gate = PauliEvolutionGate(
-        hamiltonian, time=dt, synthesis=SuzukiTrotter(order=order, reps=reps)
+        canonical_term_order(hamiltonian), time=dt,
+        synthesis=SuzukiTrotter(order=order, reps=reps)
     )
     qc = QuantumCircuit(hamiltonian.num_qubits)
     qc.compose(gate.definition, inplace=True)
