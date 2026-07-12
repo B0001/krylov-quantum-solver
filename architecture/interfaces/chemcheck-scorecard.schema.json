@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chemcheck.example/schemas/scorecard.schema.json",
+  "title": "ChemCheck scorecard (output)",
+  "type": "object",
+  "required": ["benchmark_version", "device_name", "tiers", "verdict"],
+  "properties": {
+    "benchmark_version": { "type": "string" },
+    "device_name": { "type": "string" },
+    "scoring_code_hash": { "type": "string" },
+    "tiers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["tier", "classically_simulable", "mode_a"],
+        "properties": {
+          "tier": { "type": "string" },
+          "classically_simulable": { "type": "boolean", "description": "True for T0-T2: passing certifies stack correctness, not quantum advantage." },
+          "mode_a": {
+            "type": "object",
+            "required": ["result", "headroom_factor"],
+            "properties": {
+              "result": { "type": "string", "enum": ["PASS", "FAIL"] },
+              "headroom_factor": { "type": "number", "description": "Required improvement in two-qubit error to pass; 1.0 == at threshold." },
+              "required_two_qubit_error": { "type": "number" },
+              "model_uncertainty": { "type": "string" }
+            }
+          },
+          "mode_b": {
+            "type": "object",
+            "required": ["result"],
+            "properties": {
+              "result": { "type": "string", "enum": ["PASS", "MARGINAL", "FAIL", "UNPHYSICAL", "REJECTED_AUDIT"] },
+              "energy_error_mha_raw": { "type": "number" },
+              "energy_error_mha_mitigated": { "type": "number" },
+              "floor_check": { "type": "string", "enum": ["pass", "violation"] },
+              "reproducibility": { "type": "string", "enum": ["consistent", "inconsistent"] },
+              "n_runs": { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
+    "verdict": { "type": "string" }
+  }
+}

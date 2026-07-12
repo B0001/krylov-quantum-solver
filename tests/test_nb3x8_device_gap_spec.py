@@ -8,12 +8,19 @@ Delta = E(3) + E(1) - 2 E(2) measured through genuinely-Trotterized Hadamard-tes
 an Aer device noise model, one depolarizing-immune ground-state ODMD run per particle sector,
 with the Trotter bias Richardson-removed.
 
-Recorded findings gated here: sector Trotter biases do NOT cancel in the gap (reps=1 leaves 12%
+Recorded findings gated here: sector Trotter biases do NOT cancel in the gap (reps=1 leaves 35%
 on Nb3I8, while near-commuting Nb3F8 is at 0.1 meV); and the bias-vs-noise crossover -- at
-cx=1e-4 Richardson pays (10.4 meV, 1.2% of the gap), at cx=3e-4 it stops (noise floor above the
-reps=2 bias). References: fixed_filling_energy sector FCI + SPEC_nb3x8_gaps' recorded 842.44
-meV. Aer is seeded, so the medians are deterministic. Energies in meV. PySCF/qiskit-aer, no
-block2; `make gates` runs it in its own process.
+cx=1e-4 Richardson pays, at cx=1e-3 it stops (noise floor above the reps=2 bias).
+
+REVISED (specs/SPEC_trotter_resolution_floor.md): the original recorded values (12% bias,
+crossover at cx=3e-4) were measured under hash-ordering-nondeterministic Trotter synthesis and
+are unreproducible under ANY canonical ordering. With deterministic (coeff-desc) ordering the
+I8 reps=1 bias is -292.9 meV (35%), ratio 4.29, and Richardson still pays at cx=3e-4 and 6e-4
+(16.7 < 60.7, 39.0 < 43.8 meV) -- it stops at cx=1e-3 (154.1 > 39.8).
+
+References: fixed_filling_energy sector FCI + SPEC_nb3x8_gaps' recorded 842.44 meV. Aer is
+seeded and Trotter synthesis is canonically ordered, so the medians are deterministic. Energies
+in meV. PySCF/qiskit-aer, no block2; `make gates` runs it in its own process.
 """
 import numpy as np
 
@@ -45,8 +52,11 @@ def test_G1_statevector_pipeline_is_exact():
 
 
 def test_G2_sector_trotter_biases_do_not_cancel():
-    """reps=1 leaves > 50 meV (12%) on the Nb3I8 gap -- the sector biases do NOT cancel -- with
-    the order-2 ratio on reps doubling; near-commuting Nb3F8 sits < 1 meV (the contrast)."""
+    """reps=1 leaves > 50 meV (35% under canonical ordering) on the Nb3I8 gap -- the sector
+    biases do NOT cancel -- with the order-2 ratio on reps doubling; near-commuting Nb3F8 sits
+    < 1 meV (the contrast). This assertion coin-flipped before canonical Trotter ordering: the
+    F8 reps=1 gap sits BELOW the Trotter resolution floor, and the branch depended on the term
+    order the hash seed dealt (specs/SPEC_trotter_resolution_floor.md)."""
     ref = exact_gap(**I8)
     b1 = circuit_gap(**I8, reps=1) - ref
     b2 = circuit_gap(**I8, reps=2) - ref
@@ -69,8 +79,13 @@ def test_G3_richardson_fixes_the_circuit_gap():
 
 def test_G4_device_measurement_and_crossover():
     """DEFINITION OF DONE: at cx=1e-4 the Richardson device gap lands < 15 meV (1.2%) and > 5x
-    below the raw reps=1 device gap; at cx=3e-4 the noise floor exceeds the reps=2 bias and
-    Richardson stops paying -- SPEC_trotter_odmd R1 demonstrated on a material."""
+    below the raw reps=1 device gap; at cx=1e-3 the noise floor exceeds the reps=2 bias and
+    Richardson stops paying -- SPEC_trotter_odmd R1 demonstrated on a material.
+
+    REVISED: the crossover was recorded at cx=3e-4 under hash-nondeterministic Trotter ordering.
+    Deterministically (canonical ordering) Richardson still pays at 3e-4 AND 6e-4 (16.7 < 60.7,
+    39.0 < 43.8 meV); it stops at 1e-3 (154.1 > 39.8). The crossover EXISTS either way -- its
+    location was never reproducible before specs/SPEC_trotter_resolution_floor.md."""
     ref = exact_gap(**I8)
     nm = _noise(1e-4)
     rich = [abs(device_gap_richardson(**I8, shots=SHOTS, noise_model=nm, seed=sd) - ref)
@@ -79,9 +94,17 @@ def test_G4_device_measurement_and_crossover():
               for sd in range(5)]
     assert np.median(rich) < 15.0, np.median(rich)
     assert np.median(plain1) / np.median(rich) > 5.0, (np.median(plain1), np.median(rich))
+    # Richardson still pays in the mid-noise regime under deterministic ordering ...
     nm3 = _noise(3e-4)
     rich3 = [abs(device_gap_richardson(**I8, shots=SHOTS, noise_model=nm3, seed=sd) - ref)
              for sd in range(5)]
     plain3 = [abs(device_gap(**I8, shots=SHOTS, noise_model=nm3, seed=sd, trotter_reps=2) - ref)
               for sd in range(5)]
-    assert np.median(rich3) > np.median(plain3), (np.median(rich3), np.median(plain3))
+    assert np.median(rich3) < np.median(plain3), (np.median(rich3), np.median(plain3))
+    # ... and stops paying once the noise floor clears the reps=2 bias.
+    nm10 = _noise(1e-3)
+    rich10 = [abs(device_gap_richardson(**I8, shots=SHOTS, noise_model=nm10, seed=sd) - ref)
+              for sd in range(5)]
+    plain10 = [abs(device_gap(**I8, shots=SHOTS, noise_model=nm10, seed=sd, trotter_reps=2) - ref)
+               for sd in range(5)]
+    assert np.median(rich10) > np.median(plain10), (np.median(rich10), np.median(plain10))

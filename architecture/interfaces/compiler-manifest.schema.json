@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chemcheck.example/schemas/compiler-manifest.schema.json",
+  "title": "ShallowForge provenance manifest",
+  "description": "Travels with every compiled circuit. Doubles as ChemCheck's compilation-audit artifact (ADR-0006/0007). Total predicted epsilon must bound observed epsilon on the golden suite.",
+  "type": "object",
+  "required": ["manifest_version", "hamiltonian_hash", "stack", "totals"],
+  "properties": {
+    "manifest_version": { "type": "string" },
+    "hamiltonian_hash": { "type": "string", "description": "SHA-256 of the canonicalized term stream the circuit implements." },
+    "solver_version": { "type": "string" },
+    "stack": {
+      "type": "array",
+      "description": "Ordered list of transforms applied. Each is a pure function with recorded parameters.",
+      "items": {
+        "type": "object",
+        "required": ["transform", "parameters", "predicted_epsilon_mha", "lossless"],
+        "properties": {
+          "transform": {
+            "type": "string",
+            "enum": ["pauli_grouping", "term_ordering", "gate_cancellation", "trotter_order", "randomized_compiling", "thc_truncation", "qubitization", "peephole_optimization", "template_matching", "resynthesis"]
+          },
+          "parameters": { "type": "object" },
+          "predicted_epsilon_mha": { "type": "number", "minimum": 0, "description": "0 for lossless transforms." },
+          "lossless": { "type": "boolean" }
+        }
+      }
+    },
+    "totals": {
+      "type": "object",
+      "required": ["cx_per_step", "depth", "ancillas", "predicted_epsilon_total_mha"],
+      "properties": {
+        "cx_per_step": { "type": "integer" },
+        "depth": { "type": "integer" },
+        "ancillas": { "type": "integer" },
+        "predicted_epsilon_total_mha": { "type": "number" },
+        "cx_at_epsilon_claim": {
+          "type": "object",
+          "description": "A gate count is never reported without its epsilon (ADR-0007).",
+          "required": ["epsilon_mha", "cx_per_step"],
+          "properties": {
+            "epsilon_mha": { "type": "number", "const": 1.6 },
+            "cx_per_step": { "type": "integer" }
+          }
+        }
+      }
+    }
+  }
+}

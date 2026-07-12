@@ -29,6 +29,8 @@ dependencies = [
     "qiskit-addon-sqd>=0.12",
     "pyscf>=2.0.0",
     "ase>=3.22",
+    # ChemCheck submission/scorecard schema validation (draft 2020-12; pulls in `referencing`).
+    "jsonschema>=4.18",
 ]
 
 [project.optional-dependencies]
@@ -47,9 +49,17 @@ dev = [
     "ruff>=0.5",
 ]
 
+[project.entry-points.pytest11]
+# Auto-discovers the plugin once installed, so `pytest` loads it without an explicit -p flag.
+# Entry-point name == module name so that an explicit `-p pytest_invariants` is deduped by
+# pytest instead of registering the same module object under a second name (pluggy rejects that).
+pytest_invariants = "pytest_invariants"
+
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["hybrid_quantum_solver*"]
+include = [
+    "hybrid_quantum_solver*", "certchem*", "chemcheck*", "shallowforge*", "pytest_invariants*",
+]
 
 [tool.ruff]
 # orchestrate_hybrid_pipeline.py is a quarantined "what-not-to-do" regression fixture (see

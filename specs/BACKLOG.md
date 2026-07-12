@@ -373,6 +373,17 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   in `tests/test_precision_cost_spec.py`; `precision_cost.py`.
   → [`SPEC_precision_cost.md`](SPEC_precision_cost.md) (reproduction-adjacent scaling laws; the
   composition on real shifted λ's is new; absolute T-gate cost out of scope).
+- [x] **Cost advisor — a per-molecule near-term-vs-FT verdict** *(the bridge, closed into a decision
+  tool)* — turns [`SPEC_precision_cost.md`](SPEC_precision_cost.md) into an engineering artifact:
+  `advise(λ_meas, λ_DF, ε, ρ)` returns which is cheaper (near-term certified Krylov vs FT-QPE) at
+  target accuracy ε, under a common cost model whose only free parameter is the honest unknown
+  ρ = cost_per_query/cost_per_shot. The verdict flips exactly at ε*(ρ) ∝ 1/ρ; the flip-ρ at fixed ε
+  is N/Q; and `robust_over_rho` gives a cross-validated recommendation. **Quantified verdict:** for
+  N₂ CAS(6,6) at chemical accuracy the flip-ρ is **~2×10⁵** — FT is cheaper unless a query costs more
+  than ~2×10⁵ shots (ρ is never hidden — it's an explicit input). Reuses `precision_cost`. Gates
+  G1–G4 in `tests/test_cost_advisor_spec.py`; `cost_advisor.py`.
+  → [`SPEC_cost_advisor.md`](SPEC_cost_advisor.md) (resource-count decision under a stated cost
+  model; true ρ hardware-specific, not computed).
 - [x] **Excited-state ODMD via noise-edge thresholding** — the *same* survival-amplitude signal
   carries the low-lying spectrum in its higher DMD eigenphases (no extra measurements): noiseless
   E₁/gap < 1e-5 Ha (H₄ K=24, N₂ CAS(6,6) K=48). Under shot noise the ground-state spec's relative
@@ -445,6 +456,63 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   headline was corrected by the TDL step (the honest turn). Gates G1–G6 in
   `tests/test_nb3x8_gaps_spec.py`; `nb3x8_gaps.py`. → [`SPEC_nb3x8_gaps.md`](SPEC_nb3x8_gaps.md)
   (data from `arXiv:2501.10320`, Tables I & IV).
+- [x] **ScreenLoop — screening with *zero false eliminations*** — *Claim:* eliminating candidates only
+  when their certified bracket is strictly disjoint from the target region can never discard a true
+  hit, a guarantee no point-estimate screener can make. *Gate (the check that could kill it):* on a
+  50-candidate space with exhaustive ground truth, `screen` eliminates **0** of the 11 true hits
+  (pilot precision and through refinement) while `point_estimate_screen` eliminates > 0 on the *same*
+  space with the *same* oracle; the loop reaches the exhaustive-at-full-precision hit set for < half
+  the cost. Soundness is *relative to* bracket validity — a lying oracle voids it (stated, not hidden).
+  Gates 1–5 in `tests/test_screenloop_spec.py`; `screenloop/`.
+  → [`SPEC_screenloop.md`](SPEC_screenloop.md).
+- [x] **Shift BOTH sides — the bridge overstated FT's advantage** — the BLISS/SCDF number-operator
+  shift that the bridge banked on the FT side (λ_DF) **also lowers the measurement 1-norm λ_meas**,
+  so it cuts the near-term shot cost too; comparing raw-λ_meas against shifted-λ_DF was an
+  inconsistency. **THE FINDING:** the draft's headline (λ_meas −54/−51/−73%, crossover 4–14×) was
+  scored with the *wrong* 1-norm — `precision_cost.measurement_lambda` sums **every** Pauli
+  coefficient *including identity*, but the identity is a zero-variance constant that costs **zero
+  shots**, and a large part of what the shift does is dump weight into it (N₂: 8.55 → 0.10 Ha). On
+  the honest identity-excluded 1-norm the reductions are **42.9/39.4/57.9%** and the fair crossover
+  moves **2.7–5.7×**, not 4–14× (N₂ flip-ρ 8.14e4 → 1.44e4). The claim survives, smaller; G1's bar
+  was revised 40%→35% because H₂O honestly reduces by 39.4%. Gates G1–G5 in
+  `tests/test_shift_both_sides_spec.py`; `shift_both_sides.py`.
+  → [`SPEC_shift_both_sides.md`](SPEC_shift_both_sides.md).
+- [x] **λ_meas includes the identity term — the published crossovers inherit the bias** *(follow-up
+  from `SPEC_shift_both_sides`)* — fixed in place: `precision_cost.measurement_lambda` now excludes
+  the zero-variance identity term by default (`include_identity=True` retained for archaeology).
+  Re-scored: λ_meas 2.70/9.93/22.84 → 1.89/5.40/14.30 (identity was 30/46/37% of the 1-norm); the
+  shift margin 2.8/5.4/5.7× → 1.9/3.0/3.6× (precision_cost G3 bar revised 5.0 → 3.0, reason
+  recorded); ε\* and R move by (λ_old/λ_new)². **THE FINDING: one qualitative verdict flips** —
+  H₂ at ρ=10⁴ goes FT → near-term; the conjecture recorded here earlier ("no qualitative verdict
+  flips") was **wrong**. Every structural finding of `SPEC_precision_cost` survives (raw λ_DF > λ_meas
+  for N₂ holds *more strongly*; margin still grows with size). Gates G1–G4 in
+  `tests/test_lambda_meas_identity_spec.py`.
+  → [`SPEC_lambda_meas_identity.md`](SPEC_lambda_meas_identity.md).
+- [x] **`nb3x8_device_gap` G2: a Trotter-leakage resolution floor, exposed as a flaky gate** —
+  resolved by [`SPEC_trotter_resolution_floor.md`](SPEC_trotter_resolution_floor.md). Root cause,
+  measured: **(1)** Trotter synthesis was **nondeterministic across processes** — the Pauli term
+  order followed Python hash randomization (observed orderings ≡ coeff-asc/coeff-desc; F8 sector-2
+  reps=1 deviation 1.045e-2 vs 5.964e-3), and SuzukiTrotter products depend on term order; **(2)**
+  the F8 sector-2 reps=1 eigenphase sits **below the method's resolution floor** — genuine reference
+  population 1.36e-5 < Trotter leakage dev² ≈ 3.6e-5–1.1e-4 — so its computed population was
+  interference noise (1e-5…2.5e-13) and the extracted branch flipped by the 2π/τ wrap quantum
+  (−1171.1 vs +2580.7 meV; flake rate 3/5 pytest, 2/2 make gates). **Fix:** canonical term ordering
+  (largest-|coeff| first) in `build_trotter_step` — device_gap now 4/4 green on every run — plus the
+  law as a gated invariant: *an eigenphase is resolvable only if the reference population exceeds
+  ‖U−U_exact‖²* (`trotter_resolution_floor.is_resolvable`; the ordering-spread probe: 3756.7 meV at
+  reps=1 = the wrap quantum, 5.5 meV at reps=2). **Casualties honestly recorded:** the spec's prose
+  values were hash artifacts (I8 bias −100.9/12%/4.65 → deterministic −292.9/35%/4.29) and G4's
+  noise crossover moved a decade (cx=3e-4 → 1e-3; Richardson still pays at 3e-4 and 6e-4) — the
+  crossover *exists* as claimed, its recorded location was never reproducible. Latent `np.min`
+  unphysical-branch issue remains recorded below. Gates G1–G4 in
+  `tests/test_trotter_resolution_floor_spec.py`; `trotter_resolution_floor.py`.
+- [ ] **`trotter_odmd` eigenphase selection can pick unphysical branches** — *(latent, from the
+  resolution-floor work)* `build_trotter_odmd_problem` line ~84 takes `min(-angle(λ)/τ)` over the
+  principal branch; eigenphases outside the reachable band exist in the same spectrum (an e =
+  −1657.45 meV image for F8 sector-2, |e| > width/2) and `np.min` would select one if it ever
+  cleared the population cut. Untriggered under canonical ordering. *Gate:* restrict selection to
+  the physical band |e| ≤ width/2 and assert the F8/I8 eigenphases are unchanged — pure hardening,
+  no physics.
 
 ## Killed
 
