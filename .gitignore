@@ -48,3 +48,5 @@ data/
 
 # Loki Mode scratch/trust-layer state
 .loki/
+.gates-cache/
+logs/gates/

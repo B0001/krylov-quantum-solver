@@ -5,25 +5,40 @@
 ENV ?= chem
 RUN ?= conda run -n $(ENV)
 
-.PHONY: gates test lint help
+GATE_JOBS ?= $(shell nproc 2>/dev/null || echo 4)
+
+.PHONY: gates gates-seq gates-fresh gates-clean-cache test lint help
 
 help:
-	@echo "make gates  - run every tests/test_*_spec.py, each in its OWN process"
-	@echo "make test   - full test suite (block2/DMRG tests isolated)"
-	@echo "make lint   - ruff check"
+	@echo "make gates             - all spec gates, $(GATE_JOBS) parallel processes, cached"
+	@echo "make gates-seq         - all spec gates, sequential (GATE_JOBS=1), cached"
+	@echo "make gates-fresh       - all spec gates, parallel, ignore cache"
+	@echo "make gates-<component> - gates matching tests/test_<component>*_spec.py (e.g. gates-certchem)"
+	@echo "make gates-clean-cache - drop all cached gate passes"
+	@echo "make test              - full test suite (block2/DMRG tests isolated)"
+	@echo "make lint              - ruff check"
+	@echo "Overrides: GATE_JOBS=N  RUN='' (no conda)"
 
-# Acceptance gates. Each spec's gate file runs in a separate process so block2's OpenMP runtime
+# Acceptance gates. Each spec's gate file runs in its OWN process so block2's OpenMP runtime
 # never loads into an interpreter that already imported pyscf/qiskit-aer (which segfaults).
+# Parallelism is across processes, so that isolation is preserved. Passes are cached against
+# a conservative global source digest (any .py change invalidates everything — safe, never
+# wrongly skips). See scripts/run_gates.sh.
 gates:
-	@set -e; \
-	shopt -s nullglob 2>/dev/null || true; \
-	files=$$(ls tests/test_*_spec.py 2>/dev/null); \
-	if [ -z "$$files" ]; then echo "no spec gate tests (tests/test_*_spec.py)"; exit 0; fi; \
-	for f in $$files; do \
-		echo "=== gates: $$f ==="; \
-		$(RUN) python -m pytest $$f -q || exit 1; \
-	done; \
-	echo "all spec gates passed"
+	@GATE_RUN="$(RUN)" GATE_JOBS=$(GATE_JOBS) bash scripts/run_gates.sh
+
+gates-seq:
+	@GATE_RUN="$(RUN)" GATE_JOBS=1 bash scripts/run_gates.sh
+
+gates-fresh:
+	@GATE_RUN="$(RUN)" GATE_JOBS=$(GATE_JOBS) GATE_NO_CACHE=1 bash scripts/run_gates.sh
+
+# Component gates: `make gates-certchem` runs tests/test_certchem*_spec.py, etc.
+gates-%:
+	@GATE_RUN="$(RUN)" GATE_JOBS=$(GATE_JOBS) GATE_GLOB='tests/test_$**_spec.py' bash scripts/run_gates.sh
+
+gates-clean-cache:
+	@rm -rf .gates-cache && echo "gate cache cleared"
 
 # Full suite. The block2/DMRG tests (test_dmrg_reference + every spec gate) must NOT share a
 # process with pyscf/qiskit-aer (block2's OpenMP runtime segfaults), so they run separately.
