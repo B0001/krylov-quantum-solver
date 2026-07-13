@@ -528,6 +528,26 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   reproduces exactly; the exclusion only bites a synthetic decoy branch (gated directly, since no
   real committed system exercises it — "untriggered under canonical ordering" confirmed). Gates
   G5 in `tests/test_trotter_resolution_floor_spec.py`; `trotter_odmd.py`.
+- [x] **SenseForge — Nb₃X₈ strain/field sensor screening: the harness is real, the *ranking* is
+  vacuous** — a resumable sweep harness (validated YAML + provenance hash, crash-resume to a
+  byte-identical CSV, ADR-0003 header automation, closed-form-vs-exact cross-check on all four
+  halides) over strain (`t(ε)=t₀(1+ε)`) and Zeeman (`g·μ_B·B·Sz`) perturbations of the validated
+  dimer. **THE FINDING (G9):** the FoM ranking **does not discriminate on this model, on either
+  axis.** Brackets are exact (zero-width) so `FoM ≡ |S|`, and |S| is *exactly constant* on the field
+  axis (Zeeman response is exactly linear → **all 19 operating points tie**; the rank order is sort
+  noise) and *strictly monotone* on the strain axis (→ **rank 1 is just the window edge**: widen
+  ±2%→±5% and the "optimum" moves +1.75%→+4.75%). No interior optimum exists on either axis. This
+  was **shipping as a real recommendation** — the pre-fix field design card published "+2 T" as the
+  #1 operating point, provably no better than any other. Fixed: `ranking_verdict()` classifies every
+  ranking (degenerate/monotone/interior) and every artifact now leads with the verdict. **Second
+  defect:** `krylov_dim` was dead *and* stamped on every published design card as `krylov_dim=12` —
+  false provenance for an exact-diagonalization result with no Krylov subspace; removed. Also
+  recorded: `certified_gaps.gap_bracket` is *actively wrong* here (returns the bright ionic ~1117
+  meV, not the dark spin gap J≈66 meV). The sensitivity itself is real and reproduces the gated
+  Grüneisen sign. **Boundary:** a non-vacuous screener needs a system that is (a) too large for FCI
+  yet Krylov-resolvable (so `/width` does work) *and* (b) has an interior |S| optimum — the Nb₃X₈
+  dimer is neither. Gates G1–G9 in `tests/test_senseforge_spec.py`; `senseforge/`.
+  → [`SPEC_senseforge.md`](SPEC_senseforge.md).
 
 ## Killed
 
