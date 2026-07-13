@@ -16,6 +16,7 @@ import numpy as np
 
 from nb3x8_device_gap import circuit_gap, exact_gap, sector_models
 from nb3x8_gaps import NB3X8_LT_BULK
+from trotter_odmd import select_ground_eigenphase
 from trotter_resolution_floor import (
     is_resolvable,
     leakage_floor,
@@ -118,3 +119,45 @@ def test_G4_device_gap_recorded_numbers_reproduced():
     assert abs(b1) > 50.0, b1
     assert 3.3 < b1 / b2 < 5.5, b1 / b2
     assert abs(circuit_gap(**F8, reps=1) - exact_gap(**F8)) < 1.0
+
+
+# --- G5: unphysical-branch hardening (backlog latent item) ---------------------------------
+
+
+def test_G5_selection_rejects_out_of_band_branch_even_at_higher_population():
+    """The latent bug this hardens: `min(-angle(lam)/tau)` over the population cut alone would
+    prefer a periodic image outside the physical band [-width/2, width/2] if it ever had lower
+    (i.e. more negative) angle AND cleared the population cut -- exactly the F8 sector-2
+    scenario noted in BACKLOG (an e = -1657.45 meV image, |e| > width/2). Synthetic here because
+    it is untriggered by every committed system: a genuine in-band candidate at pop just above
+    cut must beat a lower, higher-population out-of-band decoy."""
+    width = 100.0
+    angles = np.array([-200.0, -40.0, 30.0, 55.0])  # first is a decoy outside +-width/2 = 50
+    pops = np.array([0.9, 1e-7, 0.5, 1e-6])
+    e = select_ground_eigenphase(angles, pops, width, pop_cut=1e-8)
+    assert e == -40.0, e  # not -200.0: the decoy is excluded despite pop=0.9 > cut
+
+
+def test_G5_selection_keeps_the_closed_boundary_despite_roundoff():
+    """A candidate that IS the band edge (|e| == width/2 up to float roundoff) must still be
+    selected -- the tolerance in select_ground_eigenphase exists so ULP noise from the
+    eig/angle chain cannot silently drop a genuine boundary branch (this is what a naive strict
+    `<= width/2` filter breaks on I8 sector-1 reps=2, see BACKLOG)."""
+    width = 436.4  # width/2 = 218.2
+    angles = np.array([-218.20000000000002, 218.19999999999996])
+    pops = np.array([0.5, 0.5])
+    e = select_ground_eigenphase(angles, pops, width, pop_cut=1e-8)
+    assert e == -218.20000000000002, e
+
+
+def test_G5_f8_i8_eigenphases_unchanged_under_physical_band_selection():
+    """The hardening is pure -- every committed circuit_gap number reproduces exactly through
+    select_ground_eigenphase, for both the systems that previously exercised the coin-flip
+    (F8 sector-2 reps=1/2) and the deterministic ones (I8)."""
+    i8 = NB3X8_LT_BULK["Nb3I8"]
+    assert abs(circuit_gap(**F8, reps=1) - 2580.70) < 0.5
+    assert abs(circuit_gap(**i8, reps=1) - exact_gap(**i8)) > 50.0
+    ref = exact_gap(**i8)
+    b1 = circuit_gap(**i8, reps=1) - ref
+    b2 = circuit_gap(**i8, reps=2) - ref
+    assert 3.3 < b1 / b2 < 5.5, b1 / b2

@@ -54,6 +54,23 @@ class TrotterODMDProblem(ODMDProblem):
     depth: int = 0                # circuit depth of one step
 
 
+def select_ground_eigenphase(angles: np.ndarray, pops_u: np.ndarray, width: float,
+                             pop_cut: float = 1e-8) -> float:
+    """Pick the ground (minimum) eigenphase among HF-reachable circuit eigenvalues.
+
+    ``angles`` are ``-angle(lam)/tau`` for every eigenvalue of the (centered) circuit unitary;
+    the physical eigenphases live in the closed band ``[-width/2, width/2]`` by construction
+    (``tau = pi/width``) -- a periodic image outside it is an artifact of the ``arg`` branch cut,
+    not a reachable energy, and must never be chosen even if its population clears ``pop_cut``.
+    A small relative tolerance guards the closed boundary against roundoff in the eig/angle
+    chain: without it, a candidate that IS the band edge can round a few ULPs outside and get
+    dropped, silently flipping which branch is selected.
+    """
+    band = width / 2 + 1e-9 * max(width, 1.0)
+    physical = (pops_u > pop_cut) & (np.abs(angles) <= band)
+    return float(np.min(angles[physical]))
+
+
 def build_trotter_odmd_problem(mh: MolecularHamiltonian, n: int = 24, reps: int = 1,
                                order: int = 2) -> TrotterODMDProblem:
     """Trotterized survival amplitudes + exact circuit-eigenphase references.
@@ -81,7 +98,8 @@ def build_trotter_odmd_problem(mh: MolecularHamiltonian, n: int = 24, reps: int 
     deviation = float(np.linalg.norm(U - U_exact, 2))
     lam, W = np.linalg.eig(U)
     pops_u = np.abs(W.conj().T @ psi0) ** 2
-    e_circuit = float(np.min(-np.angle(lam[pops_u > 1e-8]) / tau))
+    angles = -np.angle(lam) / tau
+    e_circuit = select_ground_eigenphase(angles, pops_u, width)
 
     s = np.empty(n, dtype=complex)
     s[0], psi = 1.0, Statevector(psi0)
