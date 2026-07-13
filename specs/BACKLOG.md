@@ -27,10 +27,20 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   `tests/test_nb3x8_magnetometry_spec.py`; `nb3x8_magnetometry.py`.
   → [`SPEC_nb3x8_magnetometry.md`](SPEC_nb3x8_magnetometry.md) (comparison vs measured references,
   not a fit; isolated bilayer dimer, density-density only).
-- [ ] **Be₂ toward experiment** — *Claim:* core-valence correlation + a cc-pVxZ→CBS extrapolation
-  moves the FCI/DMRG well depth from ~305 cm⁻¹ toward the experimental 929.7. *Gate (reproduction):*
-  `|D_e − 930| < 100 cm⁻¹` at CBS+CV; `R_e` within 0.1 Å of 2.45. (Honest: reproduces a settled
-  result.)
+- [x] **Be₂ toward experiment** — *Claim:* core-valence correlation + a cc-pVXZ→CBS extrapolation
+  moves the well depth from ~305 cm⁻¹ toward the experimental 929.7. **THE FINDING: the original
+  gate does not hold.** CASSCF orbital optimization tried first and rejected — numerically unstable
+  for Be₂'s near-degeneracy (unconverged at several basis/R points; well depth swung
+  non-monotonically 792→251 cm⁻¹ across one basis step). Falling back to the validated fixed-orbital
+  CASCI(4,8) (`study_be2.py`) + NEVPT2 (core unfrozen, so core-valence correlation is automatic),
+  CBS-extrapolated cc-pVTZ/QZ: **Re=2.58 Å, De=469 cm⁻¹** — genuinely bound at the right general
+  location (unlike the baseline, whose "~305 cm⁻¹" turns out to be a spurious minimum at R≈4.5 Å,
+  not a real near-Rₑ well) and closer to experiment than the baseline (461 cm⁻¹ off vs 625 cm⁻¹
+  off — gated), but **not** within the original 100 cm⁻¹/0.1 Å tolerance — attributed to 2nd-order
+  MRPT2 + an 8-orbital active space missing what CCSD(T)-F12/large-CAS-MRCI+Q needed in the
+  literature. Gates G1–G4 in `tests/test_be2_cbs_spec.py`; `be2_cbs.py`.
+  → [`SPEC_be2_cbs.md`](SPEC_be2_cbs.md) (reproduction attempt that falls honestly short, not a
+  929.7 cm⁻¹ match; isolated dimer, no vibrational correction).
 - [x] **1D Hubbard vs Bethe ansatz** — the validated stack (`hubbard_chain_integrals` → FCI/Krylov)
   reproduces the exact Lieb–Wu Bethe-ansatz energy: closed-shell-BC finite-L FCI extrapolates to the
   TDL integral (U=2→1.6, U=4→5.5, U=8→1.4 mHa/site), free-fermion (−4/π) + dimer limits at machine
@@ -504,15 +514,19 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   values were hash artifacts (I8 bias −100.9/12%/4.65 → deterministic −292.9/35%/4.29) and G4's
   noise crossover moved a decade (cx=3e-4 → 1e-3; Richardson still pays at 3e-4 and 6e-4) — the
   crossover *exists* as claimed, its recorded location was never reproducible. Latent `np.min`
-  unphysical-branch issue remains recorded below. Gates G1–G4 in
+  unphysical-branch issue fixed below (G5). Gates G1–G4 in
   `tests/test_trotter_resolution_floor_spec.py`; `trotter_resolution_floor.py`.
-- [ ] **`trotter_odmd` eigenphase selection can pick unphysical branches** — *(latent, from the
-  resolution-floor work)* `build_trotter_odmd_problem` line ~84 takes `min(-angle(λ)/τ)` over the
-  principal branch; eigenphases outside the reachable band exist in the same spectrum (an e =
-  −1657.45 meV image for F8 sector-2, |e| > width/2) and `np.min` would select one if it ever
-  cleared the population cut. Untriggered under canonical ordering. *Gate:* restrict selection to
-  the physical band |e| ≤ width/2 and assert the F8/I8 eigenphases are unchanged — pure hardening,
-  no physics.
+- [x] **`trotter_odmd` eigenphase selection can pick unphysical branches** — *(latent, from the
+  resolution-floor work)* `build_trotter_odmd_problem` took `min(-angle(λ)/τ)` over the population
+  cut alone; eigenphases outside the reachable band exist in the same spectrum (an e = −1657.45 meV
+  image for F8 sector-2, |e| > width/2) and `np.min` would select one if it ever cleared the
+  population cut. **Fixed:** extracted `select_ground_eigenphase` and restricted selection to the
+  physical band `|e| ≤ width/2` (with a relative-tolerance boundary guard — a naive strict `<=`
+  drops the closed-boundary branch to roundoff and silently flips I8 sector-1 reps=2's sign, caught
+  while verifying "unchanged"). Pure hardening: every committed F8/I8 `circuit_gap` number
+  reproduces exactly; the exclusion only bites a synthetic decoy branch (gated directly, since no
+  real committed system exercises it — "untriggered under canonical ordering" confirmed). Gates
+  G5 in `tests/test_trotter_resolution_floor_spec.py`; `trotter_odmd.py`.
 
 ## Killed
 
