@@ -549,6 +549,22 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   dimer is neither. Gates G1–G9 in `tests/test_senseforge_spec.py`; `senseforge/`.
   → [`SPEC_senseforge.md`](SPEC_senseforge.md).
 
+- [x] **The certified relative-energy bracket under shot noise — composition beats either endpoint
+  alone** — extends `certified_thermochem`'s two-geometry composition into the noise regime
+  `certified_noise` opened for a single bracket. **THE FINDING:** the composed relative-energy
+  bracket inherits the coin-flip collapse (raw coverage ~0.70, shot-count-independent, same
+  mechanism as the single-bracket ~0.40) but is **measurably better calibrated than either endpoint
+  alone** — restoring 90% coverage costs **z\* ≈ 0.55–0.60**, roughly 3–4× *less* inflation than the
+  single-bracket z=2 rule (which still works if reused unchanged, just over-conservative). Two
+  independent one-sided coin-flips, composed into a two-sided difference, do not simply compound.
+  100% reuse (`certified_noise`'s per-endpoint noise model + `certified_thermochem`'s composition);
+  the one new seam is that cross-geometry energy offsets do NOT cancel (unlike a single-geometry
+  gap) and must be added back before composing. Gates G1–G4 in
+  `tests/test_certified_thermochem_noise_spec.py`; `certified_thermochem_noise.py`.
+  → [`SPEC_certified_thermochem_noise.md`](SPEC_certified_thermochem_noise.md) (oracle E1 per
+  geometry, i.i.d. Gaussian shot noise, H4 stretch only — the specific z* is a measurement on this
+  system, not a derived constant; see R1).
+
 ## Killed
 
 - [-] **Hₙ to larger n, *cheaply*** (ramp + D=100/200/400) — → [`SPEC_hchain_largen.md`](SPEC_hchain_largen.md).
