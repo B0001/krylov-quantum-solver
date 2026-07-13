@@ -1,0 +1,5 @@
+# SenseForge M1-M2 first real sweep (task 7): Nb3Cl8 strain, no SOC caveat (PRD sec 8: Cl first).
+halide: Cl
+axis: strain
+# grid_min/grid_max/grid_step default to the PRD's [-2%, +2%] step 0.25% when omitted.
+output_dir: results/senseforge/Nb3Cl8_strain

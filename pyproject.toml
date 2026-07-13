@@ -58,7 +58,8 @@ pytest_invariants = "pytest_invariants"
 [tool.setuptools.packages.find]
 where = ["."]
 include = [
-    "hybrid_quantum_solver*", "certchem*", "chemcheck*", "shallowforge*", "pytest_invariants*",
+    "hybrid_quantum_solver*", "certchem*", "chemcheck*", "shallowforge*", "senseforge*",
+    "pytest_invariants*",
 ]
 
 [tool.ruff]

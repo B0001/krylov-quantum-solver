@@ -1,0 +1,4 @@
+# SenseForge M1-M2: Nb3Cl8 field sweep, B in [0, 10] T (PRD sec 3 default).
+halide: Cl
+axis: field
+output_dir: results/senseforge/Nb3Cl8_field
