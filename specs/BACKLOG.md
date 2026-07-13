@@ -49,12 +49,13 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   Krylov is slow on the strongly-correlated Mott chain (L≥6, large U). Gates G1–G4 in
   `tests/test_hubbard_bethe_spec.py`; `model_hamiltonians.py`.
   → [`SPEC_hubbard_bethe.md`](SPEC_hubbard_bethe.md) (repro of Lieb & Wu 1968, exact analytic ref).
-- [~] **Nb₃X₈ / Hubbard model loader** — *Claim:* a tight-binding hopping matrix + Hubbard/cRPA
+- [x] **Nb₃X₈ / Hubbard model loader** — *Claim:* a tight-binding hopping matrix + Hubbard/cRPA
   interaction maps onto the universal `(h1, eri, e_core, nelec, norb)` interface and the
   number-conserving solver reproduces the analytic 2-site Hubbard dimer `(U−√(U²+16t²))/2` and PySCF
   FCI for a rank-4 cRPA tensor. *Gate:* `|E_solver − E_analytic| < 1e-6 Ha` across U/t = 0…20;
   rank-4 mapping `< 1e-9` vs FCI. → [`SPEC_nb3x8_hubbard.md`](SPEC_nb3x8_hubbard.md). **G1–G5 green
-  (2026-06-29); `hybrid_quantum_solver/model_hamiltonians.py`.** Validates the Nb₃X₈ Model-Database
+  (2026-06-29, re-confirmed 2026-07-12); `hybrid_quantum_solver/model_hamiltonians.py`.** Validates
+  the Nb₃X₈ Model-Database
   drop-in path (handoff). Honest: not yet checked against the DB's DMFT/Hubbard-I gaps (DB files not
   bundled); Nb₃I₈ is the weakly-correlated anchor, not a strong-correlation headline.
 - [x] **DMRG-referenced transition-metal active space** — NbN CAS(14,14) (half-filling sector
