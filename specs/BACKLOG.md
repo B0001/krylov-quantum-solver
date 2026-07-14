@@ -672,6 +672,29 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   → [`SPEC_qubitization_spectrum.md`](SPEC_qubitization_spectrum.md) (dense-matrix verification
   oracle, not circuit-level; two CAS(2,2) systems; T-gate/query cost claims not gated here).
 
+- [x] **Iterative QPE — a fat-tailed bit-flip cascade the median error hides** — unlike
+  `qpe_walk_readout.py`'s noiseless exact-simulation oracle, `iterative_qpe.py`'s per-bit
+  measurement is genuinely stochastic (a majority vote over `shots_per_bit` Bernoulli trials), and
+  because IQPE reads bits least-significant-first with feedback, a single flipped LOW bit corrupts
+  every subsequent (coarser) bit's measurement — a cascade the docstring's `"precision ~ 1/2^bits"`
+  claim (checked only by eye on one seed) never characterized. **THE FINDING:** median error DOES
+  improve monotonically with more bits at the module's own default `shots_per_bit=15` (a staircase,
+  same character as `qpe_walk_readout`'s precision law), but at low `shots_per_bit` the WORST-CASE
+  error over seeds is dramatically worse than the median — at `n_bits=8, shots_per_bit=3`:
+  **max/median = 10.4×** (134.3 vs 12.9 mHa) — while at the SAME `n_bits` with the module's own
+  default `shots_per_bit=15` the ratio is exactly 1 (fully deterministic, no cascade — the default
+  already avoids the pathology a naive shot-cutting choice would reintroduce). The tail has a
+  measured threshold, not an open-ended risk: at `n_bits=12`, `shots_per_bit=1` shows the cascade
+  (ratio 10.3×) but `shots_per_bit>=3` is fully deterministic. **Boundary, recorded not smoothed
+  over:** even at the module's own default shots, `n_bits=8` NEVER reaches chemical accuracy
+  (>10 mHa on every one of 40 seeds) — the `__main__` demo's own smallest printed bit counts are
+  honestly still in the gross-error regime. No library code changes — the checks live entirely in
+  the test file, exercising `iqpe_ground_energy` unmodified. Gates G1–G4 in
+  `tests/test_iqpe_cascade_risk_spec.py`.
+  → [`SPEC_iqpe_cascade_risk.md`](SPEC_iqpe_cascade_risk.md) (exact-`p1` Bernoulli simulation, no
+  device noise beyond that; one system, H2 CAS(2,2) — the shots_per_bit threshold is a measurement
+  on this system's rotation-angle sequence, not a portable formula; no mitigation attempted).
+
 ## Killed
 
 - [-] **Hₙ to larger n, *cheaply*** (ramp + D=100/200/400) — → [`SPEC_hchain_largen.md`](SPEC_hchain_largen.md).
