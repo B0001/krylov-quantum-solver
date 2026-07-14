@@ -650,6 +650,28 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   → [`SPEC_taper_spectrum.md`](SPEC_taper_spectrum.md) (Z-type symmetries only; minimal-basis
   STO-3G; composing tapering with a downstream method like ADAPT-VQE is a follow-up, not attempted).
 
+- [x] **The qubitization walk operator recovers EVERY Hamiltonian eigenvalue, exactly twice** —
+  `qubitization_blueprint.py`'s own `verify_qubitization` only ever checked one direction of
+  `eig(W) = e^{±i arccos(E_k/lambda)}`: that every recovered value is *valid* (near some true
+  eigenvalue), never that every true eigenvalue is actually *recovered* — the direction that matters
+  for QPE, since a construction bug that silently dropped the ground state from `W`'s spectrum would
+  sail through the existing check. **THE FINDING:** the reverse holds to machine precision (H2
+  2.0e-15, LiH 1.0e-15), and sharpened to an exact counting invariant — of `W`'s (non-deduplicated)
+  eigenphases, exactly `2 * dim(H)` land within tolerance of a true eigenvalue on both systems (32 =
+  2×16), i.e. every eigenvalue slot contributes exactly one `theta/-theta` pair, no eigenvalue
+  missing, no extra collision; every individual multiplicity count is even, confirming the pairing
+  holds without exception (H2/LiH counts up to 6, all even). Construction bookkeeping
+  (`lambda == sum|coeffs|` independently recomputed, `dim(W) == ancilla_dim * dim(H)`) pinned too.
+  **Bug caught while writing the gate, not shipped:** an early version of the counting invariant
+  summed local match-counts from the (possibly-degenerate) `eigH` side, double-counting whenever two
+  eigenvalues sat within tolerance of each other (60 instead of the correct 32) — fixed by counting
+  from the `W`-recovered side instead, and left as a comment in the test explaining why the other
+  direction is wrong. No library code changes — the check lives entirely in the test file, a genuine
+  external verification of `qubitization_blueprint.py`'s existing `build_walk_operator`. Gates G1–G4
+  in `tests/test_qubitization_spectrum_spec.py`.
+  → [`SPEC_qubitization_spectrum.md`](SPEC_qubitization_spectrum.md) (dense-matrix verification
+  oracle, not circuit-level; two CAS(2,2) systems; T-gate/query cost claims not gated here).
+
 ## Killed
 
 - [-] **Hₙ to larger n, *cheaply*** (ramp + D=100/200/400) — → [`SPEC_hchain_largen.md`](SPEC_hchain_largen.md).
