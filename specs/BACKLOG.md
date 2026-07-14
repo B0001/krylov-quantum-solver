@@ -565,6 +565,28 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   geometry, i.i.d. Gaussian shot noise, H4 stretch only — the specific z* is a measurement on this
   system, not a derived constant; see R1).
 
+- [x] **Gap self-check under shot noise — intersection concentrates noise where composition
+  diluted it** — the noise counterpart to `certified_thermochem_noise`, but for the OTHER
+  composition operator this repo uses: `gap_selfcheck`'s oracle-free trustworthiness certificate
+  builds its self-checked interval by *intersecting* several independently-noisy corroborated
+  brackets, rather than differencing two. **THE FINDING:** raw coverage is broken the same way
+  (~0.14–0.20 H4, ~0.06–0.08 LiH, shot-count-independent — same coin-flip mechanism as
+  `certified_noise`), but unlike the difference composition (which needed *less* than the
+  single-bracket z=2 rule), intersection needs **MORE**: z=2 leaves coverage at 0.70 (H4) / 0.53
+  (LiH) at shots=1e5, and the minimal z reaching 90% coverage is **z\* = 3.25 (H4) / 4.00 (LiH)** —
+  roughly 1.6–2× the single-bracket rule, the opposite direction from
+  [`SPEC_certified_thermochem_noise.md`](SPEC_certified_thermochem_noise.md). Padding does fix
+  "inconclusive" well before "correct": the empty-interval rate (no bracket corroborates) drops
+  from ~0.1–0.13 at z=0 to <0.005 at z=2, even while coverage is still broken there. 100% reuse
+  (`gap_selfcheck.self_checked_gap` unmodified, `certified_noise.certified_half_width`); the one
+  new design choice — a simple post-hoc pad on each depth's bracket rather than internal
+  directional inflation — was forced by finding that the two-eigenstate gap formula has no single
+  unambiguous "worst-case" direction for θ0 (it plays opposing conservative roles in gap_lower vs.
+  the Temple term feeding gap_upper). Gates G1–G4 in `tests/test_gap_selfcheck_noise_spec.py`;
+  `gap_selfcheck_noise.py`. → [`SPEC_gap_selfcheck_noise.md`](SPEC_gap_selfcheck_noise.md)
+  (self-mode/oracle-free only; i.i.d. Gaussian shot noise; two systems — the z* numbers are a
+  measurement, the *direction* is the falsifiable claim; no repair attempted, a follow-up).
+
 ## Killed
 
 - [-] **Hₙ to larger n, *cheaply*** (ramp + D=100/200/400) — → [`SPEC_hchain_largen.md`](SPEC_hchain_largen.md).
