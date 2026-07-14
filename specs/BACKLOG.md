@@ -672,6 +672,24 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   → [`SPEC_qubitization_spectrum.md`](SPEC_qubitization_spectrum.md) (dense-matrix verification
   oracle, not circuit-level; two CAS(2,2) systems; T-gate/query cost claims not gated here).
 
+- [x] **QPE readout — the precision law is a staircase, and the state-prep law is
+  overlap-independent** — `qpe_walk_readout.py`'s docstring claims "resolution ~ lambda/2^t" and
+  "success probability set by ground-state overlap," neither ever gated. **THE FINDING:** the
+  literal "~lambda/2^t" smooth-scaling reading is FALSE — the realized argmax point-estimate error
+  is a monotonically non-increasing STAIRCASE in `t` (adding phase bits never hurts, but the error
+  often doesn't move for several consecutive `t` before a sudden drop), bounded above by a real,
+  checked constant (measured max ratio `err/(lambda/2^t)` = 2.175, gated at 3x). The state-prep
+  claim sharpens into a precise law: `p_success(window)/overlap` depends almost entirely on `t`, NOT
+  on the overlap value — verified band width `< 0.05` across an overlap sweep spanning 0.02 to 0.99
+  (a 50x range) at each of `t=8,10,12` (measured widths 0.029 / 0.002 / 0.0001). **Boundary, recorded
+  not smoothed over:** that `t`-dependent prefactor is itself NOT monotonic in `t` — t=10's ratio
+  (0.928) is measurably lower than t=8's (0.960), an unexplained artifact of window/dyadic-grid
+  alignment, gated explicitly rather than glossed into a false "increases with t" story. No library
+  code changes — the checks live entirely in the test file, exercising `qpe_walk_readout.py`'s
+  existing `run_qpe` unmodified. Gates G1–G4 in `tests/test_qpe_readout_laws_spec.py`.
+  → [`SPEC_qpe_readout_laws.md`](SPEC_qpe_readout_laws.md) (exact Fejer-kernel simulation oracle,
+  not circuit-level; one system, H2 CAS(2,2) — the specific constants are measurements, not derived).
+
 ## Killed
 
 - [-] **Hₙ to larger n, *cheaply*** (ramp + D=100/200/400) — → [`SPEC_hchain_largen.md`](SPEC_hchain_largen.md).
