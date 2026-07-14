@@ -102,6 +102,37 @@ def adapt_vqe(H, hf, pool, grad_tol=1e-3, max_ops=40):
     return psi, params, history
 
 
+def fixed_order_vqe(H, hf, pool, order, max_ops):
+    """The `adapt_vqe` comparison baseline (specs/SPEC_adapt_vqe_compactness.md): grows the SAME
+    pool, re-optimizing all parameters the same way (BFGS, warm-started), but in a CALLER-GIVEN
+    fixed ``order`` instead of by gradient -- isolates whether gradient-greedy selection buys a
+    more compact ansatz, or a fixed order does just as well. Returns a history of
+    (n_ops, electronic_energy) pairs."""
+    eig = [np.linalg.eigh(1j * pool[k]) for k in order[:max_ops]]
+    chosen, params, history = [], [], []
+
+    for lam, V in eig:
+        chosen.append((lam, V))
+        params.append(0.0)
+
+        def state(theta):
+            s = hf.copy()
+            for (lam, V), th in zip(chosen, theta):
+                s = V @ (np.exp(-1j * th * lam) * (V.conj().T @ s))
+            return s
+
+        def energy(theta):
+            s = state(theta)
+            return float(np.real(np.vdot(s, H @ s)))
+
+        res = minimize(energy, np.array(params), method="BFGS",
+                       options={"gtol": 1e-7, "maxiter": 500})
+        params = list(res.x)
+        history.append((len(chosen), res.fun))
+
+    return history
+
+
 def adapt_ground_state(h1, eri, e_core, nelec, norb, grad_tol=1e-3, max_ops=40):
     """Total ground-state energy via ADAPT-VQE. total = <psi|H|psi> + e_core."""
     H, n = build_qubit_hamiltonian(h1, eri, norb)

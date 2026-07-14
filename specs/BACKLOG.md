@@ -611,6 +611,25 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   noise from depth-convergence; i.i.d. Gaussian noise; two systems, the ceiling's exact location is
   shot-budget/system-dependent — R1).
 
+- [x] **ADAPT-VQE — gradient-greedy selection actually buys a more compact ansatz (on a system with
+  real correlation)** — a different algorithmic family from everything else gated so far (variational
+  ansatz growth, not Krylov/ODMD/DMRG/rodeo/QITE/shadows/moments): `adapt_vqe.py` already ran and
+  asserted a variational floor informally in its `__main__`, but had never been CI-gated, and its
+  core selling point (greedy > fixed order) had never been checked at all. **THE FINDING:** on H4
+  CAS(4,4) (real multi-orbital correlation), greedy gradient selection reaches chemical accuracy in
+  **9 operators**; NONE of 5 seeded random fixed orders reach it within a matched 14-op budget — a
+  decisive win. **Boundary, recorded not smoothed over:** on LiH CAS(2,2) (trivially simple active
+  space) adaptivity buys **nothing** — greedy and every one of 5 random orders reach chemical
+  accuracy in exactly 1 operator. Variational floor pinned at every growth step (not just the final
+  one) on all three systems (H2/LiH/H4), closing the gap between an informal `assert` and an actual
+  CI gate. New code: `fixed_order_vqe` (~25 lines, the comparison baseline — byte-identical
+  growth/optimize loop to `adapt_vqe`, differing only in selection rule), everything else reused
+  unchanged (`qubitization_blueprint`'s JW operators, `build_pool`, `hf_state`). Gates G1–G4 in
+  `tests/test_adapt_vqe_compactness_spec.py`; `adapt_vqe.py`.
+  → [`SPEC_adapt_vqe_compactness.md`](SPEC_adapt_vqe_compactness.md) (exact statevector, generalized
+  singles+doubles pool only, operator count not circuit depth/T-cost; the decisive gap is shown on
+  one correlated system, not claimed universal — R1).
+
 ## Killed
 
 - [-] **Hₙ to larger n, *cheaply*** (ramp + D=100/200/400) — → [`SPEC_hchain_largen.md`](SPEC_hchain_largen.md).
