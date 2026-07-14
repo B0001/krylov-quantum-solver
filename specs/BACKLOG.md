@@ -713,6 +713,29 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   → [`SPEC_qpe_readout_laws.md`](SPEC_qpe_readout_laws.md) (exact Fejer-kernel simulation oracle,
   not circuit-level; one system, H2 CAS(2,2) — the specific constants are measurements, not derived).
 
+- [x] **krylov_subspace_solver — the documented bug fix gets a regression test, and the cross-check
+  finally happens** — a second, independent real-time Krylov implementation (FCI-direct, not
+  qubit-mapped) whose own docstring names its purpose as cross-checking the qubit-based path and
+  documents a historical bug ("the collapse fix": an absolute overlap-eigenvalue cutoff that
+  "dropped almost every vector and nulled the eigenproblem") — neither claim was ever gated.
+  **THE FINDING:** the collapse fix is proven, not asserted — under a benign rescaling of the
+  reference state (scale = 1, 1e-3, 1e-6, 1e-9), the RELATIVE cutoff keeps an IDENTICAL 7/12 basis
+  vectors at every scale (scale-invariant, as a well-posed generalized eigenproblem requires), while
+  an independently-reimplemented ABSOLUTE cutoff at the same numeric threshold collapses to **0/12
+  kept vectors at scale <= 1e-6** — reproducing the exact historical failure mode. The cross-check
+  the module was built for finally ran: its converged H4 CAS(4,4) energy agrees with
+  `hybrid_quantum_solver.QuantumKrylovSolver`'s (an entirely independent, qubit-mapped statevector
+  implementation) to **0.00037 mHa** — two genuinely separate code paths, sub-microhartree agreement.
+  Variational floor pinned across closed- and open-shell systems (H2, H4, O2 triplet); the
+  docstring's "condition numbers of 1e6+ are normal and harmless" claim measured (up to 9.5e6,
+  error always < 3 mHa), not just asserted. No library code changes — G2's absolute-cutoff
+  comparison is a deliberate reimplementation of the module's FORMER behavior in the test file, never
+  imported from the module. Gates G1–G4 in `tests/test_krylov_subspace_solver_gates_spec.py`.
+  → [`SPEC_krylov_subspace_solver_gates.md`](SPEC_krylov_subspace_solver_gates.md) (three systems,
+  CAS(4,4) and smaller — the module's own documented `_dense_active_H` scope; the artificial
+  rescaling in G2 demonstrates the mechanism on this system's real S matrix, not a claim that
+  natural parameter ranges would themselves collapse without the fix — see R1).
+
 ## Killed
 
 - [-] **Hₙ to larger n, *cheaply*** (ramp + D=100/200/400) — → [`SPEC_hchain_largen.md`](SPEC_hchain_largen.md).
