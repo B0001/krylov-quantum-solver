@@ -587,6 +587,30 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   (self-mode/oracle-free only; i.i.d. Gaussian shot noise; two systems — the z* numbers are a
   measurement, the *direction* is the falsifiable claim; no repair attempted, a follow-up).
 
+- [x] **Certified dipole under shot noise — inflation cannibalizes the gap margin it needs to stay
+  finite** — closes the noise trilogy: `certified_thermochem_noise` (difference composition, needs
+  *less* z), `gap_selfcheck_noise` (intersection composition, needs *more* z), and now the property
+  bracket, which composes THREE noisy quantities through the Davis–Kahan `s = sigma_0/Delta_lo < 1`
+  gate. **THE FINDING:** on the healthy-margin system (HeH+) moderate inflation (z=1) still works
+  (coverage 0.98–1.00 at shots ≥1e5), but at a tight shot budget (1e4) MORE inflation makes it
+  *worse* — the finite-bracket rate falls from 0.728 (z=1) to 0.554 (z=3) — an **inflation ceiling**
+  neither prior noise spec showed (both monotonic in z up to z=5–6): padding conservatively shrinks
+  `Delta_lo`, the exact margin the certificate needs to stay finite, so widening the bracket to fix
+  the coin-flip collapse cannibalizes the resource that keeps it from going vacuous. On the
+  fragile-margin system (LiH at M=16) no tested z rescues it — finite-bracket rate stays <0.3
+  throughout, a recorded boundary, not a fix. **Caught before it became a claim:** an earlier probe
+  using internal directional perturbation (rather than post-hoc padding) produced a spurious
+  monotonically-*decreasing* coverage curve from a sign error (θ0 is negative, inverting the
+  naive "shift down is conservative" assumption) — the same class of ambiguity
+  [`SPEC_gap_selfcheck_noise.md`](SPEC_gap_selfcheck_noise.md) flagged, now hit a second time and
+  designed around the same way (simple post-hoc padding on raw, undirected noisy draws). 100% reuse
+  (`certified_dipole.spectral_width`, `certified_gaps`' self-mode formula, `certified_noise`'s
+  padding convention). Gates G1–G4 in `tests/test_certified_dipole_noise_spec.py`;
+  `certified_dipole_noise.py`. → [`SPEC_certified_dipole_noise.md`](SPEC_certified_dipole_noise.md)
+  (coverage target is the noiseless M=16 Krylov estimate, not dense-diagonalization FCI — isolates
+  noise from depth-convergence; i.i.d. Gaussian noise; two systems, the ceiling's exact location is
+  shot-budget/system-dependent — R1).
+
 ## Killed
 
 - [-] **Hₙ to larger n, *cheaply*** (ramp + D=100/200/400) — → [`SPEC_hchain_largen.md`](SPEC_hchain_largen.md).
