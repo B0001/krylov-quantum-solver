@@ -736,6 +736,31 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   rescaling in G2 demonstrates the mechanism on this system's real S matrix, not a claim that
   natural parameter ranges would themselves collapse without the fix — see R1).
 
+- [x] **cross_check's own trust semantics — what "reference" means when CASCI can't run** — the
+  "capstone for the near-term half of the stack" (four independent solvers — CASCI, Krylov, ADAPT,
+  SQD — agreeing is what justifies trusting a number before spending QPU time on it) had an informal
+  `__main__` assertion and an unexamined fallback: `reference = available.get("CASCI",
+  next(iter(available.values())) ...)`. **THE FINDING:** with CASCI forced unreachable (cost-cap
+  stress test, not a code change), the reference becomes EXACTLY the Krylov value — proving the
+  fallback is a literal first-available pick in source insertion order, not a documented trust
+  ranking; with CASCI AND Krylov both unreachable, it becomes ADAPT, never SQD — the accidental
+  insertion order (CASCI, Krylov, ADAPT, SQD in the source) happens to keep the
+  configuration-sampling method last in line, though nothing enforces this as a policy. **Boundary,
+  recorded not smoothed over:** SQD has NO cost-cap knob and cannot be suppressed through the public
+  API — with all three other caps forced to zero, SQD still ran unconditionally and became the sole
+  reference; there is no way to drive `cross_check` into a fully-empty "no reference available"
+  state through its public parameters alone, an asymmetry among the "four independent methods" worth
+  knowing before assuming the caps make all four symmetric knobs. Baseline agreement (all four
+  reachable) pinned too: H4 CAS(4,4) max deviation 0.0047 mHa, well inside the 5 mHa tolerance — and
+  SQD's own deviation there (1.0e-9 mHa) was tighter than Krylov's or ADAPT's, a system-specific
+  reminder that the accidental fallback order isn't a general accuracy ranking either. No library
+  code changes — every gate drives `cross_check.py`'s existing `fci_max_dim`/`krylov_max_dim`/
+  `qubit_dense_max_orb` cost caps, never touching internals. Gates G1–G4 in
+  `tests/test_cross_check_trust_semantics_spec.py`.
+  → [`SPEC_cross_check_trust_semantics.md`](SPEC_cross_check_trust_semantics.md) (one system, H4
+  CAS(4,4), for the fallback-order gates; a mechanism check on the harness's own logic, not an
+  accuracy claim about any individual solver — see R1).
+
 ## Killed
 
 - [-] **Hₙ to larger n, *cheaply*** (ramp + D=100/200/400) — → [`SPEC_hchain_largen.md`](SPEC_hchain_largen.md).
