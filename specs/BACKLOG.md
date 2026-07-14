@@ -549,6 +549,129 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   dimer is neither. Gates G1–G9 in `tests/test_senseforge_spec.py`; `senseforge/`.
   → [`SPEC_senseforge.md`](SPEC_senseforge.md).
 
+- [x] **The certified relative-energy bracket under shot noise — composition beats either endpoint
+  alone** — extends `certified_thermochem`'s two-geometry composition into the noise regime
+  `certified_noise` opened for a single bracket. **THE FINDING:** the composed relative-energy
+  bracket inherits the coin-flip collapse (raw coverage ~0.70, shot-count-independent, same
+  mechanism as the single-bracket ~0.40) but is **measurably better calibrated than either endpoint
+  alone** — restoring 90% coverage costs **z\* ≈ 0.55–0.60**, roughly 3–4× *less* inflation than the
+  single-bracket z=2 rule (which still works if reused unchanged, just over-conservative). Two
+  independent one-sided coin-flips, composed into a two-sided difference, do not simply compound.
+  100% reuse (`certified_noise`'s per-endpoint noise model + `certified_thermochem`'s composition);
+  the one new seam is that cross-geometry energy offsets do NOT cancel (unlike a single-geometry
+  gap) and must be added back before composing. Gates G1–G4 in
+  `tests/test_certified_thermochem_noise_spec.py`; `certified_thermochem_noise.py`.
+  → [`SPEC_certified_thermochem_noise.md`](SPEC_certified_thermochem_noise.md) (oracle E1 per
+  geometry, i.i.d. Gaussian shot noise, H4 stretch only — the specific z* is a measurement on this
+  system, not a derived constant; see R1).
+
+- [x] **Gap self-check under shot noise — intersection concentrates noise where composition
+  diluted it** — the noise counterpart to `certified_thermochem_noise`, but for the OTHER
+  composition operator this repo uses: `gap_selfcheck`'s oracle-free trustworthiness certificate
+  builds its self-checked interval by *intersecting* several independently-noisy corroborated
+  brackets, rather than differencing two. **THE FINDING:** raw coverage is broken the same way
+  (~0.14–0.20 H4, ~0.06–0.08 LiH, shot-count-independent — same coin-flip mechanism as
+  `certified_noise`), but unlike the difference composition (which needed *less* than the
+  single-bracket z=2 rule), intersection needs **MORE**: z=2 leaves coverage at 0.70 (H4) / 0.53
+  (LiH) at shots=1e5, and the minimal z reaching 90% coverage is **z\* = 3.25 (H4) / 4.00 (LiH)** —
+  roughly 1.6–2× the single-bracket rule, the opposite direction from
+  [`SPEC_certified_thermochem_noise.md`](SPEC_certified_thermochem_noise.md). Padding does fix
+  "inconclusive" well before "correct": the empty-interval rate (no bracket corroborates) drops
+  from ~0.1–0.13 at z=0 to <0.005 at z=2, even while coverage is still broken there. 100% reuse
+  (`gap_selfcheck.self_checked_gap` unmodified, `certified_noise.certified_half_width`); the one
+  new design choice — a simple post-hoc pad on each depth's bracket rather than internal
+  directional inflation — was forced by finding that the two-eigenstate gap formula has no single
+  unambiguous "worst-case" direction for θ0 (it plays opposing conservative roles in gap_lower vs.
+  the Temple term feeding gap_upper). Gates G1–G4 in `tests/test_gap_selfcheck_noise_spec.py`;
+  `gap_selfcheck_noise.py`. → [`SPEC_gap_selfcheck_noise.md`](SPEC_gap_selfcheck_noise.md)
+  (self-mode/oracle-free only; i.i.d. Gaussian shot noise; two systems — the z* numbers are a
+  measurement, the *direction* is the falsifiable claim; no repair attempted, a follow-up).
+
+- [x] **Certified dipole under shot noise — inflation cannibalizes the gap margin it needs to stay
+  finite** — closes the noise trilogy: `certified_thermochem_noise` (difference composition, needs
+  *less* z), `gap_selfcheck_noise` (intersection composition, needs *more* z), and now the property
+  bracket, which composes THREE noisy quantities through the Davis–Kahan `s = sigma_0/Delta_lo < 1`
+  gate. **THE FINDING:** on the healthy-margin system (HeH+) moderate inflation (z=1) still works
+  (coverage 0.98–1.00 at shots ≥1e5), but at a tight shot budget (1e4) MORE inflation makes it
+  *worse* — the finite-bracket rate falls from 0.728 (z=1) to 0.554 (z=3) — an **inflation ceiling**
+  neither prior noise spec showed (both monotonic in z up to z=5–6): padding conservatively shrinks
+  `Delta_lo`, the exact margin the certificate needs to stay finite, so widening the bracket to fix
+  the coin-flip collapse cannibalizes the resource that keeps it from going vacuous. On the
+  fragile-margin system (LiH at M=16) no tested z rescues it — finite-bracket rate stays <0.3
+  throughout, a recorded boundary, not a fix. **Caught before it became a claim:** an earlier probe
+  using internal directional perturbation (rather than post-hoc padding) produced a spurious
+  monotonically-*decreasing* coverage curve from a sign error (θ0 is negative, inverting the
+  naive "shift down is conservative" assumption) — the same class of ambiguity
+  [`SPEC_gap_selfcheck_noise.md`](SPEC_gap_selfcheck_noise.md) flagged, now hit a second time and
+  designed around the same way (simple post-hoc padding on raw, undirected noisy draws). 100% reuse
+  (`certified_dipole.spectral_width`, `certified_gaps`' self-mode formula, `certified_noise`'s
+  padding convention). Gates G1–G4 in `tests/test_certified_dipole_noise_spec.py`;
+  `certified_dipole_noise.py`. → [`SPEC_certified_dipole_noise.md`](SPEC_certified_dipole_noise.md)
+  (coverage target is the noiseless M=16 Krylov estimate, not dense-diagonalization FCI — isolates
+  noise from depth-convergence; i.i.d. Gaussian noise; two systems, the ceiling's exact location is
+  shot-budget/system-dependent — R1).
+
+- [x] **ADAPT-VQE — gradient-greedy selection actually buys a more compact ansatz (on a system with
+  real correlation)** — a different algorithmic family from everything else gated so far (variational
+  ansatz growth, not Krylov/ODMD/DMRG/rodeo/QITE/shadows/moments): `adapt_vqe.py` already ran and
+  asserted a variational floor informally in its `__main__`, but had never been CI-gated, and its
+  core selling point (greedy > fixed order) had never been checked at all. **THE FINDING:** on H4
+  CAS(4,4) (real multi-orbital correlation), greedy gradient selection reaches chemical accuracy in
+  **9 operators**; NONE of 5 seeded random fixed orders reach it within a matched 14-op budget — a
+  decisive win. **Boundary, recorded not smoothed over:** on LiH CAS(2,2) (trivially simple active
+  space) adaptivity buys **nothing** — greedy and every one of 5 random orders reach chemical
+  accuracy in exactly 1 operator. Variational floor pinned at every growth step (not just the final
+  one) on all three systems (H2/LiH/H4), closing the gap between an informal `assert` and an actual
+  CI gate. New code: `fixed_order_vqe` (~25 lines, the comparison baseline — byte-identical
+  growth/optimize loop to `adapt_vqe`, differing only in selection rule), everything else reused
+  unchanged (`qubitization_blueprint`'s JW operators, `build_pool`, `hf_state`). Gates G1–G4 in
+  `tests/test_adapt_vqe_compactness_spec.py`; `adapt_vqe.py`.
+  → [`SPEC_adapt_vqe_compactness.md`](SPEC_adapt_vqe_compactness.md) (exact statevector, generalized
+  singles+doubles pool only, operator count not circuit depth/T-cost; the decisive gap is shown on
+  one correlated system, not claimed universal — R1).
+
+- [x] **Z2 qubit tapering preserves the FULL sector spectrum — independently verified, not just
+  the ground energy** — `taper_qubits.py` had only ever checked its own ground-eigenvalue-matches-
+  CASCI assertion informally, in `__main__` (the weakest possible falsifier: a bug scrambling every
+  excited state while leaving the ground state alone would sail through it). **THE FINDING:** the
+  full spectrum matches an INDEPENDENTLY-constructed sector projection (built directly from
+  computational-basis parity, no Clifford rotation — deliberately not reusing
+  `taper_hamiltonian`'s own code path) to machine precision on H2 CAS(2,2), LiH CAS(2,2), and — new
+  scope — an OPEN-SHELL radical (H3, CAS(3,3), spin=1, nelec=(2,1)) that `taper_qubits.py`'s own
+  `__main__` never exercises (it hardcodes closed-shell RHF); qubits removed exactly equals the
+  independent Z-symmetry count on all three; and the check is proven non-vacuous — the same
+  construction with a deliberately WRONG reference state gives a genuinely different spectrum.
+  **Scalability boundary found while probing, recorded not fixed:** `pauli_decompose` (used inside
+  `taper_hamiltonian` itself) costs **~1000 seconds at 8 qubits** vs ~0.02s at 4 and ~0.3s at 6 — a
+  ~16x-per-qubit blowup — meaning `taper_qubits.py`'s own existing H4 CAS(4,4) `__main__` case
+  already takes 15-20 minutes to run; this spec's gates stop at 6 qubits by design rather than
+  pretend the module scales. No library code changes — the independent verification lives entirely
+  in the test file, a genuine external check. Gates G1–G4 in `tests/test_taper_spectrum_spec.py`.
+  → [`SPEC_taper_spectrum.md`](SPEC_taper_spectrum.md) (Z-type symmetries only; minimal-basis
+  STO-3G; composing tapering with a downstream method like ADAPT-VQE is a follow-up, not attempted).
+
+- [x] **The qubitization walk operator recovers EVERY Hamiltonian eigenvalue, exactly twice** —
+  `qubitization_blueprint.py`'s own `verify_qubitization` only ever checked one direction of
+  `eig(W) = e^{±i arccos(E_k/lambda)}`: that every recovered value is *valid* (near some true
+  eigenvalue), never that every true eigenvalue is actually *recovered* — the direction that matters
+  for QPE, since a construction bug that silently dropped the ground state from `W`'s spectrum would
+  sail through the existing check. **THE FINDING:** the reverse holds to machine precision (H2
+  2.0e-15, LiH 1.0e-15), and sharpened to an exact counting invariant — of `W`'s (non-deduplicated)
+  eigenphases, exactly `2 * dim(H)` land within tolerance of a true eigenvalue on both systems (32 =
+  2×16), i.e. every eigenvalue slot contributes exactly one `theta/-theta` pair, no eigenvalue
+  missing, no extra collision; every individual multiplicity count is even, confirming the pairing
+  holds without exception (H2/LiH counts up to 6, all even). Construction bookkeeping
+  (`lambda == sum|coeffs|` independently recomputed, `dim(W) == ancilla_dim * dim(H)`) pinned too.
+  **Bug caught while writing the gate, not shipped:** an early version of the counting invariant
+  summed local match-counts from the (possibly-degenerate) `eigH` side, double-counting whenever two
+  eigenvalues sat within tolerance of each other (60 instead of the correct 32) — fixed by counting
+  from the `W`-recovered side instead, and left as a comment in the test explaining why the other
+  direction is wrong. No library code changes — the check lives entirely in the test file, a genuine
+  external verification of `qubitization_blueprint.py`'s existing `build_walk_operator`. Gates G1–G4
+  in `tests/test_qubitization_spectrum_spec.py`.
+  → [`SPEC_qubitization_spectrum.md`](SPEC_qubitization_spectrum.md) (dense-matrix verification
+  oracle, not circuit-level; two CAS(2,2) systems; T-gate/query cost claims not gated here).
+
 ## Killed
 
 - [-] **Hₙ to larger n, *cheaply*** (ramp + D=100/200/400) — → [`SPEC_hchain_largen.md`](SPEC_hchain_largen.md).
