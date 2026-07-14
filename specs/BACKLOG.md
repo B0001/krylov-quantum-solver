@@ -630,6 +630,26 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   singles+doubles pool only, operator count not circuit depth/T-cost; the decisive gap is shown on
   one correlated system, not claimed universal — R1).
 
+- [x] **Z2 qubit tapering preserves the FULL sector spectrum — independently verified, not just
+  the ground energy** — `taper_qubits.py` had only ever checked its own ground-eigenvalue-matches-
+  CASCI assertion informally, in `__main__` (the weakest possible falsifier: a bug scrambling every
+  excited state while leaving the ground state alone would sail through it). **THE FINDING:** the
+  full spectrum matches an INDEPENDENTLY-constructed sector projection (built directly from
+  computational-basis parity, no Clifford rotation — deliberately not reusing
+  `taper_hamiltonian`'s own code path) to machine precision on H2 CAS(2,2), LiH CAS(2,2), and — new
+  scope — an OPEN-SHELL radical (H3, CAS(3,3), spin=1, nelec=(2,1)) that `taper_qubits.py`'s own
+  `__main__` never exercises (it hardcodes closed-shell RHF); qubits removed exactly equals the
+  independent Z-symmetry count on all three; and the check is proven non-vacuous — the same
+  construction with a deliberately WRONG reference state gives a genuinely different spectrum.
+  **Scalability boundary found while probing, recorded not fixed:** `pauli_decompose` (used inside
+  `taper_hamiltonian` itself) costs **~1000 seconds at 8 qubits** vs ~0.02s at 4 and ~0.3s at 6 — a
+  ~16x-per-qubit blowup — meaning `taper_qubits.py`'s own existing H4 CAS(4,4) `__main__` case
+  already takes 15-20 minutes to run; this spec's gates stop at 6 qubits by design rather than
+  pretend the module scales. No library code changes — the independent verification lives entirely
+  in the test file, a genuine external check. Gates G1–G4 in `tests/test_taper_spectrum_spec.py`.
+  → [`SPEC_taper_spectrum.md`](SPEC_taper_spectrum.md) (Z-type symmetries only; minimal-basis
+  STO-3G; composing tapering with a downstream method like ADAPT-VQE is a follow-up, not attempted).
+
 ## Killed
 
 - [-] **Hₙ to larger n, *cheaply*** (ramp + D=100/200/400) — → [`SPEC_hchain_largen.md`](SPEC_hchain_largen.md).
