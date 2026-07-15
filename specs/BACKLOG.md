@@ -859,6 +859,28 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   `validate_and_cost`'s taper threshold, per `SPEC_validate_and_cost_composition.md`'s R2 OOM
   near-miss; no real CIF, no FT-cost numbers — see R1).
 
+- [x] **Nb₃X₈ metamagnetism — the field-driven singlet-to-triplet crossing** *(new observable,
+  falsifiable prediction against real magnet records)* — a Zeeman term −h·Ŝz,tot added to the same
+  exactly-diagonalizable dimer used by `SPEC_odmd_spin`/`SPEC_nb3x8_susceptibility` crosses the
+  ground state from the non-magnetic singlet to the fully-polarized triplet member at an **exact
+  closed form h_c = J** — verified not just asserted: bisecting the full field-augmented matrix's
+  ⟨Ŝz⟩ crossing (no block-diagonal shortcut) lands on J to **< 1e-6 meV**, and the whole
+  ground-energy curve matches the rigid-shift prediction `min(E_singlet, E_triplet−h)` to
+  **< 1e-8 meV** across a grid spanning the crossing. **THE FINDING (G4, honest feasibility
+  boundary):** expressed as a real magnetic field via B = h/(gμ_B), Nb₃Cl₈ (**572 T**) and Nb₃Br₈
+  (**1029 T**) sit above the best documented non-destructive pulsed-field record (100.75 T, Los
+  Alamos, March 2012) but within the best documented destructive electromagnetic flux-compression
+  record (1200 T, U. Tokyo, 2018); Nb₃I₈ (**2124 T**) exceeds even that — a real observation would
+  need either megagauss techniques or the lattice's cooperative coupling to be much weaker than
+  this isolated-cluster J, consistent with the 2.3–5.3× Tc overcoupling already found in
+  `SPEC_nb3x8_magnetometry`. 100% primitive reuse (`dimer_cluster_integrals`,
+  `dimer_exchange_analytic`, `n2_spectrum`'s Ŝz/N̂ construction) plus one new Zeeman term. Gates
+  G1–G4 in `tests/test_nb3x8_metamagnetism_spec.py`; `nb3x8_metamagnetism.py`.
+  → [`SPEC_nb3x8_metamagnetism.md`](SPEC_nb3x8_metamagnetism.md) (isolated dimer, T=0 ground-state
+  crossing only, g=2 assumed, density-density only; Nb₃F₈'s h_c ≈ 0.44 T is not a physical
+  prediction — its J is already flagged below the model's own neglected terms; not a match to
+  measured magnetization data — a prediction, not a reproduction).
+
 ## Killed
 
 - [-] **Hₙ to larger n, *cheaply*** (ramp + D=100/200/400) — → [`SPEC_hchain_largen.md`](SPEC_hchain_largen.md).
