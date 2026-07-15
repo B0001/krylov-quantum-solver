@@ -824,6 +824,41 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   matching the original smoke test exactly; the synthetic branch inputs are tied to the classifiers'
   current threshold constants, not hardcoded independent of them — see R1).
 
+- [x] **`pyproject.toml` had no pytest rootdir anchor — every gate was silently vulnerable to a
+  sibling project's global `sys.modules` stub** *(infra fix, discovered while probing the spec
+  below)* — this repo's `pyproject.toml` lacked a `[tool.pytest.ini_options]` section, so it didn't
+  qualify as a pytest config file; pytest's rootdir search silently walked UP past this repo into
+  its parent directory, found an UNRELATED sibling "gene" bioinformatics project's `pyproject.toml`
+  there, and loaded THAT project's `conftest.py` — which force-stubs `sys.modules["polars"]`
+  globally (`_stub("polars", col=MagicMock())`) for its own test isolation, before any test file
+  even runs. Every `pytest` invocation from within this repo — including `make gates`, which shells
+  out to the identical `python -m pytest <file> -q` pattern — was silently vulnerable to any gate
+  calling real `polars` functionality beyond the stub's one mocked attribute; unnoticed only because
+  no gate before this session's `nb_validate_sweep` spec happened to construct a real
+  `polars.DataFrame`. **Fixed:** added a minimal `[tool.pytest.ini_options]` (`testpaths =
+  ["tests"]`, itself a correctness improvement) to `pyproject.toml`, anchoring rootdir at this repo;
+  confirmed the sibling `conftest.py` no longer loads, and re-ran 54 pre-existing gates
+  (`test_invariants_plugin_spec.py`, `test_certchem_core_spec.py`,
+  `test_certchem_contract_spec.py`, `test_taper_spectrum_spec.py`, plus this session's own new
+  files) clean after the fix — no behavior change to anything that was already passing.
+- [x] **nb_validate_sweep — the ragged-schema CSV union, checked not just asserted in a docstring** —
+  `nb_validate_sweep.py` wires `validate_and_cost` into the spin-sector sweep, writing one CSV row
+  per sector, with a precise docstring claim about its `_to_frame` helper never checked: rows may be
+  RAGGED (an OK sector emits ~19 fields, a guarded failure emits 3), and the union/null-fill must
+  preserve first-seen column order. **THE FINDING:** the claim holds exactly — verified on synthetic
+  mixed-schema rows matching the sweep's own OK/FAILED shapes, columns land in first-seen order with
+  proper nulls, not scrambled or crashed. The sweep itself (LiH CAS(2,2), the module's own `__main__`
+  example) produces exactly the 2 physically reachable spin sectors with `reference_energy` matching
+  independently-computed CASCI to `<1e-6` Ha each; FT cost gracefully degrades through the
+  CSV-flattening layer (`ft_status == "no_openfermion"`, all `ft_*` fields `None`) in the standard
+  `chem` env; and the sweep actually writes a valid, re-readable CSV to disk, not just an in-memory
+  row list. No library code changes — every gate calls existing functions directly.
+  Gates G1–G4 in `tests/test_nb_validate_sweep_schema_spec.py`.
+  → [`SPEC_nb_validate_sweep_schema.md`](SPEC_nb_validate_sweep_schema.md) (LiH CAS(2,2) only — the
+  module's own known-safe example; deliberately never raises the active space toward
+  `validate_and_cost`'s taper threshold, per `SPEC_validate_and_cost_composition.md`'s R2 OOM
+  near-miss; no real CIF, no FT-cost numbers — see R1).
+
 ## Killed
 
 - [-] **Hₙ to larger n, *cheaply*** (ramp + D=100/200/400) — → [`SPEC_hchain_largen.md`](SPEC_hchain_largen.md).
