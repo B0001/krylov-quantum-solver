@@ -62,6 +62,17 @@ include = [
     "pytest_invariants*",
 ]
 
+[tool.pytest.ini_options]
+# Anchors pytest's rootdir at this directory. Without this section, pyproject.toml here doesn't
+# qualify as a pytest config file, so pytest's rootdir search walks UP past this repo into its
+# parent directory looking for one -- and if a sibling, unrelated project up there has its own
+# pyproject.toml + conftest.py (as found while probing SPEC_nb_validate_sweep_schema.md: a "gene"
+# bioinformatics project one level up force-stubs sys.modules["polars"] globally in its
+# conftest.py, for its own test isolation), pytest silently loads that conftest.py too and every
+# test in THIS repo gets the sibling's fake `polars` instead of the real package. testpaths below
+# also narrows collection to tests/, matching this repo's actual layout.
+testpaths = ["tests"]
+
 [tool.ruff]
 # orchestrate_hybrid_pipeline.py is a quarantined "what-not-to-do" regression fixture (see
 # REFACTOR_PLAN.md); it is frozen and intentionally not reformatted.
