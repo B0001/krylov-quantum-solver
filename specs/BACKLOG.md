@@ -761,6 +761,28 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   CAS(4,4), for the fallback-order gates; a mechanism check on the harness's own logic, not an
   accuracy claim about any individual solver — see R1).
 
+- [x] **validate_and_cost — one threshold quietly governs two independent regime boundaries** — the
+  three-stage capstone (taper → cross-check → FT cost) that composes every already-gated method in
+  the near-term stack had never been gated itself. **THE FINDING:** `qubit_dense_max_orb`, one
+  parameter forwarded through `validate_and_cost`, quietly controls TWO conceptually independent
+  regime boundaries at once — this module's own taper-skip gate, and `cross_check`'s internal
+  ADAPT-skip gate — with no documentation saying so. Proven on H4 CAS(4,4): at the default
+  threshold both taper and ADAPT run; lowered below `norb`, both skip together, never
+  independently. On a genuinely larger system (N2 CASCI(8,10), 8 orbitals) the pipeline degrades
+  gracefully rather than crashing — CASCI/Krylov/SQD still ran and agreed (max deviation 0.0012
+  mHa) despite taper and ADAPT both being out of regime. FT cost gracefully reports `None` in the
+  standard `chem` env (no `openfermion`), confirmed rather than assumed. **Near-miss caught while
+  probing, not shipped:** the first attempt to prove the threshold coupling RAISED
+  `qubit_dense_max_orb` on the large N2 system instead of lowering it on the small one — this let
+  `taper_hamiltonian` attempt `pauli_decompose` at 16 qubits (exponential in qubit count, per
+  `SPEC_taper_spectrum.md`'s own R1) and OOM-killed the process. Redesigned to prove the identical
+  finding in the safe direction (shrink an already-tractable system's cap) instead. No library code
+  changes — every gate drives `validate_and_cost.py`'s existing public API. Gates G1–G4 in
+  `tests/test_validate_and_cost_composition_spec.py`.
+  → [`SPEC_validate_and_cost_composition.md`](SPEC_validate_and_cost_composition.md) (stage 3's FT
+  cost numbers themselves are out of scope — needs the `chem-ft` env, outside `make gates`'s default
+  flow; a mechanism check on the composition seam, not a fix for the coupling — see R1/R2).
+
 ## Killed
 
 - [-] **Hₙ to larger n, *cheaply*** (ramp + D=100/200/400) — → [`SPEC_hchain_largen.md`](SPEC_hchain_largen.md).
