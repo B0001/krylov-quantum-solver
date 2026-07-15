@@ -783,6 +783,26 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   cost numbers themselves are out of scope — needs the `chem-ft` env, outside `make gates`'s default
   flow; a mechanism check on the composition seam, not a fix for the coupling — see R1/R2).
 
+- [x] **lambda_ladder — the docstring's honest caveat, and an unmonotonic accuracy trend it doesn't
+  mention** — `lambda_ladder.py` compares naive/DF/THC factorizations on the qubitization 1-norm and
+  already states an honest caveat in its docstring ("on a small CAS, a generic THC fit is comparable
+  to or denser than DF; do not expect a small-system win") — never gated, only shown by eye in a
+  `__main__` printout. **THE FINDING:** the caveat is true, not just prose — on N2 CAS(3,4), at the
+  cheapest tested rank, THC's 1-norm exceeds DF's by **32%** and its LCU term count exceeds DF's by
+  **5.3×** (117 vs 22 terms); both methods reconstruct exactly at their own full rank (lambda
+  matches naive, FCI error zero). **A second finding the docstring doesn't mention:** DF's own
+  rank-truncation accuracy is NOT monotonic — rank 5 gives a WORSE FCI error (43.5 mHa) than rank 4
+  (12.2 mHa), before rank 6 recovers to exact — a reader could reasonably assume "more factors =
+  strictly better," and the data doesn't support that. THC's own accuracy checked too: its worst
+  error sits at the cheapest tested rank (unlike DF), confirming G2's "cheapest" and "least
+  accurate" align for THC and the caveat comparison isn't confounded. No library code changes —
+  every gate calls `lambda_ladder.py`'s and `df_factorization.py`'s existing functions directly.
+  Gates G1–G4 in `tests/test_lambda_ladder_honest_caveat_spec.py`.
+  → [`SPEC_lambda_ladder_honest_caveat.md`](SPEC_lambda_ladder_honest_caveat.md) (one system, N2
+  CAS(3,4) — the module's own `__main__` example; THC's asymptotic large-N advantage is explicitly
+  out of scope, unreachable with the brute-force Pauli 1-norm this module uses; the DF non-monotonic
+  dip is recorded as measured, not diagnosed — see R1).
+
 ## Killed
 
 - [-] **Hₙ to larger n, *cheaply*** (ramp + D=100/200/400) — → [`SPEC_hchain_largen.md`](SPEC_hchain_largen.md).
