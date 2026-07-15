@@ -803,6 +803,27 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   out of scope, unreachable with the brute-force Pauli 1-norm this module uses; the DF non-monotonic
   dip is recorded as measured, not diagnosed — see R1).
 
+- [x] **SQD plumbing — promoting the smoke test, and exercising the verdicts it never triggers** —
+  `smoke_test_sqd_plumbing.py` already exercised `run_nbn_sqd_sweep.py`'s real functions with real
+  assertions, but as a raw script never wired into `make gates`, and it only ever produced 2 of
+  `validate_row`'s 4 possible verdicts and 1 of `analyze_sector_trend`'s 5. **THE FINDING:** every
+  verdict either classifier can return is now reachable and checked — `validate_row`'s `SKIP` path
+  (None/NaN energy) and `analyze_sector_trend`'s `FLAT_SUBSPACE`/`STALLED`/`CONVERGING`/
+  `INSUFFICIENT` paths, none of which any real run in this repo had ever triggered (only `CONVERGED`
+  had, from the H2/H4 smoke systems, which — per the module's own docstring — "hit the full
+  determinant space immediately" and so never naturally exercise the others). Constructed via cheap
+  synthetic inputs directly against the module's own published tolerance constants
+  (`CONVERGENCE_TOL_MHA`, `TREND_MIN_IMPROVEMENT`), no SQD execution needed for those four verdicts.
+  The original smoke test's checks promoted to real gates too, tightened where loose: the deliberate
+  "drop e_core" frame-break simulation (the smoke test's own "507 Ha class of bug" guard) now pins
+  the EXACT verdict (`FRAME_ERROR`, confirmed via `e_core > 0` on this system) rather than accepting
+  either of two possible outcomes; the H4 sweep's `analyze_sector_trend` result is now asserted
+  `CONVERGED`, not just printed. No library code changes — every gate calls existing functions
+  directly. Gates G1–G4 in `tests/test_sqd_plumbing_verdict_coverage_spec.py`.
+  → [`SPEC_sqd_plumbing_verdict_coverage.md`](SPEC_sqd_plumbing_verdict_coverage.md) (H2/H4 scope,
+  matching the original smoke test exactly; the synthetic branch inputs are tied to the classifiers'
+  current threshold constants, not hardcoded independent of them — see R1).
+
 ## Killed
 
 - [-] **Hₙ to larger n, *cheaply*** (ramp + D=100/200/400) — → [`SPEC_hchain_largen.md`](SPEC_hchain_largen.md).
