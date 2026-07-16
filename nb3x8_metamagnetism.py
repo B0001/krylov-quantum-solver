@@ -45,17 +45,27 @@ _N = _MAPPER.map(FermionicOp({f"+_{i} -_{i}": 1.0 for i in range(4)},
 G_MU_B = 0.115767636
 
 
-def zeeman_ground_state(U0: float, t: float, Us: float, h: float) -> tuple[float, float]:
-    """(energy, <Sz>) of the N=2-sector ground state of H0 - h*Sz,tot, by DIRECT diagonalization
-    of the full field-augmented matrix (no assumed block structure)."""
+def field_spectrum(U0: float, t: float, Us: float, h: float) -> tuple[np.ndarray, np.ndarray]:
+    """(energies, sz) of the FULL N=2-sector spectrum of H0 - h*Sz,tot, ascending in energy, by
+    DIRECT diagonalization of the field-augmented matrix (no assumed block structure). ``sz[i]``
+    is the exact <Sz> expectation of level i (a good quantum number since [H0, Sz] = 0, resolved
+    here numerically rather than assumed)."""
     H0 = dimer_cluster_integrals(U0, t, Us).to_hamiltonian().qubit_hamiltonian.to_matrix()
     Hh = H0 - h * _SZ
     w, V = np.linalg.eigh(Hh)
     n = np.real(np.einsum("ji,jk,ki->i", V.conj(), _N, V))
     idx = np.flatnonzero(np.abs(n - 2.0) < 1e-6)
-    gi = idx[np.argmin(w[idx])]
-    sz = float(np.real(V[:, gi].conj() @ _SZ @ V[:, gi]))
-    return float(w[gi]), sz
+    e = w[idx]
+    sz = np.real(np.einsum("ji,jk,ki->i", V[:, idx].conj(), _SZ, V[:, idx]))
+    order = np.argsort(e)
+    return e[order], sz[order]
+
+
+def zeeman_ground_state(U0: float, t: float, Us: float, h: float) -> tuple[float, float]:
+    """(energy, <Sz>) of the N=2-sector ground state of H0 - h*Sz,tot, by DIRECT diagonalization
+    of the full field-augmented matrix (no assumed block structure)."""
+    e, sz = field_spectrum(U0, t, Us, h)
+    return float(e[0]), float(sz[0])
 
 
 def magnetization(U0: float, t: float, Us: float, h: float) -> float:
