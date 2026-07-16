@@ -881,6 +881,27 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   prediction — its J is already flagged below the model's own neglected terms; not a match to
   measured magnetization data — a prediction, not a reproduction).
 
+- [x] **Nb₃X₈ metamagnetism at finite temperature — the crossover width law, and its breakdown**
+  *(follow-up invention, cross-module validation)* — the T=0 singlet→triplet step above smooths
+  into a finite-T crossover; a full 6-level Boltzmann trace under the same Zeeman term gives its
+  zero-field slope dM/dh, matched to `nb3x8_susceptibility.py`'s **independently-derived**
+  χ(T) (a different route — the zero-field Van Vleck ⟨Sz²⟩/T trace) to **< 1e-5 relative**
+  (Cl/Br/I) — two separately-built modules agreeing on an unshared derivation is the real check
+  here, not a tautology. **THE FINDING:** the 10–90% crossover width obeys the elementary
+  two-level logistic law **width = 2·ln(9)·T exactly** (< 1e-4 relative) for T ≲ 0.1·J, material-
+  independent, despite the full trace carrying 4 more levels than that picture assumes — **and the
+  law's own breakdown is gated, not hidden:** deviation crosses 0.1% by T=0.2·J and 1% by T=0.3·J,
+  strictly growing. Found honestly while probing: the first version of this gate (tolerance 1e-3
+  up to T=0.2·J) failed by a hair (0.100% vs a 0.100% bound) — rather than loosen the tolerance,
+  the trend was checked explicitly and the true, tighter regime (T ≲ 0.1·J, < 1e-4) plus the
+  recorded breakdown replaced it. 100% reuse of `nb3x8_metamagnetism.py`'s field-augmented dimer
+  (generalized `zeeman_ground_state` into public `field_spectrum`) + `nb3x8_susceptibility`'s
+  Boltzmann-trace style. Gates G1–G4 in `tests/test_nb3x8_metamagnetism_thermal_spec.py`;
+  `nb3x8_metamagnetism_thermal.py`.
+  → [`SPEC_nb3x8_metamagnetism_thermal.md`](SPEC_nb3x8_metamagnetism_thermal.md) (T ≲ 0.1·J for the
+  clean law; not claimed near/above the charge scale E_s−J where the ionic singlets would
+  intrude; same isolated-dimer/g=2/density-density-only scope as `SPEC_nb3x8_metamagnetism`).
+
 ## Killed
 
 - [-] **Hₙ to larger n, *cheaply*** (ramp + D=100/200/400) — → [`SPEC_hchain_largen.md`](SPEC_hchain_largen.md).
