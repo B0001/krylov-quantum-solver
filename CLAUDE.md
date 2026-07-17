@@ -16,8 +16,11 @@ it. When adding capability, follow this — do not introduce numbers without a g
 
 ## Environment & commands
 
-Everything runs in the `chem` conda environment. **Always prefix shell commands with
-`conda run -n chem`** (do not assume the env is activated).
+## Environment Rules
+
+- **Package Manager:** `uv` is the exclusive dependency manager. `pip`, `poetry`, and `conda` are strictly prohibited.
+- **Dependency Installation:** Use `uv add <package>` for new dependencies and `uv remove <package>` for removal. Never invoke `pip install`.
+- **Script Execution:** Execute all Python scripts and commands via `uv run` (e.g., `uv run python script.py`). Never invoke a bare `python` or `python3` command.
 
 ```bash
 make gates     # run every tests/test_*_spec.py, each in its OWN process (see segfault note)

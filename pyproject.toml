@@ -7,7 +7,7 @@ name = "hybrid_quantum_solver"
 version = "0.1.0"
 description = "Hybrid quantum-classical pipeline for molecular ground-state energies via real-time quantum Krylov subspace diagonalization, validated against FCI/CASCI and DMRG."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
