@@ -1,28 +1,40 @@
-"""Temple/Lehmann-type lower energy bound (shared provenance with overlap certificate)."""
+"""Temple lower energy bound sharing provenance with the overlap certificate.
+
+The inequality is the same one the repo's existing certified-bracket path applies to
+Krylov Ritz states (temple_bounds.krylov_bracket, specs/SPEC_temple_bracket.md); here it
+is exposed as a pure function of the (λ_u, r, β) triple so the overlap certificate can
+report the energy floor derived from the SAME gap input (SPEC-21 section 2). The
+derivation of β itself stays exclusively in the gap machinery.
+"""
 
 
 def temple_lower_bound(
-    rayleigh_quotient: float,
+    lambda_u: float,
     residual_norm: float,
-    upper_bound_e1: float,
+    e1_floor: float,
 ) -> float:
     """
-    Compute Temple/Lehmann lower bound on E₀.
+    Temple (1928) lower bound on E₀ from a trial state's mean and residual.
 
-        E₀ ≥ λ_u − r² / (β − λ_u)    for certified β ≤ E₁ with λ_u < β
+        E₀ ≥ λ_u − r² / (β − λ_u)    for any certified β ≤ E₁ with λ_u < β
+
+    using that the trial-state variance ⟨u|(H − λ_u)²|u⟩ equals r² exactly.
 
     Args:
-        rayleigh_quotient: λ_u = ⟨u|H|u⟩
+        lambda_u: λ_u = ⟨u|H|u⟩ (Rayleigh quotient of the normalized trial state)
         residual_norm: r = ‖(H − λ_u)u‖
-        upper_bound_e1: β = certified upper bound on E₁ (first excited)
+        e1_floor: β = certified lower bound on E₁ (same energy frame as λ_u)
 
     Returns:
-        E₀_lower: lower bound on ground-state energy
+        Certified lower bound on the ground-state energy E₀.
 
     Raises:
-        NotImplementedError: This stub wraps the existing solver's certified
-            lower-bound path; implementation details TBD pending integration.
+        ValueError: if the Temple premise λ_u < β fails. Loud, never a default:
+            with λ_u ≥ β the inequality is not valid and no number may be emitted.
     """
-    raise NotImplementedError(
-        "temple_lower_bound: wraps existing certified lower-bound path; implementation pending"
-    )
+    if not lambda_u < e1_floor:
+        raise ValueError(
+            f"Temple premise violated: lambda_u = {lambda_u} must lie strictly below "
+            f"the certified E1 floor beta = {e1_floor}. No bound is emitted."
+        )
+    return lambda_u - residual_norm**2 / (e1_floor - lambda_u)

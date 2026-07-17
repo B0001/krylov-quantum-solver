@@ -1,6 +1,8 @@
 # SPEC-21: Certified Guiding-State Overlap Bounds
 
-**Status:** Draft for review
+**Status:** Core implemented 2026-07-17 (Davis–Kahan γ_min, Temple shared-provenance floor,
+invariants I1–I4, binding 1000-trial validity gate). `krylov_refine` remains a stub —
+Lanczos-chained refinement and the degenerate-ground-space block form are SPEC-21b candidates.
 **Depends on:** existing certified gap-input machinery (Temple/Lehmann path); Krylov/Lanczos core
 **arXiv provenance verified:** 2026-07-16
 
