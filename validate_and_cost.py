@@ -92,7 +92,7 @@ def print_report(report, title="active space"):
     if ft is None:
         print("[3] FT COST     skipped (openfermion not installed -- run in the chem-ft env)")
     elif "error" in ft:
-        print(f"[3] FT COST     unavailable for this active space")
+        print("[3] FT COST     unavailable for this active space")
         if ft.get("note"):
             print(f"                  {ft['note']}")
     else:
@@ -134,9 +134,15 @@ if __name__ == "__main__":
 
     # medium system: dense validators auto-skip, FT cost fires (the production regime)
     mol = gto.M(atom="N 0 0 0; N 0 0 1.0977", basis="sto-3g")
-    mf = scf.RHF(mol); mf.verbose = 0; mf.kernel()
-    norb = mol.nao_nr(); na = nb = mol.nelectron // 2
-    cas = mcscf.CASCI(mf, norb, (na, nb)); cas.verbose = 0; cas.kernel()
-    h1, e_core = cas.get_h1eff(); eri = ao2mo.restore(1, cas.get_h2eff(), norb)
+    mf = scf.RHF(mol)
+    mf.verbose = 0
+    mf.kernel()
+    norb = mol.nao_nr()
+    na = nb = mol.nelectron // 2
+    cas = mcscf.CASCI(mf, norb, (na, nb))
+    cas.verbose = 0
+    cas.kernel()
+    h1, e_core = cas.get_h1eff()
+    eri = ao2mo.restore(1, cas.get_h2eff(), norb)
     rep = validate_and_cost(h1, eri, e_core, (na, nb), norb, target_mHa=1.0)
     print_report(rep, title=f"N2 / STO-3G CAS({2*na},{norb}) -- production regime")

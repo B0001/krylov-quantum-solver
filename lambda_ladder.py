@@ -93,7 +93,7 @@ def lambda_ladder(h1, eri, norb, nelec, e_core, casci_energy, thc_ranks=range(2,
               f"{fci_energy_error(h1, eriR, norb, nelec, e_core, casci_energy):>12.4f}")
     print("-" * 74)
 
-    print(f"[THC] X X Z X X fit (advantage is asymptotic; small-CAS win not expected)")
+    print("[THC] X X Z X X fit (advantage is asymptotic; small-CAS win not expected)")
     print(f"{'rankM':>5} {'lambda':>9} {'terms':>7} {'err_mHa':>12}")
     for M in thc_ranks:
         eriT = fit_thc(eri, norb, M)

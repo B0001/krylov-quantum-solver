@@ -80,3 +80,4 @@ extend-exclude = ["hybrid_quantum_solver/orchestrate_hybrid_pipeline.py"]
 
 [tool.ruff.lint.per-file-ignores]
 "docs/source/conf.py" = ["E402"]   # Sphinx: imports follow sys.path setup, by convention
+"qubitization_blueprint.py" = ["E741"]  # `l` matches the math (SELECT = sum_l |l><l| ⊗ P_l)
