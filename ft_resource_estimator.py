@@ -105,7 +105,8 @@ def threshold_sweep(mf, thresholds=(1e-1, 1e-2, 1e-3, 1e-4, 1e-5)):
 def cross_validate_df(eri, norb):
     """Confirm the hand-rolled double_factorize (df_factorization.py) agrees with the
     reference: same exact rank and an exact reconstruction at full rank."""
-    import os, sys
+    import os
+    import sys
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from df_factorization import double_factorize, reconstruct_eri
     leaves, _, my_rank = double_factorize(eri, norb)
@@ -159,7 +160,7 @@ def accuracy_gate(mf, thresholds=(1e-1, 5e-2, 1e-2, 5e-3, 1e-3, 1e-4),
 
 
 if __name__ == "__main__":
-    from pyscf import gto, scf, ao2mo
+    from pyscf import gto, scf
 
     print("=" * 78)
     print("Fault-tolerant resource scaling for N2 across basis sets (DF, chemical accuracy)")
@@ -179,7 +180,9 @@ if __name__ == "__main__":
     print("-" * 78)
     # cross-validate the hand-rolled DF against the reference on a small ERI
     mol = gto.M(atom="N 0 0 0; N 0 0 1.10", basis="sto-3g")
-    mf = scf.RHF(mol); mf.verbose = 0; mf.kernel()
+    mf = scf.RHF(mol)
+    mf.verbose = 0
+    mf.kernel()
     h1, eri, ecore, na, nb = pyscf_to_cas(mf)
     cv = cross_validate_df(eri, h1.shape[0])
     print(f"DF cross-check (my module vs reference): {cv}")
@@ -194,7 +197,9 @@ if __name__ == "__main__":
     print("\nCCSD(T) accuracy gate for N2 / 6-31g (target 1 mHa)")
     print("-" * 78)
     mol = gto.M(atom="N 0 0 0; N 0 0 1.0977", basis="6-31g")
-    mf = scf.RHF(mol); mf.verbose = 0; mf.kernel()
+    mf = scf.RHF(mol)
+    mf.verbose = 0
+    mf.kernel()
     gate = accuracy_gate(mf, target_mHa=1.0)
     print(f"{'thresh':>8} {'rank':>5} {'lambda_DF':>10} {'ccsd_t_err_mHa':>15} {'pass':>6}")
     for row in gate["rows"]:

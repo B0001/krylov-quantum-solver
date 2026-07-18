@@ -1,5 +1,7 @@
 """Smoke test: exercise the REAL shipped functions on systems with known answers."""
-import sys, os, numpy as np
+import sys
+import os
+import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # find the script beside this file
 import run_nbn_sqd_sweep as R   # the actual deliverable
 from pyscf import gto, scf
@@ -7,7 +9,8 @@ from pyscf import gto, scf
 def build_mf(atom, basis="sto-3g", spin=0):
     mol = gto.M(atom=atom, basis=basis, spin=spin)
     mf = scf.RHF(mol) if spin == 0 else scf.ROHF(mol)
-    mf.verbose = 0; mf.kernel()
+    mf.verbose = 0
+    mf.kernel()
     return mf
 
 rng = np.random.default_rng(0)

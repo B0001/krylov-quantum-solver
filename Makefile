@@ -1,9 +1,8 @@
 # Spec-driven development targets. See specs/README.md.
 #
-# Override the env runner if you don't use conda (e.g. `make gates RUN=`):
-#   ENV ?= chem   ->  commands run via `conda run -n chem`
-ENV ?= chem
-RUN ?= conda run -n $(ENV)
+# Commands run via `uv run` (the project's exclusive dependency manager -- see CLAUDE.md).
+# Override the runner if needed (e.g. `make gates RUN=` for a bare activated env):
+RUN ?= uv run
 
 GATE_JOBS ?= $(shell nproc 2>/dev/null || echo 4)
 
@@ -17,7 +16,7 @@ help:
 	@echo "make gates-clean-cache - drop all cached gate passes"
 	@echo "make test              - full test suite (block2/DMRG tests isolated)"
 	@echo "make lint              - ruff check"
-	@echo "Overrides: GATE_JOBS=N  RUN='' (no conda)"
+	@echo "Overrides: GATE_JOBS=N  RUN='' (bare activated env)"
 
 # Acceptance gates. Each spec's gate file runs in its OWN process so block2's OpenMP runtime
 # never loads into an interpreter that already imported pyscf/qiskit-aer (which segfaults).

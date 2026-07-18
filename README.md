@@ -28,6 +28,10 @@ single-signal error bars, and photoemission/optical/spin spectroscopy, applied e
 Nb₃X₈ dimer clusters. The ladder, the material scorecard, and the recorded boundaries:
 [`docs/ODMD_SUITE.md`](docs/ODMD_SUITE.md).
 
+## Why certified bounds
+
+This solver refuses to return an unaccompanied ground-state energy. Instead, it always emits two-sided brackets: a Rayleigh–Ritz upper bound (unconditional) and a Temple/Lehmann-type lower bound (explicit about its conditional gap input). For the full theoretical justification — why the problem itself is QMA-complete in our regime, why physical instance hardness remains open, and why this posture matters — see [`docs/theory/WHY_CERTIFIED_BOUNDS.md`](docs/theory/WHY_CERTIFIED_BOUNDS.md) and the arXiv-verified complexity proof graph in [`docs/theory/complexity-proof-graph-v2.cypher`](docs/theory/complexity-proof-graph-v2.cypher).
+
 ## Method
 
 1. **Classical pre-processing** (`hybrid_quantum_solver/chemistry_gateway.py`) — PySCF HF/CASCI

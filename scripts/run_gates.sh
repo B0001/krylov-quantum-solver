@@ -12,13 +12,13 @@
 # repeated nightly runs) — but it can never wrongly skip a gate.
 #
 # Env:
-#   GATE_RUN      command prefix (default: conda run -n chem)  e.g. GATE_RUN=""
+#   GATE_RUN      command prefix (default: uv run)  e.g. GATE_RUN=""
 #   GATE_JOBS     parallel processes (default: nproc)
 #   GATE_NO_CACHE 1 = ignore cache (still records passes)
 #   GATE_GLOB     gate file glob (default: tests/test_*_spec.py)
 set -u
 
-RUN=${GATE_RUN-conda run -n chem}
+RUN=${GATE_RUN-uv run}
 JOBS=${GATE_JOBS:-$(nproc 2>/dev/null || echo 4)}
 GLOB=${GATE_GLOB:-tests/test_*_spec.py}
 CACHE_DIR=.gates-cache

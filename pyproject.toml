@@ -7,7 +7,7 @@ name = "hybrid_quantum_solver"
 version = "0.1.0"
 description = "Hybrid quantum-classical pipeline for molecular ground-state energies via real-time quantum Krylov subspace diagonalization, validated against FCI/CASCI and DMRG."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
@@ -31,6 +31,7 @@ dependencies = [
     "ase>=3.22",
     # ChemCheck submission/scorecard schema validation (draft 2020-12; pulls in `referencing`).
     "jsonschema>=4.18",
+    "pyyaml>=6.0.3",
 ]
 
 [project.optional-dependencies]
@@ -80,3 +81,4 @@ extend-exclude = ["hybrid_quantum_solver/orchestrate_hybrid_pipeline.py"]
 
 [tool.ruff.lint.per-file-ignores]
 "docs/source/conf.py" = ["E402"]   # Sphinx: imports follow sys.path setup, by convention
+"qubitization_blueprint.py" = ["E741"]  # `l` matches the math (SELECT = sum_l |l><l| ⊗ P_l)
