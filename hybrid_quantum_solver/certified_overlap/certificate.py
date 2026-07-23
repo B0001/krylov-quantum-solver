@@ -59,6 +59,10 @@ class OverlapCertificate:
     (u, gap-input) pair -- overlap floor and energy floor share provenance and are
     reported together (SPEC-21 section 2). None only when the Temple premise
     λ_u < e1_floor fails.
+
+    ``cluster_size`` d: γ_min bounds |⟨u|ψ₀⟩| for a simple ground state (d=1, the
+    SPEC-21 default) or ‖P_S u‖ for the lowest-d eigenspace (d>1, block Davis–Kahan,
+    SPEC-21b). Invariant Ib: d must be an integer ≥ 1.
     """
 
     gamma_min: float
@@ -70,14 +74,26 @@ class OverlapCertificate:
     vacuous: bool = False
     vacuous_reason: Optional[str] = None
     e0_lower_temple: Optional[float] = None
+    cluster_size: int = 1
 
     def __post_init__(self):
-        """Enforce invariants I1-I4."""
+        """Enforce invariants I1-I4 and Ib."""
         # I1: gap_certificate_id must be present (non-empty string)
         if not self.gap_certificate_id or not isinstance(self.gap_certificate_id, str):
             raise ValueError(
                 "I1 violation: gap_certificate_id must be a non-empty string. "
                 "No overlap certificate without a valid gap certificate."
+            )
+
+        # Ib: cluster_size must be an integer >= 1 (bool is not an acceptable int here)
+        if isinstance(self.cluster_size, bool) or not isinstance(self.cluster_size, int):
+            raise ValueError(
+                f"Ib violation: cluster_size must be an int, got {type(self.cluster_size).__name__}."
+            )
+        if self.cluster_size < 1:
+            raise ValueError(
+                f"Ib violation: cluster_size must be >= 1, got {self.cluster_size}. "
+                "A ground eigenspace of dimension < 1 is meaningless."
             )
 
         # I2: vacuous bounds must have gamma_min = 0 and a stated reason
@@ -124,16 +140,18 @@ class OverlapCertificate:
             "vacuous": self.vacuous,
             "vacuous_reason": self.vacuous_reason,
             "e0_lower_temple": self.e0_lower_temple,
+            "cluster_size": self.cluster_size,
         }
 
     def __repr__(self) -> str:
+        target = "|⟨u|ψ₀⟩|" if self.cluster_size == 1 else f"‖P_S u‖ (d={self.cluster_size})"
         if self.vacuous:
             return (
-                f"OverlapCertificate(vacuous, reason={self.vacuous_reason}, "
-                f"gap_cert={self.gap_certificate_id})"
+                f"OverlapCertificate(vacuous, target={target}, "
+                f"reason={self.vacuous_reason}, gap_cert={self.gap_certificate_id})"
             )
         return (
-            f"OverlapCertificate(γ_min={self.gamma_min:.6f}, "
+            f"OverlapCertificate(γ_min={self.gamma_min:.6f} ≤ {target}, "
             f"λ_u={self.lambda_u:.6f}, r={self.residual_norm:.6e}, "
             f"E0≥{self.e0_lower_temple}, gap_cert={self.gap_certificate_id})"
         )
