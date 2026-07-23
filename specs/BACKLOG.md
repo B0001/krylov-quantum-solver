@@ -9,6 +9,20 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
 
 ## Open
 
+- [x] **Certified HF guiding-state overlap — the guided-LH assumption, certified from Krylov
+  data** *(SPEC-21 integration: the classical certifier produces the assumption's proof)* —
+  the guided-LH results (arXiv:2111.09079 +) make GSEE BQP-complete GIVEN γ = |⟨u|ψ₀⟩| ≥
+  1/poly, an overlap that is *assumed*, never certified. Feeding the repo's own premise-gated
+  self-mode Krylov E₁ floor (`certified_gaps.gap_bracket`, M ≥ 6) into the SPEC-21 Davis–Kahan
+  machinery yields a rigorous γ_min ≤ |⟨HF|ψ₀_reachable⟩| with **no oracle**. **THE CHECK
+  (killable):** dense `eigh` gives the exact reachable overlap; any γ_min above it kills SPEC-21.
+  **THE FINDING:** valid on every row (H₂ eq/stretched, H₄) at M ∈ {6,8,12}; useful at
+  equilibrium (H₂ 0.9936 vs exact 0.9936; H₄ 0.72@M12 vs 0.968), and the self-mode floor
+  *climbs with M* toward the oracle floor (H₄: 0.479→0.539→0.721→0.776) — the matvec-priced
+  Krylov refinement SPEC-21 §2 predicted, measured. Stretched H₂ degrades the floor to 0.772
+  (exact 0.844) — the orthogonality catastrophe made numeric. See
+  [`SPEC_hf_overlap_certificate.md`](SPEC_hf_overlap_certificate.md).
+
 - [x] **Nb₃X₈ vs magnetometry — a parameter-free prediction against the lab** *(the profitable turn:
   internal cross-check → falsifiable prediction against experiment)* — the ab-initio interlayer
   singlet–triplet gap J (from the same downfolded bilayer as [`SPEC_odmd_spin.md`](SPEC_odmd_spin.md),
