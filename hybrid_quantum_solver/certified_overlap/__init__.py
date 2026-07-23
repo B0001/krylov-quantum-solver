@@ -16,6 +16,11 @@ Reference: arXiv:2111.09079, arXiv:2207.10097, arXiv:2207.10250 (guided-LH);
 from .rayleigh import rayleigh_quotient
 from .residual import residual_norm
 from .davis_kahan import gamma_min, certify_overlap
+from .block_davis_kahan import (
+    ClusterGapCertificate,
+    certify_subspace_overlap,
+    exact_subspace_overlap,
+)
 from .temple import temple_lower_bound
 from .certificate import GapCertificate, OverlapCertificate
 
@@ -24,7 +29,10 @@ __all__ = [
     "residual_norm",
     "gamma_min",
     "certify_overlap",
+    "certify_subspace_overlap",
+    "exact_subspace_overlap",
     "temple_lower_bound",
     "GapCertificate",
+    "ClusterGapCertificate",
     "OverlapCertificate",
 ]

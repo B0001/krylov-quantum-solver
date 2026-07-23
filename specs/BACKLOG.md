@@ -9,6 +9,20 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
 
 ## Open
 
+- [x] **Certified subspace overlap — the block Davis–Kahan form for (near-)degenerate ground
+  clusters** *(SPEC-21b: the honest generalization the single-vector certificate flagged twice)*
+  — for a degenerate ground level the eigenvector ψ₀ is basis-arbitrary and |⟨u|ψ₀⟩| is undefined;
+  for a *near*-degenerate cluster the single-vector separation δ = E₁ − λ_u collapses to the
+  intra-cluster spacing and the SPEC-21 certificate goes vacuous. Block sin-θ certifies the
+  basis-independent target ‖P_S u‖ (overlap with the lowest-d eigenspace) using δ = E_d − λ_u,
+  the gap to the first level *above* the cluster. **THE CHECK (killable):** dense `eigh` gives the
+  exact ‖P_S u‖; any γ_min above it kills the block bound (1000 trials, d ∈ {1,2,3}, zero tol).
+  **THE FINDING:** on an engineered 2-fold near-degenerate ground pair (spacing 1e-4, gapped by
+  1.0) the v1 single-vector certificate is **vacuous** (r = 5e-5 ≥ δ = 5e-5) while the d=2 block
+  certificate returns γ_min = 1.0 = exact ‖P_S u‖ — vacuous-vs-useful, asserted (G3). d=1 recovers
+  SPEC-21 to machine precision (G2). See
+  [`SPEC_certified_overlap_subspace.md`](SPEC_certified_overlap_subspace.md).
+
 - [x] **Certified HF guiding-state overlap — the guided-LH assumption, certified from Krylov
   data** *(SPEC-21 integration: the classical certifier produces the assumption's proof)* —
   the guided-LH results (arXiv:2111.09079 +) make GSEE BQP-complete GIVEN γ = |⟨u|ψ₀⟩| ≥
