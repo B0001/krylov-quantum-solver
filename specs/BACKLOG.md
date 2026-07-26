@@ -9,6 +9,20 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
 
 ## Open
 
+- [x] **Certified HF subspace overlap on a real molecule — the block certificate rescues what the
+  single-vector one throws away** *(SPEC-21b integration: the molecular reachable-cluster demo)* —
+  on strongly-multireference **square H₄** the HF state is a poor proxy for the reachable ground
+  *state* but a strong proxy for the ground *eigenspace*: its weight spreads across the two lowest
+  reachable levels, so its overlap with either one alone drops below the residual-to-gap ratio and
+  the SPEC-21 single-vector certificate goes **vacuous** — while the SPEC-21b d=2 block certificate,
+  fed the repo's own self-mode Krylov E_d floor (θ_d − σ_d, no oracle), is **valid and non-vacuous**.
+  **THE CHECK (killable):** dense `eigh` gives the exact reachable ‖P_S u‖; any γ_min above it kills
+  it (self M∈{6,8} + oracle, zero tol). **THE FINDING:** across the a = 1.4→1.0 Å sweep the d=1 cert
+  is vacuous at every point while d=2 climbs 0.50→0.92 (exact 0.88→0.97), self-mode matching oracle
+  to <0.05 (Krylov resolves the cluster, so no oracle is needed), and the floor grows as the square
+  tightens (stronger multireference ⇒ more HF weight in the two-level cluster). See
+  [`SPEC_hf_overlap_subspace.md`](SPEC_hf_overlap_subspace.md).
+
 - [x] **Certified subspace overlap — the block Davis–Kahan form for (near-)degenerate ground
   clusters** *(SPEC-21b: the honest generalization the single-vector certificate flagged twice)*
   — for a degenerate ground level the eigenvector ψ₀ is basis-arbitrary and |⟨u|ψ₀⟩| is undefined;
