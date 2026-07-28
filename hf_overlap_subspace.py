@@ -44,10 +44,13 @@ _REACHABLE_TOL = 1e-8
 def _weinstein_intervals_disjoint(centers, sigmas) -> bool:
     """Are the Weinstein intervals [theta_k - sigma_k, theta_k + sigma_k] pairwise disjoint?
 
-    The in-band resolvability signal (SPEC_subspace_floor_resolvability.md): when the Krylov space
-    has NOT resolved the size-d cluster, the residuals sigma_k are large and adjacent intervals
-    overlap, so the self-mode floor theta_d - sigma_d is untrustworthy (it can exceed the true
-    E_d). ``centers`` must be ascending. A necessary, oracle-free check -- NOT proven sufficient.
+    A HEURISTIC in-band resolvability pre-filter (SPEC_subspace_floor_resolvability.md): when the
+    Krylov space grossly fails to resolve the size-d cluster, the residuals are large and adjacent
+    intervals overlap, so the self-mode floor theta_d - sigma_d is untrustworthy. ``centers`` must
+    be ascending. This is a NECESSARY, oracle-free check that is DEMONSTRABLY NOT SUFFICIENT: a
+    parallel falsification sweep found guard-passing cases with invalid floors (a tiny-amplitude
+    reachable level near the cluster boundary is localized as a higher level; more Krylov dim does
+    not fix it). It reduces but does not eliminate the failure. Oracle mode is the rigorous path.
     """
     for k in range(len(centers) - 1):
         if centers[k] + sigmas[k] >= centers[k + 1] - sigmas[k + 1]:
@@ -68,9 +71,13 @@ def certify_hf_subspace_overlap(
 
     Raises on: self mode below M = 6, a Krylov subspace too small to expose level d (rank
     < d+1), or any SPEC-21b invariant. Returns a possibly-VACUOUS certificate -- check
-    ``.vacuous`` before quoting gamma_min. In self mode the certificate is also VACUOUS when the
-    Krylov space has not resolved the cluster (overlapping Weinstein intervals), so the self-mode
-    floor is never emitted unsound -- see SPEC_subspace_floor_resolvability.md.
+    ``.vacuous`` before quoting gamma_min.
+
+    RIGOR: **oracle mode (e_d given) is rigorous** -- the block sin-theta certificate is valid by
+    theorem. **Self-mode (e_d=None) is HEURISTIC, not rigorous** for d >= 2: the floor
+    theta_d - sigma_d can exceed the true E_d, and the disjoint-interval guard that filters gross
+    failures is demonstrably insufficient (SPEC_subspace_floor_resolvability.md). A non-vacuous
+    self-mode certificate is a heuristic estimate, not a proof; do not quote it as certified.
     """
     if e_d is None and m < _SELF_MODE_MIN_M:
         raise ValueError(
@@ -90,9 +97,9 @@ def certify_hf_subspace_overlap(
         )
 
     if e_d is None:
-        # Resolvability guard: the self-mode floor theta_d - sigma_d is only trustworthy when the
-        # Krylov space has resolved the cluster. Unresolved => overlapping Weinstein intervals =>
-        # return VACUOUS rather than a possibly-unsound positive floor (fail-safe, not fail-silent).
+        # Heuristic resolvability pre-filter: reject GROSS non-resolution (overlapping Weinstein
+        # intervals) by returning VACUOUS. NOTE: this is not sound -- guard-passing cases with
+        # invalid floors exist (SPEC_subspace_floor_resolvability.md); self-mode stays heuristic.
         centers = [energies[k] - offset for k in range(cluster_size + 1)]
         sigmas = [residual_norm(Hs, states[k], centers[k]) for k in range(cluster_size + 1)]
         if not _weinstein_intervals_disjoint(centers, sigmas):

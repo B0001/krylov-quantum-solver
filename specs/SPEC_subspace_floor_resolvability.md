@@ -1,84 +1,78 @@
-# SPEC: Self-mode subspace floor is not rigorous for d ≥ 3 — a discovered failure and a fail-safe guard
+# SPEC: The self-mode subspace floor is not rigorous for d ≥ 2 — a discovered failure, a heuristic pre-filter, and its falsification
 
-**Status:** Specced 2026-07-27. A soundness fix to `hf_overlap_subspace.py`
-(merged PR #20). Deferred boundary named in `SPEC_hf_overlap_subspace.md` honest-caveats:
-"a general certified resolvability test for d > 1 is deferred."
-**Depends on:** `hf_overlap_subspace` (the self-mode E_d floor), `certified_overlap` (the block
-certificate it feeds).
+**Status:** Updated 2026-07-28 after a parallel falsification sweep. The self-mode floor is a
+**heuristic**; the disjoint-interval guard reduces but does **not** eliminate the failure (proven
+insufficient below). **Oracle mode is the only rigorous path.** Corrects the earlier "fail-safe"
+framing of this same spec.
+**Depends on:** `hf_overlap_subspace.py`, `certified_overlap` (the block certificate).
 
-## The finding (killable)
+## The finding (killable): the self-mode floor is not rigorous
 
-`certify_hf_subspace_overlap` in self mode floors E_d by `theta_d − sigma_d` — the Weinstein
-floor on the (d+1)-th Ritz value, generalized from the d = 1 `gap_bracket`. **This floor is not
-rigorous for d ≥ 3.** On the linear H₆ chain (R = 1.2 Å, d = 3):
+`certify_hf_subspace_overlap` in self mode floors E_d by `theta_d − sigma_d` — the Weinstein floor
+on the (d+1)-th Ritz value, generalized from the d = 1 `gap_bracket`. **This floor can exceed the
+true reachable E_d**, so a non-vacuous self-mode certificate is not a proof. Linear H₆ (R = 1.2 Å,
+d = 3): β_self = −2.251 > true E_d = −2.583 at M = 8 (−2.412 at M = 12). The excited Ritz states
+are unresolved (σ₁…σ₃ ≈ 0.29–0.45), so `theta_d` sits near a higher level.
 
-| M | β_self = θ_d − σ_d | true reachable E_d | β_self ≤ E_d ? |
-|---|---|---|---|
-| 8  | −2.25106 | −2.58257 | **NO** |
-| 12 | −2.41174 | −2.58257 | **NO** |
+## The heuristic pre-filter (kept, but NOT sound)
 
-β_self **exceeds** the true (d+1)-th reachable level, so it is not a valid lower bound, and the
-resulting block certificate γ_min (0.88) came out *above* the oracle-mode γ_min (0.53) — a
-near-miss from an outright invalid certificate (it stayed under the exact ‖P_S u‖ = 0.92 only by
-slack). The cause is visible in the residuals: the excited Ritz states are unresolved at these M
-(σ₁…σ₃ ≈ 0.29, 0.34, 0.45), so `theta_d` has not converged to E_d — it sits near a higher level.
+The gross-failure case has an in-band signature: when the Krylov space badly fails to resolve the
+cluster, the d + 1 lowest Weinstein intervals `[theta_k − sigma_k, theta_k + sigma_k]` **overlap**.
+`certify_hf_subspace_overlap` self mode computes all d + 1 residuals and returns a **VACUOUS**
+certificate when they overlap. This rejects the gross failures (in the stress sweep below, 106 of
+114 cases), including the H₆ R=1.2 d=3 bug.
 
-The d = 1 (gap_bracket) and d = 2 (square-H₄ / linear-H₄) paths did not exhibit this in testing;
-d = 3 on a genuinely multireference chain is where the unresolved-excited-state regime bites.
+## The falsification: the guard is insufficient (killable)
 
-## The fix: a checkable resolvability signal, fail-safe
+A parallel adversarial sweep (linear H₆, symmetric and asymmetric, d = 3, M ∈ {6,8,10,12,16,20})
+found **8 guard-PASSING cases whose self-mode floor is still invalid** (β_self > true E_d).
+Representative, deterministic:
 
-The failure has an **in-band signature**: when the Krylov space has not resolved the cluster, the
-Weinstein intervals `I_k = [theta_k − sigma_k, theta_k + sigma_k]` of the first d + 1 Ritz states
-**overlap**. When it has resolved them, the intervals are disjoint. Observed:
+| case | intervals disjoint (guard passes) | β_self | true E_d | floor valid |
+|---|---|---|---|---|
+| linear H₆ R=1.0, d=3, M=16 | Yes | −2.218 | −2.500 | **NO** |
+| linear H₆ R=1.1, d=3, M=20 | Yes | −2.369 | −2.584 | **NO** |
+| asym H₆ [0.9,0.9,2.2,0.9,0.9], d=3, M=6 | Yes | −1.379 | −2.433 | **NO** |
 
-| case | intervals disjoint | β_self valid |
-|---|---|---|
-| H₆ R=1.2 d=3 M=8/12 (fails) | **No**  | No  |
-| square-H₄ d=2 (good)         | Yes | Yes |
-| linear-H₄ d=2 (good)         | Yes | Yes |
+Two facts make this decisive, not a corner case:
+- **The blind spot is common, not pathological.** Every stretched H₆ geometry has a reachable
+  level of HF amplitude ~1e-4 near the cluster boundary. Disjoint intervals localize d + 1
+  *distinct* eigenvalues but not necessarily the d + 1 *lowest*; a missed low-amplitude level is
+  localized as a higher one, with small residuals (disjoint intervals) all the way.
+- **More Krylov dimension does not fix it** — escapes occur at M = 16 and M = 20.
+- No local residual/disjointness criterion can detect a *missed* level; a sound test needs a
+  certified lower anchor below the cluster (the `certified_gaps` open problem).
 
-`certify_hf_subspace_overlap` self mode now computes all d + 1 Ritz residuals and checks pairwise
-disjointness of the Weinstein intervals. **If they overlap, it returns an explicit VACUOUS
-certificate** (reason: self-mode floor unresolved; increase M or supply an oracle e_d) rather than
-the possibly-unsound positive. Self mode is now *fail-safe* (refuses when unresolved), not
-*fail-silent*. Oracle mode is unchanged and remains the rigorous path.
+In the sweep the resulting *certificate* γ_min stayed ≤ exact ‖P_S u‖ in all 8 cases — but only by
+unquantified slack, as thin as **0.0045** (asym H₆, M=6). So the library did not emit an outright
+invalid number here, yet self-mode rests on slack it does not control. **It is not rigorous.**
 
-## Honest scope of the guard
+## Conclusion / rigor statement
 
-Disjoint Weinstein intervals is a **necessary, in-band resolvability signal that is checkable
-without an oracle** — the property the existing certified line calls "not self-verifiable" and
-gates only empirically at M ≥ 6. It is **not proven sufficient**: a pathological reachable level
-of vanishing HF amplitude near the cluster boundary could in principle leave the intervals
-disjoint while a level is mislocalized. The guard converts the demonstrated *fail-silent* into a
-*fail-safe*; it does not turn self mode into a rigorous certificate. Oracle mode remains the
-proof; the empirical soundness sweep (G4) is exactly the standard the d = 1 premise is held to
-(zero escapes across a family, honestly labeled empirical).
+- **Oracle mode (a true E_d floor) is rigorous** — block sin-θ, validated with zero escapes across
+  36k adversarial synthetic certificates and the molecular sweep (G4b, and the SPEC-21/21b gates).
+- **Self-mode d ≥ 2 is HEURISTIC.** The guard is a pre-filter that rejects gross non-resolution,
+  not a soundness proof. Docstrings say so; a non-vacuous self-mode certificate must not be quoted
+  as certified. The d = 1 path was already "not self-verifiable" (gated empirically at M ≥ 6); this
+  spec establishes the same, more sharply, for d ≥ 2.
 
 ## Gates
 
-- G1 (the bug, regression, killable): on H₆ (R = 1.2 Å, d = 3, M ∈ {8, 12}) the *raw* self-mode
-  floor `theta_d − sigma_d` exceeds the true reachable E_d. Documents the failure exists; if a
-  future change makes the raw floor rigorous here, this gate flips and the spec is revisited.
-- G2 (guard catches it): the guarded `certify_hf_subspace_overlap` returns a **VACUOUS**
-  certificate on H₆ d = 3 (M ∈ {8, 12}) — never the unsound positive.
-- G3 (guard does not over-reject): on square-H₄ (a ∈ {1.4, 1.2, 1.0}, d = 2) and linear-H₄
-  (R = 1.0, d = 2) the guard passes and the certificate is non-vacuous and valid (γ_min ≤ exact).
-  Regression-guards the merged PR #20 demonstration.
-- G4 (empirical soundness, zero-tol): across a sweep (square-H₄, linear-H₄ R ∈ {1.0,1.5},
-  linear-H₆ R ∈ {1.2,1.8}, d ∈ {2,3}, M ∈ {6,8,12}), **every** case the guard passes has a valid
-  self-mode floor (β_self ≤ true reachable E_d) and a valid certificate (γ_min ≤ exact ‖P_S u‖).
-  One guard-passes-but-invalid escape kills the guard.
+- G1 (the floor bug, regression, killable): raw `theta_d − sigma_d` > true E_d on H₆ R=1.2 d=3.
+- G2 (pre-filter rejects gross failure): guarded self-mode is VACUOUS on H₆ R=1.2 d=3.
+- G3 (no over-rejection on resolved cases): square-H₄ / linear-H₄ d=2 pass, non-vacuous & valid
+  (regression-guards the PR #20 demonstration, which used resolved cases).
+- G4 (**the falsification, killable**): a deterministic guard-PASSING case with an invalid floor
+  exists (linear H₆ R=1.0, d=3, M=16) — documents the guard is not sound; flips if a future change
+  makes it sound.
+- G4b (the rigorous path, zero-tol): oracle-mode certificates are valid across the sweep.
 
 ## Out of scope
 
-A proven-sufficient resolvability certificate (the sound sufficient condition, requiring a
-certified anchor below the cluster — deferred, hard, the certified_gaps docstring's open
-problem). Guarding the d = 1 `gap_bracket` / `hf_overlap_certificate` self-mode paths (empirically
-safe at M ≥ 6; unchanged here). Shot noise on the residuals.
+A proven-sufficient resolvability certificate (needs a certified sub-cluster anchor — deferred,
+hard). Making self-mode rigorous. Guarding the d = 1 paths (unchanged; empirically M ≥ 6).
 
 ## Honest caveats
 
-Exact-statevector only. The guard is a necessary check, not a sufficiency proof (see scope). The
-G4 soundness claim is empirical over the tested family, in the same spirit as the d = 1 M ≥ 6
-boundary — not a theorem.
+Exact-statevector only. The self-mode floor is heuristic; the guard is a heuristic pre-filter,
+demonstrably insufficient. The block-bound math and oracle mode are the rigorous, validated core.
