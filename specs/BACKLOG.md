@@ -9,8 +9,305 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
 
 ## Open
 
-_None. Every hypothesis below is closed. Add new ones here — a claim plus the cheap check that
-would kill it; if you cannot write the check, it is not a candidate._
+Generated 2026-07-28 by a five-way parallel scout over the whole tree (certified arc · method rungs ·
+Nb₃X₈ · FT stack · scale/refs). Every entry names existing primitives — nothing here needs new
+machinery to *start*. Four entries below rest on a defect **verified in code** during generation;
+those are marked *(verified)*. Numbers marked *(scout probe)* come from exploratory runs during
+generation — they are **not gated results**, they are the reason to believe the hypothesis is alive,
+and the spec must re-derive them. Several entries predict their own death; that is intended — a
+hypothesis whose death is informative is worth more here than a safe one.
+
+### Certified-bounds arc
+
+- [ ] **The downstream certified rungs consume an unguarded gap input** — *Claim:* `certified_gaps`'
+  "zero escapes at M ≥ 6" is a property of its three test systems, not of M ≥ 6; on stretched/asym H₄
+  the self-mode lower certificate escapes and stays escaped to M = 12. `gap_selfcheck` catches every
+  one, but `certified_dipole.py:88`, `hf_overlap_certificate.py:58` and `hf_overlap_subspace.py:117`
+  each call `gap_bracket` at a **single M with no corroboration**, so they inherit an escape the arc
+  already knows how to catch. *(scout probe: linear H₄ R=3.0 Å M=6 → Δ_lo ∈ [0.590, 0.599] vs true
+  gap 0.0012, ~500×.)* *Check (killable):* sweep those geometries through `certified_dipole` /
+  `certify_hf_overlap` at M ∈ {6,8,12,16}, reference = exact reachable dipole/overlap; **dies if no
+  downstream escape exists** — which is itself worth recording (the bounds would be robust to their
+  own input being wrong). *Reuse:* `gap_selfcheck.self_checked_gap_from` is the fix if it propagates.
+  *Cost:* cheap (~2 min, all 8-qubit). *Caveat:* two latent crashes found en route (`spectral_width`
+  ArpackError on square H₄ where μ_z ≡ 0; a zero-half-width epsilon floor on HeH⁺) — fix in the same
+  PR but do **not** dress them up as the finding.
+
+- [ ] **The `krylov_refine` stub is not a marginal tightening — it may moot the block certificate**
+  *(verified: `krylov_refine.py:4` is a live `NotImplementedError` whose docstring promises exactly
+  this)* — *Claim:* chaining through the Krylov ground Ritz vector via the angle triangle inequality,
+  γ_chain = cos(θ_uv + arcsin(r_v/δ_v)), is valid, far tighter (v's residual ≪ HF's), and costs **zero
+  extra measurements** — ⟨HF|v⟩ is already the first row of the Krylov overlap matrix S. *Check
+  (killable):* γ_chain ≤ exact reachable overlap at zero tolerance on H₂ eq/stretched, H₄ chain,
+  square H₄ a ∈ {1.0,1.2,1.4}, M ∈ {6,8,12}; also dies if γ_chain ≤ the direct bound anywhere the
+  direct bound is non-vacuous. *(scout probe: square H₄ 1.2 Å M=8 — direct **vacuous**, chained
+  0.674, exact 0.679.)* *Cost:* cheap. *Caveat:* if it survives it **demotes SPEC_hf_overlap_subspace's
+  headline** — "the d=1 certificate goes vacuous" becomes a property of not having implemented the
+  refinement, not of the problem. SPEC-21b still stands for genuinely degenerate ground levels. That
+  relabeling must be written down, not buried.
+
+- [ ] **The missing "certified sub-cluster anchor" is a spectral-weight bound, and its target is now
+  quantified** — *Claim:* the blocker `SPEC_subspace_floor_resolvability` deferred as hard reduces to
+  an exact leakage correction: if the self-mode floor β overshoots E_d, the only damage is the HF
+  weight η on the missed levels, and γ_corr = √(1 − r²/δ² − η) is valid for *any* β. So the anchor
+  problem becomes: can Krylov data bound η? The raw material exists — S₀ₖ are the Fourier moments of
+  the HF spectral measure. *Check (killable):* G-a validity on the spec's own escape witnesses;
+  G-b the killer — bound η from the Krylov moments and compare. **Dies if the moment bound exceeds
+  ~0.05 at M ≤ 24.** *(scout probe: measured η = 2.4e-2 / 3.8e-2 / 7.4e-2 on the three witnesses,
+  spanning 54–142 levels — *not* the ~1e-4 "one tiny missed level" story, because β overshoots by
+  0.22–0.33 Ha and sweeps a whole band.)* *Cost:* medium. *Caveat:* **I expect G-b to be killed**, and
+  that is the point — it converts "open problem, deferred" into "needs Krylov resolution 1/(MΔt)
+  below the floor overshoot, measured at 0.22–0.33 Ha", a falsifiable design target.
+
+- [ ] **The overlap certificate is the one rung with no noise sibling, and its noise is structurally
+  different** — *Claim:* for a determinant guiding state λ_u and r are **classically exact** (zero
+  shots), so *all* noise enters through the single gap input β, and γ_min = √(1 − r²/δ²) has unbounded
+  derivative as r → δ. Prediction: coverage does not degrade smoothly, it **bifurcates** — near-perfect
+  at wide margin, collapsing discontinuously at thin margin, with the guided-LH γ ≥ 1/poly claim
+  surviving only in the wide-margin regime. *Check (killable):* ≥6000 seeded trials, shots ∈
+  {1e4,1e5,1e6}, z ∈ {0,1,2,3}, on four systems spanning the margin (H₂ 0.74 Å γ=0.9936 → square H₄
+  1.2 Å vacuous); **dies if z ≤ 2 restores coverage ≥ 0.9 everywhere** (then it is a fifth repetition
+  of "inflation buys coverage" and nothing new). *Reuse:* `certified_noise.shot_noise_coverage`
+  pattern, `gap_selfcheck_noise._pad` post-hoc convention. *Cost:* cheap. *Caveat:* the shot-free-residual
+  argument is specific to determinant guiding states — a chained-Ritz state (entry above) puts r back
+  on the meter. State that boundary up front rather than discovering it later.
+
+### Method rungs
+
+- [ ] **PDS's accuracy floor is a removable artifact of the uncentered moment frame** — *Claim:*
+  `SPEC_moment_pds` R1 calls "det M → 0 at large K" fundamental and caps gates at K ≤ 4. It is not:
+  the moment matrix inherits the dynamic range of raw electronic-frame moments (∼‖H‖ⁿ). Rebuilding
+  the identical moments in the repo's own centered frame drops cond(M) by 12–18 orders at identical
+  PDS values, unlocking K = 7–8. *Check (killable):* dies if centered ≠ raw by >1e-6 Ha wherever raw
+  cond(M) < 1e10 (not the same functional), or if centering fails to give ≥8 orders of cond reduction
+  at K=8. Sharper second gate: **raw PDS is non-monotone past the K=4 cap** *(scout probe: N₂ CAS(6,6)
+  0.044 mHa at K=6 → 0.049 at K=7, violating G3's monotone-tightening claim; centered stays monotone
+  0.054 → 0.006 → 0.001)*. *Reuse:* `hamiltonian_moments`, `pds_energy`, `device_odmd.centered_frame`
+  — 100% composition, zero new primitives. *Cost:* cheap. *Caveat:* this is numerical hygiene, not
+  physics — it does not change PDS's convergence *rate*, only how far you can ride it before float64
+  quits. μ from dense diagonalization is a validation-scale cheat; gate the sensitivity to a badly
+  estimated μ rather than assuming it away.
+
+- [ ] **The higher roots of P_K(E) are excited states — bounded, but ~100× more expensive in K than
+  the ground root** *(verified: `moment_expansion.py:69` returns `real_roots.min()` only)* — *Claim:*
+  `SPEC_moment_pds` §7 names this follow-up and never touched it. The j-th smallest real root is a
+  variational **upper** bound on the j-th reachable eigenvalue, converging ~1000× slower than the
+  ground root at fixed K. *Check (killable):* bound dies if any root_j < E_j − 1e-9 Ha; usefulness
+  dies if PDS(8)'s first excited root is not within 1.6 mHa of E₁ on H₄. *(scout probe: H₄ ground root
+  2.04 → 0.002 mHa over K=3…7 while root₁ crawls 553 → 20.5 mHa.)* *Reuse:* a ~3-line `pds_roots`
+  sibling returning the sorted array; degeneracy handling per `SPEC_qksd_excited` R1 (match as a
+  sorted set, never index-by-index). *Cost:* cheap. *Caveat:* **I expect index-matching to be killed on
+  near-degenerate stretched H₄** (a root slots *between* levels and skips one) — the informative death:
+  PDS roots track spectral *density*, not level *index*. Ordered after the centered-frame entry: at
+  raw K=7 the roots are already conditioning garbage.
+
+- [ ] **A non-variational estimator cannot supply the Temple premise — ODMD repairs it at shallow M,
+  then silently breaks it** — *Claim:* `SPEC_temple_bracket`'s oracle-free ε = θ₁ − σ₁ fails at M ≤ 4
+  and `certified_gaps` inherits that boundary. ODMD's E₁ comes from the first row of S the Krylov solve
+  already measures — no extra measurement — and repairs the premise there. But ODMD is explicitly
+  non-variational, so **no depth guarantees ε ≤ E₁**. *Check (killable):* G-a the repair is vacuous if
+  self-mode is not actually violated at M=4 on all three systems; G-b there exists a K at which ODMD
+  overshoots and the bracket is recorded **invalid**, not smoothed over. *(scout probe, H₄: self-mode
+  M=4 ε = −1.59181 vs true E₁ = −1.649658 → violated; ODMD K=16 → −1.653511, premise OK, bracket
+  1.02 mHa; **K=20 → −1.649481, i.e. 0.176 mHa ABOVE E₁ → violated.** Deeper signal makes the
+  certificate worse.)* *Cost:* medium. *Caveat:* **the headline claim is false by construction and the
+  K=20 overshoot proves it empirically** — the deliverable is a measured map of where the substitution
+  helps and where it silently breaks, not a certificate. Pairs with `SPEC_odmd_uq`'s recorded blind
+  spot (single-signal resampling cannot see model bias, so it cannot flag the overshoot either).
+
+- [ ] **Classical shadows buy ⟨H⟩ and ⟨H²⟩ from one dataset — cheaper than the repo's λ² model, but
+  they do not buy coverage** — *Claim:* `SPEC_certified_noise` found λ_{H²} ≫ λ_H (H₄: 63 vs 10),
+  making the Temple lower bound the noise-expensive side, and `temple_bounds` states outright that the
+  ⟨H²⟩ hardware cost is unmodeled. Random-Pauli shadows estimate both moments from the **same**
+  snapshots, with HKP variance below the assumed λ². *Check (killable):* G1 unbiasedness on the Krylov
+  Ritz state (not just HF) within 4·stderr at 16k snapshots; G2 dies if shadow_norm(H²) ≥ λ_{H²}²;
+  G4 feed shadow-estimated moments into the Temple bracket over 200 seeds — **kills the free-lunch
+  reading if coverage is also ~0.40**, i.e. the variational knife-edge is estimator-independent.
+  *(scout probe, H₄: shadow_norm/λ² a stable 0.35–0.42 across both operators; but shadow_norm ratio
+  H²/H = 29.3 vs λ-ratio 35.6 — shadows do **not** remove the asymmetry.)* *Cost:* cheap-to-medium;
+  record the honest seam that H² for H₄ has 1775 Pauli terms vs H's 185, growing O(N⁸). *Caveat:*
+  comparing `shadow_norm` to λ² compares **two different upper bounds from two different protocols** —
+  the gate must also measure empirical single-shot variance or the comparison is apples-to-oranges.
+
+### Nb₃X₈ materials line
+
+- [ ] **The 15× Curie–Weiss miss is a phase-assignment artifact, not missing in-plane exchange** —
+  *Claim:* Sheckelton's θ_W = −13.1 K is fitted above 90 K, in the **undimerized high-temperature**
+  phase, but `nb3x8_magnetometry.py:42` imports only `NB3X8_LT_BULK` — so this repo's own published
+  G3(b) finding compares a low-temperature J to a high-temperature measurement. Using the HT
+  parameters already sitting unused in `NB3X8_CLUSTERS`, the miss inverts to a 4.1× *under*prediction,
+  leaving a clean mean-field statement θ = −z·J/4 ⟹ z_eff = 4.1. *Check (killable):* dies if |−J_HT/4|
+  is not within 10× of −13.1 K, if z_eff is unphysical (<1 or >12 for a layered stack), or if absolute
+  χ_HT(200 K) misses the measured Curie constant by >2× — any of which restores the published
+  conclusion. *Cost:* cheap. *Caveat:* z_eff is **extracted, not predicted** — gate on bounds or it is
+  a one-parameter fit. The experimental C = 0.484 / μ_eff = 1.97 μ_B reached the scout via a search
+  summary; **verify against the primary source before gating.** This corrects a conclusion this repo
+  already shipped — frame it as a refinement of G3(b), not a new result.
+
+- [ ] **Coordination cannot rescue the 5.3× Tc overprediction: the spin gap goes the wrong way** —
+  *Claim:* `SPEC_nb3x8_magnetometry` §7 names coordination/mean-field reduction as the follow-up and
+  its backlog entry *attributes* the 5.3×(Cl)/2.3×(Br) miss to it. The attribution looks false: run
+  the identical SSH/coordination machinery in the **spin** channel and J_eff rises slightly then
+  returns, never falls *(scout probe: Cl 66.20 → 71.08 (L=4) → 66.55 meV (L=6))*, against the same
+  machinery's −33% in the charge channel. Broadening softens charge, not spin — so the 5.3× must be
+  reassigned to the cooperative structural transition or to t_s itself. *Check (killable):* dies if
+  J_eff(largest cluster) ≤ J₀/3 for Nb₃Cl₈ (coordination *does* deliver it and the published
+  attribution was right); secondary kill if the charge-channel control does **not** drop ≥20% on the
+  same clusters (machinery broken, neither result stands). *Cost:* cheap to L ≤ 6; cap at L=8
+  (`nb3x8_gaps.py:131` warns L=12 half-filled FCI fails to converge). *Caveat:* needs an ⟨S²⟩ check or
+  a stated convention — the S_z=1 lowest state is the lowest *triplet* only absent a higher-S intruder.
+  Open-boundary end effects likely explain the L=4 bump, so gate "no reduction ≥3×", not an extrapolant.
+
+- [ ] **The parameter-free cluster optical gap hits Nb₃Cl₈'s measured absorption edge — and provably
+  cannot explain its thermal collapse** — *Claim:* `odmd_optical.dimer_optical_gap` on LT cRPA
+  parameters gives 1117.5 meV vs a measured ≈1.10 eV at 100 K, a 1.6% parameter-free agreement. Two
+  falsifiable consequences: the family trend (model spread Cl→I 44% vs measured ~12%) and the phase
+  test — measurement collapses to ≈0.63 eV at 300 K while the model's HT parameters give 1065 meV
+  (−5%), and `coordination_gap` bottoms out ~240 meV short. *Check (killable):* dies if the LT Cl
+  prediction misses 1.10 eV by >30% (the selection-rule picture fails on a real solid), or if
+  `coordination_gap` at z=3 reaches ≤700 meV (broadening explains the collapse and no thermal-melting
+  mechanism is needed). *Cost:* cheap. *Caveat:* the 1.6% hit is **partly fortuitous** — ω_opt is a
+  cluster excitation with P as a dipole stand-in, and a measured onset folds in dispersion and
+  excitonic binding; quote it as scale agreement and let the family/phase tests carry the
+  falsifiability. Partially blocked: no measured Nb₃Br₈ optical gap located — that leg may have to drop.
+
+- [ ] **Magnetocaloric S(T,B): the named follow-up, closed as a quantified negative** — *Claim:*
+  `SPEC_nb3x8_thermo` §7 and `SPEC_nb3x8_metamagnetism` §7 both name this; one composition closes both
+  (feed `field_spectrum` into `entropy`'s Boltzmann trace). Two claims: (i) an exact internal identity
+  — the Maxwell relation (∂S/∂B)_T = (∂M/∂T)_B holds to machine precision, cross-tying two
+  independently derived modules; (ii) the verdict — |ΔS_M| peaks at B_c (Cl 572 T, already gated) where
+  the full R ln 2/f.u. unlocks, but at any laboratory field the response is suppressed by exp(−J/k_BT)
+  to orders below GGG. **Nb₃X₈ dimers are quantitatively useless magnetocalorics below megagauss
+  fields.** *Check (killable):* machinery dies if the two derivatives disagree by >1e-6 relative
+  anywhere in the spin window; **the verdict dies (the outcome worth hoping for) if any halide reaches
+  ≥10% of R ln 2 per f.u. at B ≤ 100 T and T ≥ 2 K.** *Cost:* cheap. *Caveat:* a bounding result by
+  construction — say so up front (precedent: `SPEC_senseforge` §3–4). Needs formula-unit molar masses
+  for the J kg⁻¹ K⁻¹ conversion; inherits g = 2, density-density only, isolated dimer.
+
+### Fault-tolerant stack
+
+- [ ] **QPE's precision constant is not a measurement — it is π·sin θ₀, and it is portable** —
+  *Claim:* `SPEC_qpe_readout_laws` recorded max ratio 2.175 on H₂ CAS(2,2) and explicitly disclaimed
+  derivation. It is derivable: `run_qpe` decodes E = λ·cos(2πφ), so the arccos Jacobian plus a
+  half-bin dyadic error gives a **bound π·sin θ₀ with θ₀ = arccos(E₀/λ)** — per-system predictable,
+  and it explains the staircase (the ratio oscillates as t slides the phase across bin boundaries; the
+  envelope is π·sin θ₀). Closes the spec's "beyond H₂ CAS(2,2)" gap and its "constants are
+  measurements, not derived" caveat at once. *Check (killable):* **predict π·sin θ₀ before running**,
+  then sweep t = 4…14 on H₂/LiH CAS(2,2) + N₂ CAS(3,4); dies if measured max ratio *exceeds* the bound
+  anywhere, or if it is loose by >20% on every system (real bound, wrong mechanism). *(scout probe:
+  2.285 vs 2.175, 2.351 vs 2.285, 2.391 vs 2.364 — never exceeded, tightening with sweep length.)*
+  *Cost:* cheap; ≤6 qubits (`pauli_decompose` is exponential). *Caveat:* an upper envelope, so a short
+  t-sweep can sit well under it and look like a miss — sweep enough t to hit near-worst-case alignment.
+
+- [ ] **The identity term inflates the FT λ too — the third strike in an arc that has self-corrected
+  twice** — *Claim:* `SPEC_shift_both_sides` and `SPEC_lambda_meas_identity` caught the identity term
+  corrupting the *near-term* 1-norm; it is untouched on the **FT side** — `build_walk_operator` loads
+  every `pauli_decompose` term into PREPARE, identity included, so λ_1norm carries 30–49% dead constant
+  mass *(scout probe: |c_I|/λ = 30.1% H₂, 44.2% LiH, 49.3% N₂(3,4), 45.6% H₂O(3,4))*. A constant is
+  free — subtract it, add it back classically. Combined with the entry above, the honest driver is
+  λ_eff = √(λ² − E₀²), with an optimal shift c*. *Check (killable):* the real falsifier is (c) — feed
+  the re-centered Hamiltonian through `run_qpe` and confirm the realized error at fixed t drops by the
+  predicted factor; dies if it does not. *Cost:* cheap. *Caveat:* spectral centering is **standard
+  practice** in the qubitization literature — this is a reproduction applied as an audit of this repo's
+  own path, label it as such. The scout also found `df_lambda` losing to identity-excluded naive λ on
+  all four systems, apparently flipping `SPEC_scdf_lambda` G1(b) — but DF's rotated-number-operator LCU
+  absorbs constant mass implicitly, so the two λ's may simply **not be comparable**, and "G1(b) is a
+  vacuous check" is the likelier (and still valuable) finding.
+
+- [ ] **The 62× THC λ penalty may be a collocation artifact — and the fix already lives in the repo**
+  — *Claim:* `SPEC_thc_lambda` locks λ_THC ≈ 62× λ_DF as a deliberate finding and puts optimized
+  collocation out of scope as "research-grade". But `lambda_ladder.fit_thc` **is** a nonlinear
+  Levenberg–Marquardt THC fit that predates that spec — it has simply never been scored with the native
+  `thc_lambda`, only with brute-force Pauli λ, which caps it at ≲4 orbitals and conflates two 1-norm
+  conventions. *Check (killable):* at matched rank and matched reconstruction error (<1e-6), compare
+  random vs structured vs nonlinear collocation against `df_lambda`; dies if nonlinear is not ≥5× below
+  random (the penalty is deeper than "unoptimized points"). Opposite kill: if it *beats* `df_lambda`,
+  G4 must be revised — which that spec explicitly invites. *Cost:* medium (~600 LM parameters at
+  norb=7; cap the CI gate at norb ≤ 6). *Caveat:* **I half-expect the ≥5× half to be killed** —
+  `fit_thc` minimizes *reconstruction error*, not λ, so it is λ-blind and may land anywhere. That is
+  arguably the sharper finding either way: an error-optimal THC is not a λ-optimal THC, and the
+  literature's ISDF advantage comes from choosing points for physical locality. `fit_thc` is stochastic
+  — pin the seed, never claim global optimality.
+
+- [ ] **The bridge prices only ⟨H⟩, but the method it represents needs ⟨H²⟩ — and one call site never
+  got the identity fix** *(verified: `certified_noise.py:47` still does `np.abs(Hop.coeffs).sum()` on
+  both λ_H and λ_{H²}, while `precision_cost.measurement_lambda` carries a full docstring on excluding
+  it — the `SPEC_lambda_meas_identity` fix touched only the latter)* — *Claim:* `near_term_shots`
+  charges the near-term side using the 1-norm of **H alone**, but the "near-term certified" method the
+  bridge is *defined as* is the Temple bracket, which needs ⟨H²⟩. So `precision_cost` **understates**
+  near-term cost — i.e. understates FT's advantage, the **opposite** direction from the arc's two
+  prior self-corrections. Sharper: the undercount λ_{H²}/λ_H is not O(1) and **grows with size**,
+  partially cancelling `SPEC_precision_cost`'s "margin grows with size" headline. *(scout probe,
+  identity-excluded: 1.74 (H₂ 4q) → 8.90 (H₂O 6q) → 7.09 (H₄ 8q) → 23.01 (N₂ CAS(6,6) 12q).)* *Check
+  (killable):* dies if the ratio is flat or shrinking across norb 2→6 (absorbable into z), or if no
+  `cost_advisor` verdict moves over ρ ∈ [1,1e6]. *Cost:* cheap (sub-second, `SparsePauliOp` only).
+  *Caveat:* how λ_{H²} enters the shot budget is **a modelling choice, not a derivation** — deliver a
+  *bound* on the undercount plus the measured trend, not a re-derived crossover. Given the arc's record
+  of corrections landing the other way, the interesting number is the net after all three.
+
+### Scale, references, harnesses
+
+- [ ] **The Hₙ TDL error bar is not an error bar — it misses the published benchmark by 5× its own
+  width** — *Claim:* the headline e_∞ = −0.539967 ± 0.000107 Ha/atom does not contain the Simons/Motta
+  DMRG STO-6G TDL value (−0.540493, PRX **7**, 031059), and the quoted ± is a *fit* stderr blind to the
+  dominant finite-size systematic. *(scout probe: e_∞ drifts monotonically −0.539769 (n≤12) →
+  −0.539933 (n≤16, the committed claim, 8.4σ out) → −0.540185 (n≤22) while the stderr stays ~1e-4 —
+  it tracks scatter, not bias. Per-point physics is externally clean: repo n=10 total agrees with the
+  published FCI/DMRG value to 4e-7 Ha, so basis/geometry/integral conventions are confirmed and the
+  defect is purely in the n→∞ step.)* *Check (killable):* dies if |e_∞(n≤16) − (−0.540493)| ≤ 2× the
+  quoted stderr, or if the drift with n_max is non-monotone (scatter, not bias). *Cost:* cheap (pure
+  numpy on vendored constants). *Caveat:* the published TDL is itself an N→∞ extrapolation from larger
+  N, so the conclusion is "**the ± is wrong**", not "the energy is wrong" — the fix is a
+  systematic-inclusive bar (spread across fit windows: 0.72 → 0.31 mHa). `data/` is gitignored, so the
+  spec must vendor the reference table rather than read the untracked CSV.
+
+- [ ] **The `dweight` regime guard is inverted — it flags the best DMRG points as out-of-regime**
+  *(verified: `dmrg_reference.py:195-198` uses `np.allclose(dws, 0.0)` with numpy's default atol=1e-8,
+  so any schedule converged enough that all discarded weights fall below ~1e-8 is demoted to `invD`;
+  and `tests/test_hchain_tdl_spec.py:52`, `test_hchain_largen2_spec.py:81`,
+  `test_nbn_dmrg_reference_spec.py:49-50`, `test_singleramp_spec.py:50` all assert
+  `method == "dweight"` as a quality guard)* — *Claim:* the flag conflates three distinct states —
+  *converged (nothing left to extrapolate)*, *extrapolatable*, and *truncation out of control* — so
+  **any spec that raises D until the calculation is converged will fail its own regime guard.**
+  `SPEC_nbn_dmrg_reference` already records the headline D=400/800/1200 run landing in `invD` for
+  exactly this reason. *Check (killable):* dies if, across recorded runs, `dweight` rows have
+  systematically *smaller* |E − reference| than `invD` rows. *Reuse:* factor a pure
+  `truncation_regime(per_D)` predicate out of those lines so it gates on synthetic triples with **no
+  block2**. *Cost:* cheap. *Caveat:* the 1e-8 is an *implicit* threshold nobody chose deliberately, so
+  this reads as a lint nit — it is not: it silently redefines the pass/fail meaning of four gates, and
+  would have blocked the very convergence `SPEC_hchain_largen2` G3 was written to demand.
+
+- [ ] **The Hₙ equation of state: one fixed R was the easy point, and D is set by R, not n** —
+  *Claim:* two parts — (a) the pipeline reproduces the **published EOS curve**, not just R=1.8 Bohr
+  (`SPEC_hchain_tdl` §7 names the scan); (b) the mechanism that killed `SPEC_hchain_largen` is
+  **R-dependent, not n-dependent** — the cheap schedule that fails at R=1.8 is adequate deep in the
+  Mott regime (large R, localized ⇒ low entanglement) and worse at small R (metallic). *Check
+  (killable):* cheap tier — `fci_energy` at n=10 across the published 10-point R grid must match the
+  Simons DMRG/FCI totals to <1e-4 Ha at **all ten** R, which validates the geometry convention across
+  the Mott crossover where only one point has ever been checked; mechanism tier — at fixed n=20, D
+  fixed, dies if dw(R=3.6) ≥ dw(R=1.8). *Reuse:* `R_ANG` is already a module constant
+  (`benchmark_hchain_tdl.py:35`); only new code is an `--R` flag and a `(n, R)` CSV key. *Cost:* cheap
+  for the FCI tier; expensive for the headline TDL curve (user's own terminal). *Caveat:* **I expect
+  the small-R end to be the casualty** — R=1.0 is the highest-entanglement point and R=1.8 already hit
+  a memory abort at n≥16. That is fine: "the TDL is reachable on this hardware only for R ≳ 1.6" is a
+  real boundary and explains why (b) matters.
+
+- [ ] **Is NbN's flagged "hard multireference benchmark" actually hard?** — *Claim:*
+  `SPEC_nbn_dmrg_reference` §2/§7 flags the low-spin nelec=(7,7) sector (comb(14,7)² ≈ 1.18e7 dets,
+  3.5 mHa above the ground) as needing real bond dimension — never run, never gated. Under test:
+  whether that sector is *genuinely* strongly correlated, i.e. does **not** show the softness the
+  high-spin sector does (which converged to sub-nHa by D=400). *Check (killable):* run the identical
+  A′/B′ schedule pair with `nelec` forced to (7,7); **kills the "hard benchmark" framing if
+  dw(D=300) < 1e-7 and per-D spread < 1e-5 Ha** — the CAS is soft in every sector, the follow-up is
+  vacuous, and NbN CAS(14,14) should be retired as a strong-correlation target. Confirms it if
+  dw > 1e-5 or |E_A′ − E_B′| > 0.1 mHa; then ask whether the 3.5 mHa sector gap **survives at converged
+  D or inverts** — if it inverts, the committed reference energy names the wrong sector. *Reuse:*
+  `load_nbn_cas` (no SCF re-run), all four `SCHEDULES` already defined; ~2 lines for a `nelec=`
+  passthrough. *Cost:* **cheap diagnostic** (~2 min/schedule at D ≤ 300, own process per the block2
+  isolation rule), expensive headline only if it proves hard. *Caveat:* **I half-expect this to be
+  killed** — 14 orbitals over an ECP'd σ/π manifold is small. Either outcome is publishable here: it
+  delivers the flagged benchmark or retires it. Forcing (7,7) reuses orbitals optimized for the (10,4)
+  SCF solution, so cross-check against the sector's own natural orbitals before calling it hard.
 
 ## Done
 
