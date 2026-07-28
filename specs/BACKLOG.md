@@ -9,19 +9,23 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
 
 ## Open
 
-- [x] **The self-mode subspace floor is not rigorous for d ≥ 3 — a discovered soundness bug and a
-  fail-safe guard** *(auditing my own merged code, PR #20)* — `certify_hf_subspace_overlap`'s
-  self-mode floor θ_d − σ_d (the Weinstein floor generalized from d=1) can **exceed** the true
-  reachable E_d when the Krylov space has not resolved the cluster, emitting an unsound "certified"
-  floor. **KILLABLE / demonstrated:** linear H₆ (R=1.2 Å, d=3): β_self = −2.251 > true E_d = −2.583
-  at M=8 (and −2.412 at M=12), γ_self=0.88 landing *above* oracle γ=0.53 — a near-miss from an
-  invalid certificate. **THE FIX:** the failure has an in-band signature (the d+1 lowest Weinstein
-  intervals overlap when unresolved), so self-mode now returns **VACUOUS** on overlap rather than
-  the unsound positive — *fail-safe, not fail-silent*. Guard is a necessary check (not proven
-  sufficient — labeled honestly); oracle mode stays the rigorous path. Gates: G1 bug regression,
-  G2 guard catches it, G3 no over-rejection (regression-guards the PR #20 demo), G4 empirical
-  soundness sweep (guard-passes ⇒ valid floor, zero escapes across square-H₄/linear-H₄/H₆, d∈{2,3},
-  M∈{6,8,12}). See [`SPEC_subspace_floor_resolvability.md`](SPEC_subspace_floor_resolvability.md).
+- [x] **Falsifying my own guard: the self-mode subspace floor is heuristic, not rigorous, for
+  d ≥ 2** *(a parallel adversarial falsification sweep auditing PRs #20/#21)* — the self-mode floor
+  θ_d − σ_d can exceed the true reachable E_d (linear H₆ R=1.2 Å d=3: β_self=−2.251 > −2.583). A
+  disjoint-Weinstein-interval **pre-filter** was added (PR #21) and *claimed fail-safe*. A fan-out
+  falsification sweep (four territories: d=1 diverse molecules, d=2 families, guard-sufficiency
+  stress, 36k adversarial synthetic) **killed the fail-safe claim**: 8 guard-PASSING cases still
+  have invalid floors (linear H₆ R=1.0 d=3 M=16: disjoint intervals yet β_self=−2.218 > −2.500),
+  the blind spot (a ~1e-4-amplitude reachable level near the cluster boundary) is common not
+  pathological, and *more Krylov dim does not fix it* (escapes at M=16/20). No local criterion can
+  detect a missed level (needs a certified sub-cluster anchor — the certified_gaps open problem).
+  **HONEST OUTCOME:** the guard stays as a heuristic pre-filter (rejects 106/114 gross cases), but
+  self-mode d ≥ 2 is relabeled **heuristic**; **oracle mode is the only rigorous path** (validated
+  with zero escapes across 36k adversarial synthetic + molecular sweeps). The block-bound math and
+  oracle mode are sound; only the self-mode floor estimate is not. Gates: G1 bug, G2 pre-filter
+  rejects gross, G3 no over-rejection, G4 *the falsification witness* (guard-passes-but-invalid
+  exists), G4b oracle soundness. See
+  [`SPEC_subspace_floor_resolvability.md`](SPEC_subspace_floor_resolvability.md).
 
 - [x] **Certified HF subspace overlap on a real molecule — the block certificate rescues what the
   single-vector one throws away** *(SPEC-21b integration: the molecular reachable-cluster demo)* —
