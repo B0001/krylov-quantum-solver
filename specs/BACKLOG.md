@@ -9,6 +9,11 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
 
 ## Open
 
+_None. Every hypothesis below is closed. Add new ones here — a claim plus the cheap check that
+would kill it; if you cannot write the check, it is not a candidate._
+
+## Done
+
 - [x] **Falsifying my own guard: the self-mode subspace floor is heuristic, not rigorous, for
   d ≥ 2** *(a parallel adversarial falsification sweep auditing PRs #20/#21)* — the self-mode floor
   θ_d − σ_d can exceed the true reachable E_d (linear H₆ R=1.2 Å d=3: β_self=−2.251 > −2.583). A
@@ -131,7 +136,6 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
   `nbn_dmrg_reference.py`. → [`SPEC_nbn_dmrg_reference.md`](SPEC_nbn_dmrg_reference.md) (reference
   number, not a materials claim — finite cluster, ECP, fixed geometry; a hard multireference TM
   benchmark needs the low-spin sector at real bond dimension — a follow-up).
-## Done
 
 - [x] **Nb₃X₈ strain / pressure response — Grüneisen parameters in the hopping** *(prediction toward
   strain-tuning experiments)* — with |t| as the compression knob (uniaxial strain ↑ the dimerization
