@@ -9,6 +9,20 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
 
 ## Open
 
+- [x] **The self-mode subspace floor is not rigorous for d ≥ 3 — a discovered soundness bug and a
+  fail-safe guard** *(auditing my own merged code, PR #20)* — `certify_hf_subspace_overlap`'s
+  self-mode floor θ_d − σ_d (the Weinstein floor generalized from d=1) can **exceed** the true
+  reachable E_d when the Krylov space has not resolved the cluster, emitting an unsound "certified"
+  floor. **KILLABLE / demonstrated:** linear H₆ (R=1.2 Å, d=3): β_self = −2.251 > true E_d = −2.583
+  at M=8 (and −2.412 at M=12), γ_self=0.88 landing *above* oracle γ=0.53 — a near-miss from an
+  invalid certificate. **THE FIX:** the failure has an in-band signature (the d+1 lowest Weinstein
+  intervals overlap when unresolved), so self-mode now returns **VACUOUS** on overlap rather than
+  the unsound positive — *fail-safe, not fail-silent*. Guard is a necessary check (not proven
+  sufficient — labeled honestly); oracle mode stays the rigorous path. Gates: G1 bug regression,
+  G2 guard catches it, G3 no over-rejection (regression-guards the PR #20 demo), G4 empirical
+  soundness sweep (guard-passes ⇒ valid floor, zero escapes across square-H₄/linear-H₄/H₆, d∈{2,3},
+  M∈{6,8,12}). See [`SPEC_subspace_floor_resolvability.md`](SPEC_subspace_floor_resolvability.md).
+
 - [x] **Certified HF subspace overlap on a real molecule — the block certificate rescues what the
   single-vector one throws away** *(SPEC-21b integration: the molecular reachable-cluster demo)* —
   on strongly-multireference **square H₄** the HF state is a poor proxy for the reachable ground

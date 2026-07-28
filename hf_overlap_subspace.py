@@ -29,6 +29,7 @@ from hybrid_quantum_solver.certified_overlap import (
     ClusterGapCertificate,
     OverlapCertificate,
     certify_subspace_overlap,
+    rayleigh_quotient,
     residual_norm,
 )
 from hybrid_quantum_solver.molecular_hamiltonian import MolecularHamiltonian
@@ -38,6 +39,20 @@ from hybrid_quantum_solver.quantum_krylov_solver import QuantumKrylovSolver
 # temple_bracket boundary). Inherited here as a hard raise, not re-derived.
 _SELF_MODE_MIN_M = 6
 _REACHABLE_TOL = 1e-8
+
+
+def _weinstein_intervals_disjoint(centers, sigmas) -> bool:
+    """Are the Weinstein intervals [theta_k - sigma_k, theta_k + sigma_k] pairwise disjoint?
+
+    The in-band resolvability signal (SPEC_subspace_floor_resolvability.md): when the Krylov space
+    has NOT resolved the size-d cluster, the residuals sigma_k are large and adjacent intervals
+    overlap, so the self-mode floor theta_d - sigma_d is untrustworthy (it can exceed the true
+    E_d). ``centers`` must be ascending. A necessary, oracle-free check -- NOT proven sufficient.
+    """
+    for k in range(len(centers) - 1):
+        if centers[k] + sigmas[k] >= centers[k + 1] - sigmas[k + 1]:
+            return False
+    return True
 
 
 def certify_hf_subspace_overlap(
@@ -53,7 +68,9 @@ def certify_hf_subspace_overlap(
 
     Raises on: self mode below M = 6, a Krylov subspace too small to expose level d (rank
     < d+1), or any SPEC-21b invariant. Returns a possibly-VACUOUS certificate -- check
-    ``.vacuous`` before quoting gamma_min.
+    ``.vacuous`` before quoting gamma_min. In self mode the certificate is also VACUOUS when the
+    Krylov space has not resolved the cluster (overlapping Weinstein intervals), so the self-mode
+    floor is never emitted unsound -- see SPEC_subspace_floor_resolvability.md.
     """
     if e_d is None and m < _SELF_MODE_MIN_M:
         raise ValueError(
@@ -63,6 +80,7 @@ def certify_hf_subspace_overlap(
     solver = solver if solver is not None else QuantumKrylovSolver(mh)
     offset = mh.energy_offset
     Hs = mh.qubit_hamiltonian.to_matrix(sparse=True).tocsc()
+    u = np.asarray(mh.hf_state().data, dtype=complex)
 
     energies, states = solver.eigenstates(m, n_states=cluster_size + 1)
     if len(energies) < cluster_size + 1:
@@ -72,9 +90,24 @@ def certify_hf_subspace_overlap(
         )
 
     if e_d is None:
-        theta_d_elec = energies[cluster_size] - offset
-        sigma_d = residual_norm(Hs, states[cluster_size], theta_d_elec)
-        e_above_floor = theta_d_elec - sigma_d           # Weinstein floor, electronic frame
+        # Resolvability guard: the self-mode floor theta_d - sigma_d is only trustworthy when the
+        # Krylov space has resolved the cluster. Unresolved => overlapping Weinstein intervals =>
+        # return VACUOUS rather than a possibly-unsound positive floor (fail-safe, not fail-silent).
+        centers = [energies[k] - offset for k in range(cluster_size + 1)]
+        sigmas = [residual_norm(Hs, states[k], centers[k]) for k in range(cluster_size + 1)]
+        if not _weinstein_intervals_disjoint(centers, sigmas):
+            lam = rayleigh_quotient(Hs, u)
+            return OverlapCertificate(
+                gamma_min=0.0, lambda_u=lam, residual_norm=residual_norm(Hs, u, lam),
+                gap_certificate_id=f"hf_subspace:self:M={m}:d={cluster_size}:UNRESOLVED",
+                vacuous=True, cluster_size=cluster_size,
+                vacuous_reason=(
+                    f"self-mode floor unresolved at M={m}: the {cluster_size + 1} lowest Weinstein "
+                    "intervals overlap, so theta_d - sigma_d is not a trustworthy E_d floor. "
+                    "Increase M or supply an oracle e_d."
+                ),
+            )
+        e_above_floor = centers[cluster_size] - sigmas[cluster_size]   # Weinstein floor, electronic
         source = "krylov_self_eps"
         cert_id = f"hf_subspace:self:M={m}:d={cluster_size}"
     else:
@@ -86,7 +119,6 @@ def certify_hf_subspace_overlap(
         e_above_floor=e_above_floor, cluster_size=cluster_size,
         certificate_id=cert_id, source=source,
     )
-    u = np.asarray(mh.hf_state().data, dtype=complex)
     return certify_subspace_overlap(Hs, u, gap_cert, n_qubits=mh.qubit_hamiltonian.num_qubits)
 
 
