@@ -17,6 +17,20 @@ generation — they are **not gated results**, they are the reason to believe th
 and the spec must re-derive them. Several entries predict their own death; that is intended — a
 hypothesis whose death is informative is worth more here than a safe one.
 
+- [ ] **The identity fix has a THIRD call site — `operator_one_norms`, found while fixing the
+  second** *(verified: `certified_dipole_noise.py:48-53` does `np.abs(op.coeffs).sum()` on both
+  λ_A and λ_{A²}, and its docstring says it mirrors `certified_noise.hamiltonian_one_norms` "same
+  construction" — the function that was just corrected)* — *Claim:* the same zero-variance argument
+  applies to a dipole operator's constant term, so `operator_one_norms` inflates λ_A the same way,
+  and the certified-dipole noise numbers inherit it. *Check (killable):* exclude the identity and
+  re-run `SPEC_certified_dipole_noise`'s coverage sweep; **dies if λ_A is unchanged** (a traceless
+  dipole operator in this frame would have no identity term, making the mirror harmless). *Cost:*
+  cheap. *Caveat / why it was NOT fixed alongside the second call site:* `SPEC_certified_dipole_noise`
+  records a *fragile* vacuous/non-vacuous boundary and a "double-spending the Δ_lo margin" finding.
+  Narrowing λ_A moves those numbers, so this needs its own analysis of whether a recorded finding
+  flips — doing it blind in a PR scoped to `certified_noise` is exactly how the identity fix came
+  to miss a call site in the first place.
+
 ### Certified-bounds arc
 
 - [ ] **The downstream certified rungs consume an unguarded gap input** — *Claim:* `certified_gaps`'
@@ -229,8 +243,24 @@ hypothesis whose death is informative is worth more here than a safe one.
   literature's ISDF advantage comes from choosing points for physical locality. `fit_thc` is stochastic
   — pin the seed, never claim global optimality.
 
-- [ ] **The bridge prices only ⟨H⟩, but the method it represents needs ⟨H²⟩ — and one call site never
-  got the identity fix** *(verified: `certified_noise.py:47` still does `np.abs(Hop.coeffs).sum()` on
+- [x] **The bridge prices only ⟨H⟩, but the method it represents needs ⟨H²⟩ — and one call site never
+  got the identity fix** — **DONE, and the size law was KILLED.** The defect is real: identity
+  carried 21.8–30.1% of λ_H, and `hamiltonian_one_norms` now agrees with
+  `precision_cost.measurement_lambda` exactly (G1). `SPEC_certified_noise`'s recorded λ_{H²} > λ_H
+  boundary **survives and strengthens** (H₄ 63/10 → 50.7/7.1, ratio 6.3 → 7.09). Pricing ⟨H²⟩ moves
+  real `cost_advisor` verdicts against real SCDF-shifted λ_DF, and **every** move runs one way,
+  near-term → FT (H₂ ρ=1e4, LiH ρ=1e4, N₂ CAS(6,6) ρ=1e5 & 1e6) — the opposite direction from this
+  arc's two prior self-corrections. **THE KILL:** the predicted "ratio grows with size" is **false**
+  across heterogeneous active spaces — LiH CAS(2,3) at 6 qubits has ratio **1.29, below H₂ CAS(2,2)
+  at 4 qubits (1.74)**. Growth holds only within a homogeneous family (Hₙ/STO-3G: 1.74 → 7.09 →
+  16.69), so the undercount is **not predictable from system size** and `SPEC_precision_cost`'s
+  "margin grows with size" headline is confounded, not cleanly cancelled. G5 pins the counterexample
+  so the killed form cannot return. Honest: the λ_H + λ_{H²} inflation is a labelled *proxy*, not a
+  derivation — the gates assert direction and existence of movement, never a crossover value.
+  → [`SPEC_lambda_h2_bridge.md`](SPEC_lambda_h2_bridge.md); `tests/test_lambda_h2_bridge_spec.py`
+  (G1–G6, 10 passed); downstream `gap_selfcheck_noise` / `certified_thermochem_noise` /
+  `certified_dipole_noise` all still green.
+  *(original entry: verified: `certified_noise.py:47` still does `np.abs(Hop.coeffs).sum()` on
   both λ_H and λ_{H²}, while `precision_cost.measurement_lambda` carries a full docstring on excluding
   it — the `SPEC_lambda_meas_identity` fix touched only the latter)* — *Claim:* `near_term_shots`
   charges the near-term side using the 1-norm of **H alone**, but the "near-term certified" method the
@@ -261,8 +291,22 @@ hypothesis whose death is informative is worth more here than a safe one.
   systematic-inclusive bar (spread across fit windows: 0.72 → 0.31 mHa). `data/` is gitignored, so the
   spec must vendor the reference table rather than read the untracked CSV.
 
-- [ ] **The `dweight` regime guard is inverted — it flags the best DMRG points as out-of-regime**
-  *(verified: `dmrg_reference.py:195-198` uses `np.allclose(dws, 0.0)` with numpy's default atol=1e-8,
+- [x] **The `dweight` regime guard is inverted — it flags the best DMRG points as out-of-regime**
+  — **DONE, and the hypothesis was NARROWED by its own adversarial check.** The label defect is
+  real and now fixed by a three-state `truncation_regime` predicate; the witness, on recorded
+  weight profiles: NbN headline (converged) **FAIL → PASS**, NbN cheap CI dims PASS → PASS, killed
+  `hchain_largen` (non-monotone) FAIL → **FAIL**. The fix admits exactly one new world — the
+  strictly better one — and still rejects the failure the guard was written for. **THE NARROWING:**
+  the *axis fallback itself is numerically correct and is NOT a defect* — on the converged weights
+  the discarded-weight axis has `cond(vander) = 2.1e9` vs `1.4e3` for `1/D`, so switching axes there
+  is right. Only the label and the four gates built on it were defective; the original framing
+  implied the fallback was wrong and is withdrawn. `method` is bit-for-bit unchanged (G3 oracle vs
+  the legacy expression), so no energy moved. The 1e-8 floor is kept but now named and justified
+  (`dE ≈ C·δ`, recorded NbN `C ≈ 30` ⇒ `|dE| ~ 3e-7 Ha`, three-plus orders below the tightest DMRG
+  gate) — honest: `C` is one system, so order-of-magnitude justified, not derived.
+  → [`SPEC_extrap_regime.md`](SPEC_extrap_regime.md); `tests/test_extrap_regime_spec.py` (G1–G5,
+  18 passed, pure/no-block2); four DMRG gates migrated and green with block2 installed.
+  *(original entry: verified: `dmrg_reference.py:195-198` uses `np.allclose(dws, 0.0)` with numpy's default atol=1e-8,
   so any schedule converged enough that all discarded weights fall below ~1e-8 is demoted to `invD`;
   and `tests/test_hchain_tdl_spec.py:52`, `test_hchain_largen2_spec.py:81`,
   `test_nbn_dmrg_reference_spec.py:49-50`, `test_singleramp_spec.py:50` all assert
