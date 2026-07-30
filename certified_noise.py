@@ -44,11 +44,31 @@ from hybrid_quantum_solver.quantum_krylov_solver import QuantumKrylovSolver
 from temple_bounds import _mean_and_variance
 
 
-def hamiltonian_one_norms(mh: MolecularHamiltonian) -> Tuple[float, float]:
-    """(lambda_H, lambda_{H^2}) -- the Pauli 1-norms of H and H^2 (electronic frame)."""
+def _one_norm(op, include_identity: bool) -> float:
+    if include_identity:
+        return float(np.abs(op.coeffs).sum())
+    return float(sum(abs(complex(c)) for c, p in zip(op.coeffs, op.paulis)
+                     if set(p.to_label()) != {"I"}))
+
+
+def hamiltonian_one_norms(mh: MolecularHamiltonian, *,
+                          include_identity: bool = False) -> Tuple[float, float]:
+    """(lambda_H, lambda_{H^2}) -- the Pauli 1-norms of H and H^2 (electronic frame).
+
+    The identity term is a constant of ZERO variance -- it costs zero shots -- so it must not enter
+    a shot-noise 1-norm. This function originally summed EVERY coefficient on both moments,
+    inflating them by the identity fraction (21.8-30.1% of lambda_H across the cases here). That is
+    the same defect `precision_cost.measurement_lambda` fixed for the near-term bridge; the fix
+    never reached this call site. ``include_identity=True`` reproduces the old inflated values for
+    archaeology, matching `measurement_lambda`'s API.
+
+    Consequence worth stating: lambda_{H^2} >> lambda_H (the SPEC_certified_noise G4 boundary)
+    SURVIVES the correction and in fact strengthens -- H4 moves 63/10 -> 50.7/7.1, ratio 6.3 ->
+    7.09. See specs/SPEC_lambda_h2_bridge.md.
+    """
     Hop = mh.qubit_hamiltonian
-    lam_h = float(np.abs(Hop.coeffs).sum())
-    lam_h2 = float(np.abs((Hop @ Hop).simplify().coeffs).sum())
+    lam_h = _one_norm(Hop, include_identity)
+    lam_h2 = _one_norm((Hop @ Hop).simplify(), include_identity)
     return lam_h, lam_h2
 
 
