@@ -11,6 +11,7 @@ import pytest
 from pyscf import gto, scf, ao2mo
 
 from hybrid_quantum_solver.dmrg_reference import (
+    DISCARD_WEIGHT_FLOOR,
     dmrg_energy_extrapolated,
     thermodynamic_limit_fit,
     dmrg_available,
@@ -74,8 +75,18 @@ def test_G2_bulk_vs_fit_agree_on_real_chains():
 
 @requires_dmrg
 def test_G3_stays_in_discarded_weight_regime():
-    """Regime guard: at adequate (here, converged) bond dims the extrapolation must stay in the
-    discarded-weight regime. Falling back to method='invD' is exactly what killed the cheap spec."""
+    """Regime guard: at adequate bond dims the truncation must stay CONTROLLED.
+
+    Was `method == "dweight"`, but that also rejected a converged ladder -- and `method="invD"`
+    covers both "converged" and "uncontrolled", so it could not express the intent. The failure that
+    killed the cheap spec was the *uncontrolled* one. See specs/SPEC_extrap_regime.md.
+
+    This gate has no independent accuracy assertion, so a bare `!= "uncontrolled"` would accept a
+    "converged" verdict on the label alone -- e.g. if block2 ever silently returned near-zero
+    weights. Corroborate it against the weights themselves.
+    """
     h1, eri, ne, ec = integrals(12)
     res = dmrg_energy_extrapolated(h1, eri, ne, ec, bond_dims=CONV_DIMS)
-    assert res.method == "dweight", res.method
+    assert res.regime != "uncontrolled", res.regime
+    dws = [w for _, w, _ in res.per_D]
+    assert res.regime != "converged" or max(dws) <= DISCARD_WEIGHT_FLOOR, dws

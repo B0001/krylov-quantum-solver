@@ -36,7 +36,11 @@ dependencies = [
 
 [project.optional-dependencies]
 gpu = [
-    "cupy-cuda12x>=12.0.0",
+    # CUDA does not exist on macOS and cupy-cuda12x ships no darwin wheels for any arch, so this
+    # is unsatisfiable there. Without the marker it collides with [tool.uv] required-environments
+    # (which pins an x86_64-darwin resolution) and makes `uv sync` fail for EVERY extra, including
+    # --extra dmrg, on Apple Silicon too.
+    "cupy-cuda12x>=12.0.0; sys_platform != 'darwin'",
 ]
 # Optional classical reference for active spaces beyond exact FCI's reach (benchmark_dmrg.py,
 # hybrid_quantum_solver.dmrg_reference). The code degrades to exact FCI when absent.
@@ -82,3 +86,8 @@ extend-exclude = ["hybrid_quantum_solver/orchestrate_hybrid_pipeline.py"]
 [tool.ruff.lint.per-file-ignores]
 "docs/source/conf.py" = ["E402"]   # Sphinx: imports follow sys.path setup, by convention
 "qubitization_blueprint.py" = ["E741"]  # `l` matches the math (SELECT = sum_l |l><l| ⊗ P_l)
+
+[tool.uv]
+required-environments = [
+    "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+]
