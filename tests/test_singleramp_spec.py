@@ -47,7 +47,9 @@ def test_G2_ramp_is_sound():
     e_fci = fci_energy(h1, eri, ne, ec)
     res = dmrg_energy_extrapolated(h1, eri, ne, ec, bond_dims=DIMS,
                                    protocol="ramp", sweeps_per_stage=SWEEPS_PER_STAGE)
-    assert res.method == "dweight"
+    # Was `method == "dweight"`; see specs/SPEC_extrap_regime.md. The FCI check below carries the
+    # accuracy claim, so this only needs to exclude uncontrolled truncation.
+    assert res.regime != "uncontrolled", res.regime
     assert abs(res.energy - e_fci) < 5e-4, (res.energy, e_fci)
 
 

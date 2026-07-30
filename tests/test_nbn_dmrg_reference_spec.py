@@ -15,6 +15,7 @@ from math import comb
 
 import numpy as np
 
+from hybrid_quantum_solver.dmrg_reference import DISCARD_WEIGHT_FLOOR
 from nbn_dmrg_reference import load_nbn_cas, run_schedule
 
 _CACHE = {}
@@ -46,8 +47,16 @@ def test_G2_two_independent_schedules_agree():
     res = _results()
     e_a, e_b = res["A'"].energy, res["B'"].energy
     assert abs(e_a - e_b) < 1e-4, (e_a, e_b)
-    assert res["A'"].method == "dweight", res["A'"].method
-    assert res["B'"].method == "dweight", res["B'"].method
+    # Was `method == "dweight"`. That assertion was the reason the CI dims had to be chosen
+    # DOWNWARD: SPEC_nbn_dmrg_reference.md:55 records this spec's own headline run (D=400/800/1200,
+    # weights 1e-9..1e-13) landing in "invD" precisely because it converged. The gate now excludes
+    # only uncontrolled truncation, so raising D can no longer fail it.
+    # No accuracy reference here (the agreement check above is A' vs B'), so corroborate a
+    # "converged" verdict against the weights rather than trusting the label.
+    for tag in ("A'", "B'"):
+        assert res[tag].regime != "uncontrolled", (tag, res[tag].regime)
+        dws = [w for _, w, _ in res[tag].per_D]
+        assert res[tag].regime != "converged" or max(dws) <= DISCARD_WEIGHT_FLOOR, (tag, dws)
 
 
 def test_G3_softness_finding_is_pinned():

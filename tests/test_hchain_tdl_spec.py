@@ -49,7 +49,10 @@ def test_G1_extrapolation_matches_fci():
         e_fci = fci_energy(h1, eri, ne, ec)
         res = dmrg_energy_extrapolated(h1, eri, ne, ec, bond_dims=CONV_DIMS)
         assert isinstance(res, ExtrapResult)
-        assert res.method == "dweight"
+        # Was `method == "dweight"`, which also rejected a CONVERGED ladder -- the strictly better
+        # outcome. See specs/SPEC_extrap_regime.md. The FCI check on the next line carries the
+        # accuracy claim; this one only excludes uncontrolled truncation.
+        assert res.regime != "uncontrolled", res.regime
         assert abs(res.energy - e_fci) < G1_TOL, (n, res.energy, e_fci)
 
 

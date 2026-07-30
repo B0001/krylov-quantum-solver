@@ -100,6 +100,46 @@ def dmrg_energy(
     return float(energy)
 
 
+# Below this discarded weight there is nothing left to extrapolate. Near convergence dE ~ C*delta;
+# the recorded NbN ladder (SPEC_nbn_dmrg_reference.md:55, dw 1e-9 -> 1e-13 moving E by 3e-8 Ha)
+# gives C ~ 30, so this floor implies |dE| ~ 3e-7 Ha -- three-plus orders below the tightest DMRG
+# gate in the repo (SPEC_singleramp, 0.1 mHa). The value is inherited from numpy's allclose atol,
+# where it sat implicitly and unchosen; it is defensible, but see SPEC_extrap_regime.md §3 -- C is
+# measured on ONE system, so this is order-of-magnitude justified, not derived.
+DISCARD_WEIGHT_FLOOR = 1e-8
+
+# Gate on `regime`, not on `method`. See truncation_regime() for why.
+REGIMES = ("converged", "truncation", "uncontrolled")
+
+
+def truncation_regime(per_D, *, floor: float = DISCARD_WEIGHT_FLOOR) -> str:
+    """Classify a bond-dimension ladder by what its discarded weights can support.
+
+    ``method`` answers a *factual* question -- which x-axis was fitted -- and lumps two opposite
+    states into ``"invD"``: the run CONVERGED (nothing left to extrapolate) or its truncation is
+    UNCONTROLLED (non-monotone weights). Four gate files assert ``method == "dweight"`` as a
+    *quality* guard, which it cannot express: a schedule converged past ``floor`` fails a gate
+    written to demand quality (SPEC_nbn_dmrg_reference.md:55 records exactly that happening to its
+    own headline run). This predicate separates the three states.
+
+    Order matters: the floor is tested BEFORE monotonicity, so a converged ladder whose weights
+    wobble by float noise reads as ``"converged"``, not ``"uncontrolled"``.
+
+    Pure -- no block2, no DMRG run -- so the logic stays covered where the DMRG gates skip.
+    """
+    per_D = list(per_D)
+    if len(per_D) < 2:
+        return "uncontrolled"
+    dws = np.array([p[1] for p in per_D], dtype=float)
+    # max(), not dws[-1]: a normally-converging ladder (1e-3, 1e-5, 1e-9) is still extrapolatable,
+    # and calling it converged would abandon the fit and silently change the energy.
+    if float(np.max(dws)) <= floor:
+        return "converged"
+    if np.all(np.diff(dws) <= 1e-12):          # monotone non-increasing
+        return "truncation"
+    return "uncontrolled"
+
+
 @dataclass
 class ExtrapResult:
     """Bond-dimension extrapolation of a DMRG energy (see specs/SPEC_hchain_tdl.md)."""
@@ -107,6 +147,7 @@ class ExtrapResult:
     stderr: float                                   # standard error of the extrapolated energy
     per_D: List[Tuple[int, float, float]] = field(default_factory=list)  # (D, discarded_weight, E)
     method: str = "dweight"                         # "dweight" (E vs truncation error) or "invD"
+    regime: str = "truncation"                      # one of REGIMES -- gate on THIS, not `method`
 
 
 def dmrg_energy_extrapolated(
@@ -190,12 +231,13 @@ def dmrg_energy_extrapolated(
     dws = np.array([p[1] for p in per_D], dtype=float)
     Es = np.array([p[2] for p in per_D], dtype=float)
 
-    method = "dweight"
-    x = dws
-    usable = (len(per_D) >= 2 and not np.allclose(dws, 0.0)
-              and np.all(np.diff(dws) <= 1e-12))    # monotone non-increasing
-    if not usable:
-        x, method = 1.0 / Ds, "invD"
+    # The axis choice below is unchanged and is NOT a defect: on a converged ladder the
+    # discarded-weight axis is near-degenerate (cond(vander) ~ 2e9 vs ~1e3 for 1/D on the recorded
+    # NbN weights), so switching is numerically correct. Only the LABEL was conflated -- `regime`
+    # separates "converged" from "uncontrolled", which `method` cannot. See SPEC_extrap_regime.md.
+    regime = truncation_regime(per_D)
+    method = "dweight" if regime == "truncation" else "invD"
+    x = dws if method == "dweight" else 1.0 / Ds
 
     if len(per_D) >= 3:
         coef, cov = np.polyfit(x, Es, 1, cov=True)
@@ -207,7 +249,7 @@ def dmrg_energy_extrapolated(
     else:
         energy, stderr = float(Es[-1]), 0.0
 
-    return ExtrapResult(energy=energy, stderr=stderr, per_D=per_D, method=method)
+    return ExtrapResult(energy=energy, stderr=stderr, per_D=per_D, method=method, regime=regime)
 
 
 def thermodynamic_limit_fit(ns, e_per_atom) -> Tuple[float, float]:
