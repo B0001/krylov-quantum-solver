@@ -17,6 +17,36 @@ generation — they are **not gated results**, they are the reason to believe th
 and the spec must re-derive them. Several entries predict their own death; that is intended — a
 hypothesis whose death is informative is worth more here than a safe one.
 
+- [x] **"Reachable" means two different things inside the certified arc** *(found 2026-07-30 while
+  verifying the chained-overlap bound — the bound appeared to violate its reference, and the cause
+  was the reference)* — **DONE.** The HF-reachable sector is defined by `|⟨HF|ψ_k⟩|² > tol`, written
+  as a magic number independently per file: **1e-10** in `certified_gaps`, `hf_overlap_certificate`,
+  `certified_dipole`, `certified_noise`; **1e-8** in `hf_overlap_subspace`. At square H₄ **a = 1.1 Å**
+  (a geometry already in `hf_overlap_subspace.py`'s own sweep) a level with amplitude² = 5.07e-10
+  sits *between* the thresholds, so the two select **different ground states** — HF overlap
+  **2.25e-5 vs 0.667**, four orders apart. The two specs whose head-to-head is
+  `SPEC_hf_overlap_subspace`'s headline therefore certify different targets at that geometry.
+  Same phenomenon as `SPEC_subspace_floor_resolvability`'s "~1e-4-amplitude reachable level near the
+  cluster boundary" (PR #22), one rung lower: there it corrupted a floor, here it corrupts the
+  definition of the target. **Deliberately NOT unified** — picking a value decides which of two
+  recorded findings is right and changes shipped results, so the divergence is made visible and
+  gated instead (G4 bounds it: at a ∈ {1.0,1.2,1.3,1.4} the thresholds agree, so this is
+  near-threshold, not pervasive).
+  → [`SPEC_reachability_tolerance.md`](SPEC_reachability_tolerance.md);
+  `tests/test_reachability_tolerance_spec.py` (G1–G5, 9 passed).
+
+- [ ] **Unify the reachability tolerance — which value is physically right?** *(follow-up to the
+  entry above; the decision it deliberately declined to make)* — *Claim:* one of 1e-10 / 1e-8 is
+  defensible and the other is an accident, and the choice is decidable from the amplitude spectrum
+  rather than by taste — e.g. a level with |⟨HF|ψ⟩|² = 5e-10 contributes ~2e-5 to a Krylov signal
+  and is below any shot-noise floor the repo models, which would argue for the looser 1e-8.
+  *Check (killable):* sweep the threshold over 1e-12…1e-6 on the square-H₄ family and locate the
+  plateau where the selected reachable set is stable; **dies if there is no plateau** — the sector
+  would then be genuinely continuous and *every* reachability claim in the arc needs an explicit
+  tolerance in its statement, a much larger correction. *Reuse:* the G1–G4 machinery just landed.
+  *Cost:* cheap. *Caveat:* whichever value wins, at least one recorded result moves; the spec must
+  re-run the affected sweeps rather than assert the old numbers still hold.
+
 - [ ] **The identity fix has a THIRD call site — `operator_one_norms`, found while fixing the
   second** *(verified: `certified_dipole_noise.py:48-53` does `np.abs(op.coeffs).sum()` on both
   λ_A and λ_{A²}, and its docstring says it mirrors `certified_noise.hamiltonian_one_norms` "same
@@ -47,6 +77,19 @@ hypothesis whose death is informative is worth more here than a safe one.
   ArpackError on square H₄ where μ_z ≡ 0; a zero-half-width epsilon floor on HeH⁺) — fix in the same
   PR but do **not** dress them up as the finding.
 
+- [ ] **UPDATE 2026-07-30 — the math is VERIFIED, the "moots the block certificate" half is
+  BLOCKED, and the attempt found a defect one rung lower.** Independent check of the chained bound
+  γ_chain = cos(θ_uv + arcsin(r_v/δ_v)) with oracle E₁: **valid in every case that produces a
+  bound**, and it rescues the vacuous ones — H₂ stretched M=6 direct 0.7716 → chained 0.8437 =
+  exact 0.8437; H₄ chain M=12 0.7765 → 0.9674 vs exact 0.9677; square H₄ a=1.0 M=8 direct
+  **VACUOUS** → chained 0.6863 vs exact 0.6898; a=1.2 VACUOUS → 0.5707 vs exact 0.6498. So the
+  tightening and the rescue are real. **The demotion claim could NOT be tested**: comparing chained
+  d=1 against the d=2 block certificate hit a reachability-tolerance inconsistency that makes the
+  two targets different objects at a=1.1 — see the closed entry below. Until the target is
+  unambiguous the comparison is ill-defined, so this stays open with the validity evidence
+  recorded. Note also the two certify *different* quantities (|⟨u|ψ₀⟩| vs ‖P_S u‖, and
+  ‖P_S u‖ ≥ |⟨u|ψ₀⟩| always), so "chained d=1 beats block d=2" may be category-confused even once
+  the tolerance is settled. *(original entry below)*
 - [ ] **The `krylov_refine` stub is not a marginal tightening — it may moot the block certificate**
   *(verified: `krylov_refine.py:4` is a live `NotImplementedError` whose docstring promises exactly
   this)* — *Claim:* chaining through the Krylov ground Ritz vector via the angle triangle inequality,

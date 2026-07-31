@@ -35,6 +35,16 @@ from hybrid_quantum_solver.quantum_krylov_solver import QuantumKrylovSolver
 # (the gated temple_bracket boundary). Inherited here as a hard raise, not re-derived.
 _SELF_MODE_MIN_M = 6
 
+# The HF-reachable sector is defined by |<HF|psi_k>|^2 > tol. This is the CERTIFIED ARC's value,
+# shared with certified_gaps.py, certified_dipole.py and certified_noise.py -- but NOT with
+# hf_overlap_subspace.py, which uses 1e-8. That divergence is not cosmetic: at square H4 a = 1.1 A
+# the two thresholds select DIFFERENT ground states (HF overlap 2.25e-5 vs 0.667), so the d=1 and
+# d=2 certificates whose head-to-head is SPEC_hf_overlap_subspace's headline are certifying
+# different targets there. Named here so the divergence is visible and gated; unifying it decides
+# which of two recorded findings is right and is deliberately left to a follow-up.
+# See specs/SPEC_reachability_tolerance.md.
+REACHABLE_TOL_CERTIFIED = 1e-10
+
 
 def certify_hf_overlap(mh: MolecularHamiltonian, m: int = 8, e1: Optional[float] = None,
                        solver: Optional[QuantumKrylovSolver] = None) -> OverlapCertificate:
@@ -73,7 +83,7 @@ def exact_reachable_overlap(mh: MolecularHamiltonian) -> float:
     w, V = np.linalg.eigh(H)
     hf = np.asarray(mh.hf_state().data, dtype=complex)
     amps = np.abs(V.conj().T @ hf)
-    reachable = np.where(amps ** 2 > 1e-10)[0]
+    reachable = np.where(amps ** 2 > REACHABLE_TOL_CERTIFIED)[0]
     return float(amps[reachable[0]])
 
 
@@ -96,7 +106,7 @@ if __name__ == "__main__":
         Hd = mh.qubit_hamiltonian.to_matrix()
         w, V = np.linalg.eigh(Hd)
         hf = np.asarray(mh.hf_state().data, dtype=complex)
-        reach = np.where(np.abs(V.conj().T @ hf) ** 2 > 1e-10)[0]
+        reach = np.where(np.abs(V.conj().T @ hf) ** 2 > REACHABLE_TOL_CERTIFIED)[0]
         e1_total = float(w[reach[1]]) + mh.energy_offset
         for m in (6, 8, 12):
             c_self = certify_hf_overlap(mh, m, solver=solver)
