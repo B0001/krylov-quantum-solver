@@ -46,8 +46,59 @@ shipped spec. That is a scientific decision with a reference behind it, not a re
 recorded as a follow-up rather than smuggled into a tolerance edit. This spec makes the divergence
 **visible and gated** so it cannot silently widen.
 
-**Not claimed:** that either value is wrong; that any recorded number is wrong. Both are internally
-consistent — they answer different questions.
+~~**Not claimed:** that either value is wrong; that any recorded number is wrong. Both are internally
+consistent — they answer different questions.~~ **← FALSIFIED 2026-07-31, see §2b.**
+
+## 2b. FALSIFICATION — the physics framing above was wrong
+
+The observation in §2 stands: the two thresholds do select different states. **The interpretation
+did not.** "Neither value is wrong, they answer different questions" is false. Three measurements:
+
+**(i) The disputed amplitude is an SCF convergence residue, not an overlap.** Varying only
+`PySCFDriver(conv_tol=...)` at the witness geometry, the *eigenvalue is unchanged to 10 digits*
+while the amplitude moves **19 orders of magnitude**:
+
+| conv_tol | E₀ (electronic) | p₀ = \|⟨HF\|ψ₀⟩\|² |
+|---|---|---|
+| 1e-6 | −4.5562107647 | 1.49e-09 |
+| 1e-9 *(driver default)* | −4.5562107647 | **5.07e-10** |
+| 1e-11 | −4.5562107647 | 1.14e-10 |
+| 1e-13 | −4.5562107647 | **1.53e-28** |
+
+A physical overlap does not depend on how tightly the SCF was converged. Gated as **G6**.
+
+**(ii) The mechanism: the state is symmetry-forbidden.** Square H₄ is D2h. The RHF MO irreps are
+`[Ag, B2u, B3u, Ag]` with occupation (2,2,0,0), so the **HF determinant is Ag**. Symmetry-resolved
+FCI in the tightly-converged basis:
+
+| irrep | E₁ | \|c_HF-det\|² |
+|---|---|---|
+| B1g | −1.95159401 | **0.000e+00** (exactly) |
+| Ag | −1.79988864 | 0.4451 |
+
+The level `tol=1e-10` admits is the **B1g** ground state, whose true HF overlap is **exactly zero**.
+The level `tol=1e-8` selects is the **Ag** ground state — the physically correct target. Gated as
+**G7**. So at this witness **1e-10 is wrong and 1e-8 is right**, and the certified arc has been
+certifying an overlap with a state Hartree–Fock cannot reach.
+
+**(iii) But "just pick 1e-8" is also wrong.** Scanning the same family, the artifact amplitude is
+**bistable**, not smooth: it sits at ~1e-29 where the driver finds the symmetric SCF solution, and
+jumps to ~0.47 where it instead falls into a *lower* broken-symmetry RHF solution — and at
+**a = 1.190 Å it lands at 1.4e-8, above the looser threshold too**. Gated as **G8**. **No fixed
+constant separates physics from SCF residue.** The correct fix is a symmetry/sector-aware
+reachability test, not a better number.
+
+**Consequence for the original G1.** It pinned `ov10 ≈ 2.25e-5` "so a silent drift is loud". That
+number *is* the drift — an SCF convergence residue that would break on any pyscf/qiskit-nature bump
+or a change to the driver's default `conv_tol`. The pin is removed; the durable statement
+(`ov10 < 1e-3`) is kept.
+
+**Consequence for `SPEC_subspace_floor_resolvability` (PR #22).** Its recorded mechanism — "a
+~1e-4-amplitude reachable level near the cluster boundary" — is very likely this same
+symmetry-forbidden level seen through a looser SCF. That spec's mechanism statement deserves
+re-examination on these grounds; its *conclusion* (the guard is insufficient, oracle mode is the
+rigorous path) is untouched, since a spurious level breaks the floor guard just as effectively as a
+real one. Filed as a follow-up rather than asserted here.
 
 **Connection to a prior finding.** `SPEC_subspace_floor_resolvability` (PR #22) killed the
 "fail-safe" claim for the self-mode floor and identified the mechanism as *"a ~1e-4-amplitude

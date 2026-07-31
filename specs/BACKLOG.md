@@ -35,7 +35,42 @@ hypothesis whose death is informative is worth more here than a safe one.
   → [`SPEC_reachability_tolerance.md`](SPEC_reachability_tolerance.md);
   `tests/test_reachability_tolerance_spec.py` (G1–G5, 9 passed).
 
-- [ ] **Unify the reachability tolerance — which value is physically right?** *(follow-up to the
+- [x] **Unify the reachability tolerance — which value is physically right?** — **ANSWERED, and the
+  question was malformed.** At the witness geometry **1e-10 is wrong**: the level it admits is the
+  **B1g** ground state, symmetry-forbidden to the **Ag** HF determinant, with FCI coefficient
+  **exactly 0.000e+00**. Its apparent 5.07e-10 amplitude is an **SCF convergence residue** — varying
+  only `PySCFDriver(conv_tol)` moves it 19 orders (1.49e-9 → 1.53e-28) while the eigenvalue is
+  unchanged to 10 digits. `1e-8` selects the correct Ag target (|c_HF|² = 0.4451). **But "pick 1e-8"
+  is also wrong:** the artifact is bistable in geometry (~1e-29 on the symmetric SCF solution, ~0.47
+  where the driver falls into a lower broken-symmetry RHF solution) and at **a = 1.190 Å it reaches
+  1.4e-8, above the looser threshold too**. **No fixed constant separates physics from SCF residue** —
+  the fix must be symmetry/sector-aware. Gated G6 (residue), G7 (mechanism), G8 (no safe constant) in
+  `tests/test_reachability_tolerance_spec.py`. → [`SPEC_reachability_tolerance.md`](SPEC_reachability_tolerance.md) §2b.
+
+- [ ] **A symmetry/sector-aware reachability test — the replacement for the constant** *(the fix the
+  entry above proves is needed)* — *Claim:* reachability should be decided by the trial state's
+  symmetry sector (particle number, S_z, and **spatial irrep**), not by thresholding a numerically
+  contaminated amplitude; doing so removes the artifact at every geometry in the square-H₄ family
+  without any tolerance at all. *Check (killable):* classify each eigenvector by irrep via
+  `pyscf.symm` and keep only those matching the HF determinant's; **dies if some geometry has a
+  genuinely reachable level that the irrep filter discards**, or if the filter is unavailable for
+  systems PySCF cannot symmetry-adapt (broken-symmetry SCF solutions are exactly that case — and the
+  0.47-amplitude geometries show the driver lands there routinely, so this may be the killer).
+  *Cost:* cheap. *Caveat:* this changes what "reachable" means everywhere in the arc, so it needs the
+  blast-radius analysis the tolerance question never got.
+
+- [ ] **Does `SPEC_subspace_floor_resolvability`'s mechanism survive?** *(follow-up to the
+  falsification above)* — *Claim:* PR #22 recorded the floor-guard blind spot as "a ~1e-4-amplitude
+  reachable level near the cluster boundary". That is very likely the same symmetry-forbidden level
+  seen through a looser SCF, i.e. a **spurious** level, not a physical one. *Check (killable):*
+  re-run the 8 recorded guard-passing-but-invalid witnesses at `conv_tol=1e-13` and with an irrep
+  filter; **dies if the escapes persist** — the mechanism would then be genuinely physical.
+  *Cost:* medium. *Caveat:* the **conclusion** of that spec is untouched either way (a spurious level
+  breaks the floor guard just as effectively as a real one, so self-mode d≥2 stays heuristic); only
+  the recorded *mechanism* is in question. Do not overstate this as reopening the finding.
+
+- [ ] ~~**Unify the reachability tolerance — which value is physically right?**~~ *(superseded by the
+  answered entry above; original text follows)* *(follow-up to the
   entry above; the decision it deliberately declined to make)* — *Claim:* one of 1e-10 / 1e-8 is
   defensible and the other is an accident, and the choice is decidable from the amplitude spectrum
   rather than by taste — e.g. a level with |⟨HF|ψ⟩|² = 5e-10 contributes ~2e-5 to a Krylov signal
