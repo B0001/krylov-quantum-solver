@@ -47,7 +47,41 @@ hypothesis whose death is informative is worth more here than a safe one.
   the fix must be symmetry/sector-aware. Gated G6 (residue), G7 (mechanism), G8 (no safe constant) in
   `tests/test_reachability_tolerance_spec.py`. → [`SPEC_reachability_tolerance.md`](SPEC_reachability_tolerance.md) §2b.
 
-- [ ] **A symmetry/sector-aware reachability test — the replacement for the constant** *(the fix the
+- [x] **A symmetry/sector-aware reachability test — the replacement for the constant** — **DONE, and
+  the killer I predicted turned out to be self-consistent rather than fatal.** I filed this saying
+  broken-symmetry SCF would sink it, since PySCF cannot symmetry-adapt exactly those references.
+  Measured across the square-H₄ family, **9/9**: the filter is available **exactly** when the
+  artifact is present. Symmetric SCF (a = 1.05, 1.10, 1.35) → p₀ = 1.9e-29…6.1e-9, the forbidden
+  level carries only SCF residue, filter **available** and removes it. Broken-symmetry SCF (six
+  geometries) → p₀ = 0.44…0.48, the reference is genuinely ~0.08 Ha lower and genuinely overlaps
+  that level, so there is nothing to remove and the filter correctly **refuses**. The two regimes
+  are separated by **seven orders of magnitude with nothing between** (G2), so it is a clean
+  dichotomy, not a judgement call. **LiH forced a real distinction:** deciding availability by
+  "did labelling throw" wrongly refuses ordinary closed-shell molecules — LiH is *not* broken
+  (dE ≈ 0), its degenerate E1x/E1y pair is merely arbitrarily rotated. Availability must be decided
+  by **energy** (genuine breaking) and labelling done on the symmetry-adapted solve; G4 catches the
+  wrong version. **Honest scope:** one family plus four controls — existence and mechanism, not
+  universality; a system with intermediate p₀ *and* a broken reference would falsify the dichotomy
+  and is not ruled out. Does **not** rewire the ~13 threshold sites (below).
+  → [`SPEC_symmetry_reachability.md`](SPEC_symmetry_reachability.md);
+  `reachability.py`; `tests/test_symmetry_reachability_spec.py` (G1–G6, 14 passed).
+
+- [ ] **Rewire the ~13 reachability-threshold sites onto the symmetry filter** *(the change
+  `SPEC_symmetry_reachability` deliberately declined to make)* — *Claim:* replacing
+  `|⟨HF|ψ_k⟩|² > tol` with the symmetry-aware decision at all 13 sites (1e-10: `certified_gaps:107`,
+  `hf_overlap_certificate`, `certified_dipole:118`, `certified_noise:80`, `odmd_spectral:79`; 1e-8:
+  `hf_overlap_subspace:41`, `odmd:59`, `msd:113`, `trotter_odmd:89`, `device_odmd:49`,
+  `trotter_resolution_floor:54,67`) changes **no recorded result**, because G5 shows the ordinary
+  gated systems (H₂, linear Hₙ) have no population between the machine-zero floor and the physical
+  ground state. *Check (killable):* re-run every affected spec gate after the rewire; **dies the
+  moment one recorded number moves** — and then the finding is *which* number and why. *Cost:*
+  medium (touches the certified arc and the ODMD family; each gate is cheap but there are many).
+  *Caveat:* the ODMD/MSD/Trotter family thresholds a *propagated* state's population, not the HF
+  determinant's, so the symmetry argument may not transfer — check that before assuming one
+  decision procedure serves both arcs.
+
+- [ ] ~~**A symmetry/sector-aware reachability test**~~ *(superseded by the closed entry above;
+  original text follows)* *(the fix the
   entry above proves is needed)* — *Claim:* reachability should be decided by the trial state's
   symmetry sector (particle number, S_z, and **spatial irrep**), not by thresholding a numerically
   contaminated amplitude; doing so removes the artifact at every geometry in the square-H₄ family
