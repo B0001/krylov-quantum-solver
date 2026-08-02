@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 from certified_gaps import gap_bracket
-from hf_overlap_certificate import certify_hf_overlap
+from hf_overlap_certificate import REACHABLE_TOL_CERTIFIED, certify_hf_overlap
 from hybrid_quantum_solver.certified_overlap.krylov_refine import (
     SATURATION_SLACK,
     refine_via_lanczos,
@@ -74,6 +74,9 @@ def test_G1_chained_bound_never_exceeds_the_exact_overlap(atom, m):
     """The killable check. Slack is required, not cosmetic: at a machine-converged Ritz vector the
     bound SATURATES (equals the exact overlap) and rounding puts it 1-3 ulp either side."""
     oracle, self_mode, exact = _both_modes(atom, m)
+    # Not vacuously satisfiable: an all-None implementation would pass a bare "if g is not None"
+    # guard on every cell, so require a bound to actually exist here.
+    assert oracle is not None, (atom, m, "oracle mode produced no bound")
     for label, g in (("oracle", oracle), ("self", self_mode)):
         if g is not None:
             assert g <= exact + SATURATION_SLACK, (label, atom, m, g, exact)
@@ -141,8 +144,9 @@ def test_G5_chained_bound_is_not_monotone_in_krylov_depth():
     drop it rather than carry a false warning."""
     vals = [_both_modes(H4_SQUARE_105, m)[0] for m in (6, 8, 12)]
     assert all(v is not None for v in vals), vals
-    assert vals[1] < vals[0], vals        # M=8 is WORSE than M=6
-    assert vals[2] > vals[1], vals        # ...then M=12 recovers
+    assert vals[1] < vals[0], vals        # M=8 is WORSE than M=6 -- that alone is the claim
+    # Deliberately NOT asserting vals[2] > vals[1]: the recovery shape is incidental, no spec claim
+    # depends on it, and pinning it would break on unrelated solver changes.
 
 
 # --- G6: vacuous is None, and inputs are checked --------------------------------------------------
@@ -162,3 +166,51 @@ def test_G6_unnormalized_inputs_raise():
         refine_via_lanczos(H, 2.0 * u, v, e1_elec)
     with pytest.raises(ValueError, match="normalized"):
         refine_via_lanczos(H, u, 0.5 * v, e1_elec)
+    # The band that a np.isclose(atol=1e-8) guard silently admitted (its default rtol=1e-5 made it
+    # ~1000x looser than it read). A 9e-6 denormalization pushes the bound ~1e-5 above the exact
+    # overlap -- nine orders past SATURATION_SLACK -- so it must raise, not return a number.
+    with pytest.raises(ValueError, match="normalized"):
+        refine_via_lanczos(H, u, (1.0 + 9e-6) * v, e1_elec)
+
+
+# --- G7: R2b (sector restriction inherited in NAME only) is measured, not asserted ----------------
+
+# leak^2 is the term Davis-Kahan-on-v neglects. At 1e-12 the neglected term is 1e-24, ten orders
+# below SATURATION_SLACK, so the bound cannot be affected. This is NOT a rounding tolerance -- the
+# excluded geometries below sit eight orders on the other side of it.
+LEAK_TOL = 1e-12
+
+
+def _leakage(atom, m):
+    """(||P_unreach v||, #unreachable levels below E1_reach) -- u's unreachable components vanish by
+    construction, v's only numerically, which is the whole content of R2b."""
+    mh = build_molecular_hamiltonian(atom=atom)
+    H = mh.qubit_hamiltonian.to_matrix()
+    u = np.asarray(mh.hf_state().data, dtype=complex)
+    w, V = np.linalg.eigh(H)
+    amp2 = np.abs(V.conj().T @ u) ** 2
+    reach = np.where(amp2 > REACHABLE_TOL_CERTIFIED)[0]
+    unreach = np.where(amp2 <= REACHABLE_TOL_CERTIFIED)[0]
+    v = _ritz(mh, m, QuantumKrylovSolver(mh))
+    leak = float(np.linalg.norm(V[:, unreach].conj().T @ v))
+    return leak, int(np.sum(w[unreach] < float(w[reach[1]])))
+
+
+@pytest.mark.parametrize("atom", DIRECT_SURVIVES + DIRECT_VACUOUS)
+def test_G7_unreachable_leakage_is_negligible_on_the_gated_set(atom):
+    leak, n_below = _leakage(atom, 6)
+    # Non-vacuity: if no unreachable level sat below E1_reach there would be nothing to neglect and
+    # R2b should be deleted rather than carried.
+    assert n_below > 0, (atom, "no unreachable level below E1_reach -- R2b would be vacuous")
+    assert leak < LEAK_TOL, (atom, leak)
+
+
+@pytest.mark.parametrize("a", (1.10, 1.35))
+def test_G7_excluded_geometries_are_the_positive_control(a):
+    """The exclusion is load-bearing for R2b, not only for R3. These geometries must BREACH the
+    threshold -- if they passed it, excluding them would be unnecessary and R2b overstated."""
+    atom = f"H 0 0 0; H {a} 0 0; H {a} {a} 0; H 0 {a} 0"
+    leak, _ = _leakage(atom, 6)
+    assert leak > LEAK_TOL, (a, leak, "excluded geometry no longer breaches -- revisit R2b/R3")
+    # And it breaches by enough to actually matter: leak^2 above SATURATION_SLACK.
+    assert leak ** 2 > SATURATION_SLACK, (a, leak ** 2)

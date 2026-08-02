@@ -148,9 +148,12 @@ hypothesis whose death is informative is worth more here than a safe one.
 
 - [x] **CLOSED 2026-08-01 — the stub is implemented and it works in SELF mode.** `refine_via_lanczos`
   had raised `NotImplementedError` since 2026-07-17; it now returns
-  γ_chain = cos(θ_uv + arcsin(r_v/δ_v)). Measured over 7 systems × M ∈ {6,8,12}: **0 validity
-  violations** (largest excess +3.3e-16, pure saturation), **strictly tighter** than the direct bound
-  wherever direct survives, and it **rescues 12/12 vacuous cases in self mode as well as oracle**.
+  γ_chain = cos(θ_uv + arcsin(r_v/δ_v)). Measured over 5 systems × M ∈ {6,8,12} = 15 cells: **0
+  validity violations** (largest excess +2.2e-16, pure saturation), **strictly tighter** than the
+  direct bound wherever direct survives, and it **rescues 6/6 vacuous cases in self mode as well as
+  oracle**. (Counts corrected 2026-08-02: the first write-up said 7 systems / 12-of-12, a set that
+  still included the square-H₄ a=1.10/1.35 geometries the same spec excludes. Re-run post-exclusion;
+  every *mechanism* number below survived unchanged.)
   **The practical finding is the absorption contrast, not the tightening:** a loose self-mode E₁
   floor costs the *direct* bound 38% on linear H₄ at M=6 (0.7765 → 0.4791) but costs the *chained*
   bound **0.08%** (0.9655 → 0.9647) — the floor enters only through arcsin(r_v/δ_v) with a tiny r_v
@@ -160,8 +163,14 @@ hypothesis whose death is informative is worth more here than a safe one.
   from M=6 to M=8 before recovering; G5 pins this). The "moots the block certificate" half is
   **dropped as a category error**, not resolved: d=1 bounds |⟨u|ψ₀⟩| and d=2 bounds ‖P_S u‖, and
   ‖P_S u‖ ≥ |⟨u|ψ₀⟩| always.
+  **A third caveat, gated late (G7):** the reachable-sector restriction is inherited in NAME only —
+  u's unreachable components vanish by construction, v's only numerically (‖P_unreach v‖ ≤ 3.6e-14 on
+  the gated set, so the neglected O(leak²) term is ~1e-27). That margin is a property of this set,
+  not structural: at the two excluded geometries leakage is **1.7e-6**, giving a neglected term ~3e-12,
+  **~200× above `SATURATION_SLACK`**. G7 gates both halves, using the excluded geometries as a
+  positive control.
   → [`SPEC_chained_overlap.md`](SPEC_chained_overlap.md); `tests/test_chained_overlap_spec.py`
-  (G1–G6, 47 passed — slow, ~10 min, H₆ dominates).
+  (G1–G7, 54 passed — slow, ~15 min, H₆ dominates).
 
 - [ ] **`build_molecular_hamiltonian` cannot express a tight-SCF reference** *(found while gating the
   entry above)* — *Claim:* the repo's only public Hamiltonian builder hardcodes
