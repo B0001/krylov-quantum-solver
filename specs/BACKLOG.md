@@ -146,7 +146,46 @@ hypothesis whose death is informative is worth more here than a safe one.
   ArpackError on square H₄ where μ_z ≡ 0; a zero-half-width epsilon floor on HeH⁺) — fix in the same
   PR but do **not** dress them up as the finding.
 
-- [ ] **UPDATE 2026-07-30 — the math is VERIFIED, the "moots the block certificate" half is
+- [x] **CLOSED 2026-08-01 — the stub is implemented and it works in SELF mode.** `refine_via_lanczos`
+  had raised `NotImplementedError` since 2026-07-17; it now returns
+  γ_chain = cos(θ_uv + arcsin(r_v/δ_v)). Measured over 7 systems × M ∈ {6,8,12}: **0 validity
+  violations** (largest excess +3.3e-16, pure saturation), **strictly tighter** than the direct bound
+  wherever direct survives, and it **rescues 12/12 vacuous cases in self mode as well as oracle**.
+  **The practical finding is the absorption contrast, not the tightening:** a loose self-mode E₁
+  floor costs the *direct* bound 38% on linear H₄ at M=6 (0.7765 → 0.4791) but costs the *chained*
+  bound **0.08%** (0.9655 → 0.9647) — the floor enters only through arcsin(r_v/δ_v) with a tiny r_v
+  instead of through the much larger HF residual. **Two properties callers must not assume:** it
+  SATURATES (equals the exact overlap at a machine-converged Ritz vector, so rounding puts it 1–3 ulp
+  either side — gates need `SATURATION_SLACK`), and it is **NOT monotone in M** (square H₄ gets worse
+  from M=6 to M=8 before recovering; G5 pins this). The "moots the block certificate" half is
+  **dropped as a category error**, not resolved: d=1 bounds |⟨u|ψ₀⟩| and d=2 bounds ‖P_S u‖, and
+  ‖P_S u‖ ≥ |⟨u|ψ₀⟩| always.
+  → [`SPEC_chained_overlap.md`](SPEC_chained_overlap.md); `tests/test_chained_overlap_spec.py`
+  (G1–G6, 47 passed — slow, ~10 min, H₆ dominates).
+
+- [ ] **`build_molecular_hamiltonian` cannot express a tight-SCF reference** *(found while gating the
+  entry above)* — *Claim:* the repo's only public Hamiltonian builder hardcodes
+  `PySCFDriver(atom, basis, charge, spin)` (`molecular_hamiltonian.py:103`) with no `conv_tol`, so
+  every recorded result in the repo uses the driver default 1e-9 — which is exactly where the
+  SCF-residue artifact of [`SPEC_reachability_tolerance`](SPEC_reachability_tolerance.md) lives. Two
+  symmetric-SCF geometries (square H₄ a=1.10, a=1.35) had to be **excluded** from the chained-overlap
+  gate for this reason: their "exact reachable overlap" reference *is* the residue. *Check
+  (killable):* thread `conv_tol` through and re-run the affected gates at 1e-13; **dies if no
+  recorded number moves** — the artifact would then be unreachable from the public API in practice
+  and the concern is theoretical. *Cost:* cheap. *Caveat:* if numbers DO move, this is a
+  blast-radius change across the certified arc, not a parameter addition.
+
+- [x] **The floor-guard mechanism survives — the ~1e-4 level is PHYSICAL, not the SCF artifact**
+  *(follow-up filed by `SPEC_reachability_tolerance` §2b; I suspected it was the artifact)* —
+  linear H₆ at R = 1.0/1.1/1.2 Å, populations in the 1e-6…1e-3 band are **identical to 6 significant
+  figures** at the driver default and at `conv_tol=1e-13` (63/69/65 levels respectively, none moved).
+  Contrast the square-H₄ artifact, which collapsed 19 orders under the same test. So
+  `SPEC_subspace_floor_resolvability`'s recorded mechanism ("a ~1e-4-amplitude reachable level near
+  the cluster boundary") is **accurate as written** and needs no correction. Its conclusion was never
+  contingent on this either way — a spurious level breaks a floor guard just as effectively as a real
+  one — so this confirms the description, it does not reopen the finding.
+
+- [ ] ~~**UPDATE 2026-07-30 — the math is VERIFIED, the "moots the block certificate" half is
   BLOCKED, and the attempt found a defect one rung lower.** Independent check of the chained bound
   γ_chain = cos(θ_uv + arcsin(r_v/δ_v)) with oracle E₁: **valid in every case that produces a
   bound**, and it rescues the vacuous ones — H₂ stretched M=6 direct 0.7716 → chained 0.8437 =
