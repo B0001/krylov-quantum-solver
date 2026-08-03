@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: chem-data
+spec:
+  accessModes:
+    # ReadWriteOnce. The benchmark Job and the cross-check CronJob both write
+    # here, but to disjoint files and never at the same time (the CronJob uses
+    # concurrencyPolicy: Forbid). Running them simultaneously on different nodes
+    # would leave one pod Pending -- RWO attaches to one node at a time.
+    - ReadWriteOnce
+  resources:
+    requests:
+      # Benchmark CSVs are small, but the SCF checkpoint files are not:
+      # benchmark_nbn.py caches a ground-state SCF to data/nbn_scf.chk to make
+      # the spin scan resumable, and those run to GBs for larger active spaces.
+      storage: 20Gi

@@ -1,0 +1,36 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: chem-prod
+nameSuffix: -prod
+
+resources:
+  - namespace.yaml
+  - ../../base
+
+labels:
+  - pairs:
+      app.kubernetes.io/instance: prod
+    includeSelectors: false
+
+patches:
+  - path: job-patch.yaml
+    target:
+      kind: Job
+  - path: cronjob-patch.yaml
+    target:
+      kind: CronJob
+  - path: pvc-patch.yaml
+
+configMapGenerator:
+  - name: chem-env
+    behavior: merge
+    literals:
+      # In lockstep with the cpu limit of 8 in the patches below.
+      - OMP_NUM_THREADS=8
+      - OPENBLAS_NUM_THREADS=8
+      - MKL_NUM_THREADS=8
+
+images:
+  - name: chem
+    newTag: 0.1.0

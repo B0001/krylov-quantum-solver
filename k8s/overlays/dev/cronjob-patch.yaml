@@ -1,0 +1,30 @@
+# JSON 6902 targeted at kind: CronJob. Note the paths are one level deeper than
+# the Job patch: a CronJob nests its pod spec under /spec/jobTemplate/spec.
+#
+# Suspended in dev. A weekly multi-hour physics regression check has no value in
+# a dev namespace, and left running it would quietly burn a CPU-week a year.
+# Trigger it on demand instead:
+#   kubectl create job --from=cronjob/chem-cross-check-dev manual-run -n chem-dev
+# `add`, not `replace`: the base CronJob has no suspend field, and JSON Patch
+# replace on a missing member is an error.
+- op: add
+  path: /spec/suspend
+  value: true
+- op: replace
+  path: /spec/jobTemplate/spec/template/spec/containers/0/imagePullPolicy
+  value: Always
+- op: replace
+  path: /spec/jobTemplate/spec/activeDeadlineSeconds
+  value: 3600
+- op: replace
+  path: /spec/jobTemplate/spec/template/spec/containers/0/resources/requests/cpu
+  value: "1"
+- op: replace
+  path: /spec/jobTemplate/spec/template/spec/containers/0/resources/requests/memory
+  value: 2Gi
+- op: replace
+  path: /spec/jobTemplate/spec/template/spec/containers/0/resources/limits/cpu
+  value: "1"
+- op: replace
+  path: /spec/jobTemplate/spec/template/spec/containers/0/resources/limits/memory
+  value: 4Gi

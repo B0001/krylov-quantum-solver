@@ -1,0 +1,24 @@
+# JSON 6902 targeted at kind: Job. CPU drops to 1, which is why the overlay's
+# configMapGenerator also drops OMP_NUM_THREADS to 1 -- those two must move
+# together or the pod oversubscribes its own limit.
+- op: replace
+  path: /spec/template/spec/containers/0/imagePullPolicy
+  value: Always
+- op: replace
+  path: /spec/backoffLimit
+  value: 1
+- op: replace
+  path: /spec/activeDeadlineSeconds
+  value: 3600
+- op: replace
+  path: /spec/template/spec/containers/0/resources/requests/cpu
+  value: "1"
+- op: replace
+  path: /spec/template/spec/containers/0/resources/requests/memory
+  value: 2Gi
+- op: replace
+  path: /spec/template/spec/containers/0/resources/limits/cpu
+  value: "1"
+- op: replace
+  path: /spec/template/spec/containers/0/resources/limits/memory
+  value: 4Gi

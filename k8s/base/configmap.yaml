@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chem-env
+data:
+  # These MUST equal the pod's CPU limit. PySCF and the BLAS underneath it size
+  # their thread pools from this, not from the cgroup, so a mismatch is not
+  # cosmetic: set higher than the limit and the kernel throttles a pod that
+  # thinks it has more cores than it can use, which is slower than running
+  # single-threaded. Every overlay that changes cpu must change these too.
+  OMP_NUM_THREADS: "4"
+  OPENBLAS_NUM_THREADS: "4"
+  MKL_NUM_THREADS: "4"
+  # block2 scratch. Points at the emptyDir because /app is read-only at runtime.
+  # Only consulted by the DMRG path, which the default image does not install.
+  TMPDIR: "/tmp"

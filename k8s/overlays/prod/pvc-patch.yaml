@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: chem-data
+spec:
+  resources:
+    requests:
+      # Headroom for accumulated SCF checkpoints across runs. Most storage
+      # classes allow expanding a PVC but never shrinking it, so this is
+      # effectively a one-way number.
+      storage: 100Gi

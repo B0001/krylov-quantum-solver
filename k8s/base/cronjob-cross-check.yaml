@@ -1,0 +1,70 @@
+# Weekly regression check. cross_check.py requires four independent methods to
+# agree, which makes it the right scheduled canary for this repo's stated
+# culture: a silent physics regression shows up as disagreement, not as a crash.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: chem-cross-check
+spec:
+  # 03:00 Sunday. Interpreted in the cluster's timezone unless spec.timeZone is
+  # set (Kubernetes 1.27+); set it explicitly if that ambiguity matters.
+  schedule: "0 3 * * 0"
+  # Forbid, not Allow: the run writes to a ReadWriteOnce PVC, so an overlapping
+  # invocation would either corrupt the previous run's output or sit Pending.
+  concurrencyPolicy: Forbid
+  # If the controller was down past this window, skip the slot rather than
+  # firing a stampede of missed runs on recovery.
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 604800
+      activeDeadlineSeconds: 21600
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            fsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: cross-check
+              image: chem:0.1.0
+              imagePullPolicy: IfNotPresent
+              command: ["python", "cross_check.py"]
+              envFrom:
+                - configMapRef:
+                    name: chem-env
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  # Must match OMP_NUM_THREADS in the ConfigMap.
+                  cpu: "4"
+                  memory: 8Gi
+                limits:
+                  cpu: "4"
+                  memory: 16Gi
+              volumeMounts:
+                - name: data
+                  mountPath: /app/data
+                - name: dmrg-tmp
+                  mountPath: /app/.dmrg_tmp
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: chem-data
+            - name: dmrg-tmp
+              emptyDir: {}
+            - name: tmp
+              emptyDir: {}
