@@ -51,15 +51,31 @@ run_gate() {
         return 0
     fi
     start=$(date +%s)
-    if $RUN python -m pytest "$f" -q >"$LOG_DIR/$name.log" 2>&1; then
+    $RUN python -m pytest "$f" -q >"$LOG_DIR/$name.log" 2>&1
+    rc=$?
+    elapsed=$(( $(date +%s) - start ))
+    if [ "$rc" -eq 0 ]; then
         rm -f "$CACHE_DIR/$name".* 2>/dev/null
         touch "$cache_file"
-        echo "PASS  $f  ($(( $(date +%s) - start ))s)"
+        echo "PASS  $f  (${elapsed}s)"
         return 0
-    else
-        echo "FAIL  $f  ($(( $(date +%s) - start ))s)  log: $LOG_DIR/$name.log"
-        return 1
     fi
+    # A KILLED gate is not a FAILED gate. pytest exits 1-5 for test outcomes; a signal exits
+    # 128+N. Reporting only "FAIL" made a segfault indistinguishable from an assertion failure
+    # -- which matters most for 139, since the whole per-process design here exists to stop
+    # block2 segfaulting into a pyscf/qiskit-aer interpreter (CLAUDE.md). See issue #36.
+    case $rc in
+        139) why="  SIGSEGV -- block2 isolation may have regressed, see CLAUDE.md" ;;
+        137) why="  SIGKILL -- likely OOM; retry with GATE_JOBS=1" ;;
+        134) why="  SIGABRT" ;;
+        124) why="  timeout" ;;
+        *)   why="" ;;
+    esac
+    # The log is truncated by `>` before pytest starts, so an empty one means the process died
+    # before writing a byte -- worth saying, or the FAIL line points at nothing to diagnose.
+    [ -s "$LOG_DIR/$name.log" ] || why="$why  (log empty: died before writing)"
+    echo "FAIL  $f  (${elapsed}s)  exit=$rc$why  log: $LOG_DIR/$name.log"
+    return 1
 }
 export -f run_gate
 
