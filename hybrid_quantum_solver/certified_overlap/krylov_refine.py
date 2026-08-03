@@ -13,10 +13,15 @@ and Davis-Kahan applied to v (not u) bounds the second term by arcsin(r_v / delt
 
     |<u|psi_0>|  =  cos theta(u, psi_0)  >=  cos( theta(u,v) + arcsin(r_v/delta_v) )
 
-valid whenever the angle sum stays below pi/2. Because v is a Ritz vector of a Krylov space that
-already contains u, its residual is orders of magnitude smaller than u's, so the chained bound is
-dramatically tighter -- and it costs NO extra measurements: <u|v> is a linear combination of the
-Krylov overlap-matrix entries <u|e^{-ik dt H}|u> the solver has already formed.
+valid whenever the angle sum stays below pi/2. EMPIRICALLY on the systems gated here, r_v is orders of
+magnitude smaller than r_u, so the chained bound is dramatically tighter. Note this does NOT follow
+from the Krylov space containing u: a Ritz vector minimizes the Rayleigh quotient over the space,
+not the residual, and r_v <= r_u is not a theorem. It is a measured property of this set.
+
+Measurement cost: <u|v> is a linear combination of Krylov overlap-matrix entries the solver has
+already formed, and r_v needs <v|H^2|v>, which `certified_gaps.gap_bracket` already computes as its
+variance term. So there is no extra measurement IF the gap bracket has been run -- which it has,
+since it supplies e1_floor. Stated in full because the <u|v> half alone would not justify it.
 
 Measured on a symmetry-clean set (specs/SPEC_symmetry_reachability.md defines what that means):
 valid everywhere, strictly tighter than the direct bound wherever the direct bound is non-vacuous,
@@ -35,6 +40,8 @@ from typing import Optional, Union
 
 import numpy as np
 from scipy.sparse import spmatrix
+
+from .davis_kahan import _NORMALIZATION_TOL
 
 # Saturation slack: at a machine-converged Ritz vector the bound IS the exact overlap, so rounding
 # can put it a few ulp above. Anything beyond this is a real violation, not arithmetic.
@@ -70,8 +77,15 @@ def refine_via_lanczos(
     v = np.asarray(v, dtype=complex).ravel()
     for name, vec in (("u", u), ("v", v)):
         norm = float(np.linalg.norm(vec))
-        if not np.isclose(norm, 1.0, atol=1e-8):
-            raise ValueError(f"{name} must be normalized, got ||{name}|| = {norm}.")
+        # Explicit absolute test, NOT np.isclose: its default rtol=1e-5 would make this guard ~1000x
+        # looser than it reads, admitting ||v|| = 1 + 9e-6. That is not cosmetic -- it inflates
+        # lambda_v, delta_v and |<u|v>| together and can push gamma_chain ~1e-5 ABOVE the exact
+        # overlap, nine orders past SATURATION_SLACK, silently and without returning None.
+        if abs(norm - 1.0) > _NORMALIZATION_TOL:
+            raise ValueError(
+                f"{name} must be normalized: got ||{name}|| = {norm} "
+                f"(tolerance {_NORMALIZATION_TOL})."
+            )
 
     Hv = H @ v
     lambda_v = float(np.real(np.vdot(v, Hv)))
