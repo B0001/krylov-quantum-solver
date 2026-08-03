@@ -48,7 +48,7 @@ M=24; half_width is finite iff s < 1, so it is vacuous exactly at the depths whe
 
 ## 4. Public interface
 
-Reuses `certified_gaps.gap_bracket`, `temple_bounds._mean_and_variance`, `build_dipole_operators`.
+Reuses `certified_gaps.gap_bracket`, `temple_bounds.mean_and_variance`, `build_dipole_operators`.
 
 ```
 certified_dipole.certified_dipole(mh, a_sparse, m, width=None, solver=None, e1=None) -> CertifiedDipole

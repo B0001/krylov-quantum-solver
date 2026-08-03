@@ -20,6 +20,7 @@ from hybrid_quantum_solver.molecular_hamiltonian import (
     build_molecular_hamiltonian,
 )
 from hybrid_quantum_solver.quantum_krylov_solver import QuantumKrylovSolver
+from reachability import reachable_eigenpairs
 
 CASES = {
     "HeH+": dict(atom="He 0 0 0; H 0 0 0.772", charge=1),
@@ -36,10 +37,7 @@ def ladders():
         Az = build_dipole_operators(**spec)[2].to_matrix(sparse=True)
         # reference = the HF-REACHABLE ground state (correct particle-number sector), NOT the global
         # lowest eigenvector (which for a charged species lives in a different sector).
-        w, V = np.linalg.eigh(mh.qubit_hamiltonian.to_matrix())
-        hf = np.asarray(mh.hf_state().data, dtype=complex)
-        reach = np.where(np.abs(V.conj().T @ hf) ** 2 > 1e-10)[0]
-        psi_ex = V[:, reach[np.argmin(w[reach])]]
+        psi_ex = reachable_eigenpairs(mh)[1][:, 0]
         mu_exact = float((psi_ex.conj() @ (Az @ psi_ex)).real)
         ladder = certified_dipole_ladder(mh, Az, _DIMS, solver=QuantumKrylovSolver(mh))
         out[name] = (mu_exact, Az, ladder)

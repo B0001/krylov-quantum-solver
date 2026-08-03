@@ -46,7 +46,7 @@ from certified_noise import certified_half_width, hamiltonian_one_norms
 from gap_selfcheck import self_checked_gap
 from hybrid_quantum_solver.molecular_hamiltonian import MolecularHamiltonian
 from hybrid_quantum_solver.quantum_krylov_solver import QuantumKrylovSolver
-from temple_bounds import _mean_and_variance
+from temple_bounds import mean_and_variance
 
 
 def _ladder_stats(mh: MolecularHamiltonian, dims: Sequence[int]) -> dict:
@@ -56,8 +56,8 @@ def _ladder_stats(mh: MolecularHamiltonian, dims: Sequence[int]) -> dict:
     stats = {}
     for m in dims:
         _, states = solver.eigenstates(m, n_states=2)
-        th0, var0 = _mean_and_variance(H, states[0])
-        th1, var1 = _mean_and_variance(H, states[1])
+        th0, var0 = mean_and_variance(H, states[0])
+        th1, var1 = mean_and_variance(H, states[1])
         stats[m] = (th0, var0, th1, var1)
     return stats
 

@@ -50,7 +50,7 @@ M = 6…24. At M = 4 the premise fails for H₄/N₂ and the lower certificate e
 
 ## 4. Public interface
 
-Reuses `QuantumKrylovSolver.eigenstates`, `temple_bounds._mean_and_variance`.
+Reuses `QuantumKrylovSolver.eigenstates`, `temple_bounds.mean_and_variance`.
 
 ```
 certified_gaps.gap_bracket(mh, m, e1=None, solver=None) -> GapBracket
