@@ -47,7 +47,8 @@ from scipy.sparse.linalg import eigsh
 from certified_gaps import gap_bracket
 from hybrid_quantum_solver.molecular_hamiltonian import MolecularHamiltonian
 from hybrid_quantum_solver.quantum_krylov_solver import QuantumKrylovSolver
-from temple_bounds import _mean_and_variance
+from reachability import reachable_eigenpairs
+from temple_bounds import mean_and_variance
 
 
 @dataclass
@@ -79,7 +80,7 @@ def certified_dipole(mh: MolecularHamiltonian, a_sparse, m: int, width: Optional
     H = mh.qubit_hamiltonian.to_matrix(sparse=True).tocsc()
     _, states = solver.eigenstates(m, n_states=1)
     psi0 = states[0]
-    _, var0 = _mean_and_variance(H, psi0)
+    _, var0 = mean_and_variance(H, psi0)
     sigma0 = float(np.sqrt(var0))
     ax = a_sparse @ psi0
     mu = float((psi0.conj() @ ax).real)
@@ -113,10 +114,7 @@ if __name__ == "__main__":
     for name, spec in cases.items():
         mh = build_molecular_hamiltonian(**spec)
         Az = build_dipole_operators(**spec)[2].to_matrix(sparse=True)
-        w, V = np.linalg.eigh(mh.qubit_hamiltonian.to_matrix())
-        hf = np.asarray(mh.hf_state().data, dtype=complex)
-        reach = np.where(np.abs(V.conj().T @ hf) ** 2 > 1e-10)[0]  # correct particle-number sector
-        psi_ex = V[:, reach[np.argmin(w[reach])]]                  # HF-reachable ground
+        psi_ex = reachable_eigenpairs(mh)[1][:, 0]   # HF-reachable ground (right charge sector)
         mu_exact = float((psi_ex.conj() @ (Az @ psi_ex)).real)
         solver = QuantumKrylovSolver(mh)
         print("=" * 72)

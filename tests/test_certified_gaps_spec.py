@@ -16,6 +16,7 @@ import pytest
 from certified_gaps import gap_bracket, gap_bracket_ladder, reachable_gap
 from hybrid_quantum_solver.molecular_hamiltonian import build_molecular_hamiltonian
 from hybrid_quantum_solver.quantum_krylov_solver import QuantumKrylovSolver
+from reachability import reachable_eigenpairs
 
 # Small, cheap, exactly-diagonalizable references (FCI used only to CHECK the bracket, never fed in).
 CASES = {
@@ -65,10 +66,7 @@ def test_G3_boundary_premise_fails_at_M4(built):
     for name in ("H4", "N2"):
         mh, gap, solver = built[name]
         br = gap_bracket(mh, 4, solver=solver)
-        H = mh.qubit_hamiltonian.to_matrix()
-        w, V = np.linalg.eigh(H)
-        hf = np.asarray(mh.hf_state().data, dtype=complex)
-        reach = w[np.abs(V.conj().T @ hf) ** 2 > 1e-10]
+        reach, _ = reachable_eigenpairs(mh)
         e1_elec = reach[1]                                # qubit H is electronic; eig = E_1 (elec)
         premise_ok = br.eps1 <= e1_elec + 1e-12           # eps_1 <= E_1 ?
         if not premise_ok:
@@ -90,10 +88,7 @@ def test_G4_upper_certificate_is_robust_and_scope(built):
             assert gap <= br.gap_upper + 1e-9, (name, m, gap, br.gap_upper)   # upper holds at M=4 too
         # oracle mode: feeding the exact E_1 is self-consistent and never escapes in the certified
         # regime (a sanity check that "self" is a faithful stand-in for the oracle at M >= 6).
-        H = mh.qubit_hamiltonian.to_matrix()
-        w, V = np.linalg.eigh(H)
-        hf = np.asarray(mh.hf_state().data, dtype=complex)
-        reach = w[np.abs(V.conj().T @ hf) ** 2 > 1e-10]
+        reach, _ = reachable_eigenpairs(mh)
         e1_total = reach[1] + mh.energy_offset            # oracle mode expects a TOTAL energy
         for m in _CERTIFIED_DIMS:
             bro = gap_bracket(mh, m, e1=e1_total, solver=solver)

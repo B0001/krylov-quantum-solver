@@ -41,7 +41,7 @@ mHa (H2) and 205→20.5→2.05 mHa (H4) as N×100 (exact 1/√N); λ_{H²} = 62.
 
 ## 4. Public interface
 
-Reuses `temple_bounds._mean_and_variance`, the Krylov solver.
+Reuses `temple_bounds.mean_and_variance`, the Krylov solver.
 
 ```
 certified_noise.hamiltonian_one_norms(mh) -> (lambda_H, lambda_H2)

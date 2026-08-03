@@ -12,12 +12,12 @@ data alone -- the quantity the guided-LH literature assumes but never certifies.
   G5 Krylov refinement: self-mode floor non-decreasing in M, -> oracle (H4); self == oracle (H2).
 """
 
-import numpy as np
 import pytest
 
 from hf_overlap_certificate import certify_hf_overlap, exact_reachable_overlap
 from hybrid_quantum_solver.molecular_hamiltonian import build_molecular_hamiltonian
 from hybrid_quantum_solver.quantum_krylov_solver import QuantumKrylovSolver
+from reachability import reachable_eigenpairs
 
 # Built once per geometry; the Krylov basis is reused across M via a shared solver.
 _GEOMETRIES = {
@@ -29,11 +29,7 @@ _GEOMETRIES = {
 
 def _oracle_e1_total(mh):
     """Exact reachable E1 as a TOTAL energy, for oracle-mode comparison."""
-    Hd = mh.qubit_hamiltonian.to_matrix()
-    w, V = np.linalg.eigh(Hd)
-    hf = np.asarray(mh.hf_state().data, dtype=complex)
-    reach = np.where(np.abs(V.conj().T @ hf) ** 2 > 1e-10)[0]
-    return float(w[reach[1]]) + mh.energy_offset
+    return float(reachable_eigenpairs(mh)[0][1]) + mh.energy_offset
 
 
 @pytest.fixture(scope="module")

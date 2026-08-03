@@ -47,7 +47,14 @@ class EnergyBracket:
     eps_source: str         # "oracle" (caller-supplied E_1) | "self" (theta_1 - sigma_1)
 
 
-def _mean_and_variance(H, psi):
+def mean_and_variance(H, psi):
+    """(<H>, <H^2> - <H>^2) for a normalized state, from ONE matvec -- the measurement every
+    certificate in this repo is built on (Temple, gap, dipole, and their noise variants).
+
+    The variance is clipped at zero: it is mathematically non-negative, but near convergence
+    <H^2> - <H>^2 is a difference of two nearly equal O(1) numbers and rounds negative, which
+    would make sqrt(var) NaN and silently poison a bound downstream.
+    """
     hpsi = H @ psi
     th = float((psi.conj() @ hpsi).real)
     var = float((hpsi.conj() @ hpsi).real - th ** 2)
@@ -66,10 +73,10 @@ def krylov_bracket(mh: MolecularHamiltonian, m: int, eps: Optional[float] = None
     offset = mh.energy_offset
     H = mh.qubit_hamiltonian.to_matrix(sparse=True).tocsc()
     energies, states = solver.eigenstates(m, n_states=2)
-    th0, var0 = _mean_and_variance(H, states[0])
+    th0, var0 = mean_and_variance(H, states[0])
     if eps is None:
         if len(energies) > 1:
-            th1, var1 = _mean_and_variance(H, states[1])
+            th1, var1 = mean_and_variance(H, states[1])
             eps_e = th1 - np.sqrt(var1)
         else:
             eps_e = -np.inf                              # rank-1 subspace: no E_1 estimate

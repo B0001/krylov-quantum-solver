@@ -44,7 +44,8 @@ import numpy as np
 
 from hybrid_quantum_solver.molecular_hamiltonian import MolecularHamiltonian
 from hybrid_quantum_solver.quantum_krylov_solver import QuantumKrylovSolver
-from temple_bounds import _mean_and_variance
+from reachability import reachable_eigenpairs
+from temple_bounds import mean_and_variance
 
 
 @dataclass
@@ -73,10 +74,10 @@ def gap_bracket(mh: MolecularHamiltonian, m: int, e1: Optional[float] = None,
     solver = solver if solver is not None else QuantumKrylovSolver(mh)
     H = mh.qubit_hamiltonian.to_matrix(sparse=True).tocsc()
     _, states = solver.eigenstates(m, n_states=2)
-    th0, var0 = _mean_and_variance(H, states[0])
+    th0, var0 = mean_and_variance(H, states[0])
     if len(states) < 2:                                   # rank-1 subspace: no E_1 handle
         return GapBracket(m, -np.inf, np.inf, np.inf, th0, np.inf, np.inf, -np.inf, "self")
-    th1, var1 = _mean_and_variance(H, states[1])
+    th1, var1 = mean_and_variance(H, states[1])
     sig1 = float(np.sqrt(var1))
     if e1 is None:
         eps1, eps1_source = th1 - sig1, "self"
@@ -101,11 +102,8 @@ def gap_bracket_ladder(mh: MolecularHamiltonian, dims: Sequence[int], e1: Option
 def reachable_gap(mh: MolecularHamiltonian) -> float:
     """REFERENCE ONLY (dense, O(2^n)): exact gap between the two lowest HF-reachable eigenstates --
     the object the bracket certifies. For validation/demo on small systems, never the live path."""
-    H = mh.qubit_hamiltonian.to_matrix()
-    w, V = np.linalg.eigh(H)
-    hf = np.asarray(mh.hf_state().data, dtype=complex)
-    reach = w[np.abs(V.conj().T @ hf) ** 2 > 1e-10]
-    return float(reach[1] - reach[0])
+    w, _ = reachable_eigenpairs(mh)
+    return float(w[1] - w[0])
 
 
 if __name__ == "__main__":

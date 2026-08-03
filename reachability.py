@@ -23,9 +23,11 @@ encodes (specs/SPEC_symmetry_reachability.md, gated 9/9 on the square-H4 family)
                         level (population ~0.45, not ~1e-10), so there is no artifact to remove
                         AND the irrep labelling correctly refuses.
 
-The filter is therefore available exactly when it is needed. This module does NOT rewire the ~13
-threshold sites -- that is a separate change with its own blast radius. It provides the decision
-procedure and the honest availability check those sites will need.
+The filter is therefore available exactly when it is needed. This module does NOT change the
+DECISION PROCEDURE at the call sites -- swapping the threshold for the irrep filter is a separate
+change with its own blast radius. What it does own is the single implementation: the certified arc
+extracts its reachable sector through ``reachable_eigenpairs`` here, so when the filter does land
+it is one edit rather than eight.
 """
 from __future__ import annotations
 
@@ -41,6 +43,17 @@ SYMMETRY_BREAK_TOL = 1e-6
 # Tight enough that the forbidden-state residue collapses to the machine-zero floor (~1e-28); at
 # PySCFDriver's default 1e-9 the same residue sits at 5e-10 and is admitted as "reachable".
 TIGHT_SCF_CONV_TOL = 1e-13
+
+# The HF-reachable sector is defined by |<HF|psi_k>|^2 > tol. This is the CERTIFIED ARC's value,
+# shared by certified_gaps.py, certified_dipole.py, certified_noise.py and
+# hf_overlap_certificate.py -- but NOT by hf_overlap_subspace.py, which uses 1e-8. That divergence
+# is not cosmetic: at square H4 a = 1.1 A the two thresholds select DIFFERENT ground states (HF
+# overlap 2.25e-5 vs 0.667), so the d=1 and d=2 certificates whose head-to-head is
+# SPEC_hf_overlap_subspace's headline are certifying different targets there. Named here so the
+# divergence is visible and gated (tests/test_reachability_tolerance_spec.py); unifying it decides
+# which of two recorded findings is right and is deliberately left to a follow-up.
+# See specs/SPEC_reachability_tolerance.md.
+REACHABLE_TOL_CERTIFIED = 1e-10
 
 
 def scf_symmetry_status(atom: str, basis: str = "sto-3g",
@@ -106,12 +119,33 @@ def symmetry_filter_available(atom: str, basis: str = "sto-3g",
     return hf_orbital_irreps(atom, basis=basis, conv_tol=conv_tol) is not None
 
 
+def _dense_hf_projection(mh):
+    """(eigenvalues ascending, eigenvectors, HF populations) -- dense, O(2^n)."""
+    w, vecs = np.linalg.eigh(mh.qubit_hamiltonian.to_matrix())
+    u = np.asarray(mh.hf_state().data, dtype=complex)
+    return w, vecs, np.abs(vecs.conj().T @ u) ** 2
+
+
 def hf_population_spectrum(mh) -> np.ndarray:
     """|<HF|psi_k>|^2 over the full eigenbasis (dense, O(2^n)) -- validation scale only."""
-    H = mh.qubit_hamiltonian.to_matrix()
-    _, vecs = np.linalg.eigh(H)
-    u = np.asarray(mh.hf_state().data, dtype=complex)
-    return np.abs(vecs.conj().T @ u) ** 2
+    return _dense_hf_projection(mh)[2]
+
+
+def reachable_eigenpairs(mh, tol: float = REACHABLE_TOL_CERTIFIED):
+    """(energies, eigenvectors) of the HF-reachable sector, ascending -- dense, O(2^n).
+
+    THE one implementation of the ``|<HF|psi_k>|^2 > tol`` sector cut the certified arc runs on;
+    energies are in the ELECTRONIC frame (add ``mh.energy_offset`` for totals). REFERENCE ONLY --
+    it diagonalizes H exactly, so it is a validation oracle, never a live path.
+
+    The threshold is the known-broken criterion this module's docstring dissects; it lives here so
+    the eventual symmetry-filter replacement is one edit. Note the sector cut is what keeps a
+    CHARGED species honest (HeH+): the global lowest eigenvector sits in a different
+    particle-number sector, and only the reachable cut selects the state QKSD actually converges to.
+    """
+    w, vecs, pops = _dense_hf_projection(mh)
+    keep = pops > tol
+    return w[keep], vecs[:, keep]
 
 
 if __name__ == "__main__":

@@ -41,7 +41,8 @@ import numpy as np
 
 from hybrid_quantum_solver.molecular_hamiltonian import MolecularHamiltonian
 from hybrid_quantum_solver.quantum_krylov_solver import QuantumKrylovSolver
-from temple_bounds import _mean_and_variance
+from reachability import reachable_eigenpairs
+from temple_bounds import mean_and_variance
 
 
 def _one_norm(op, include_identity: bool) -> float:
@@ -75,10 +76,8 @@ def hamiltonian_one_norms(mh: MolecularHamiltonian, *,
 def reachable_E0_E1(mh: MolecularHamiltonian) -> Tuple[float, float]:
     """REFERENCE (dense): the two lowest HF-reachable eigenvalues (electronic frame) -- the coverage
     target E_0 and the oracle gap input E_1."""
-    w, V = np.linalg.eigh(mh.qubit_hamiltonian.to_matrix())
-    hf = np.asarray(mh.hf_state().data, dtype=complex)
-    reach = np.sort(w[np.abs(V.conj().T @ hf) ** 2 > 1e-10])
-    return float(reach[0]), float(reach[1])
+    w, _ = reachable_eigenpairs(mh)
+    return float(w[0]), float(w[1])
 
 
 def certified_half_width(lam_h: float, shots: float, z: float = 2.0) -> float:
@@ -98,7 +97,7 @@ def shot_noise_coverage(mh: MolecularHamiltonian, m: int, shots: float, trials: 
     solver = solver if solver is not None else QuantumKrylovSolver(mh)
     H = mh.qubit_hamiltonian.to_matrix(sparse=True).tocsc()
     psi0 = solver.eigenstates(m, n_states=1)[1][0]
-    th0, var0 = _mean_and_variance(H, psi0)
+    th0, var0 = mean_and_variance(H, psi0)
     h2_exact = var0 + th0 * th0
     E0, E1 = reachable_E0_E1(mh)
     lam_h, lam_h2 = hamiltonian_one_norms(mh)

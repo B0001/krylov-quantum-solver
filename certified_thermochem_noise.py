@@ -35,7 +35,7 @@ import numpy as np
 from certified_noise import hamiltonian_one_norms, reachable_E0_E1
 from hybrid_quantum_solver.molecular_hamiltonian import MolecularHamiltonian
 from hybrid_quantum_solver.quantum_krylov_solver import QuantumKrylovSolver
-from temple_bounds import _mean_and_variance
+from temple_bounds import mean_and_variance
 
 
 def _endpoint_stats(mh: MolecularHamiltonian, m: int):
@@ -44,7 +44,7 @@ def _endpoint_stats(mh: MolecularHamiltonian, m: int):
     solver = QuantumKrylovSolver(mh)
     H = mh.qubit_hamiltonian.to_matrix(sparse=True).tocsc()
     psi0 = solver.eigenstates(m, n_states=1)[1][0]
-    th0, var0 = _mean_and_variance(H, psi0)
+    th0, var0 = mean_and_variance(H, psi0)
     return th0, var0 + th0 * th0
 
 

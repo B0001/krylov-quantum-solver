@@ -44,7 +44,7 @@ from certified_dipole import spectral_width
 from certified_noise import certified_half_width, hamiltonian_one_norms
 from hybrid_quantum_solver.molecular_hamiltonian import MolecularHamiltonian
 from hybrid_quantum_solver.quantum_krylov_solver import QuantumKrylovSolver
-from temple_bounds import _mean_and_variance
+from temple_bounds import mean_and_variance
 
 
 def operator_one_norms(op: SparsePauliOp) -> Tuple[float, float]:
@@ -70,8 +70,8 @@ def dipole_noise_coverage(mh: MolecularHamiltonian, a_op: SparsePauliOp, m: int,
 
     _, states = solver.eigenstates(m, n_states=2)
     psi0, psi1 = states[0], states[1]
-    th0, var0 = _mean_and_variance(H, psi0)
-    th1, var1 = _mean_and_variance(H, psi1)
+    th0, var0 = mean_and_variance(H, psi0)
+    th1, var1 = mean_and_variance(H, psi1)
     ax = a_sparse @ psi0
     mu_exact = float((psi0.conj() @ ax).real)
     h2a_exact = float((ax.conj() @ ax).real)

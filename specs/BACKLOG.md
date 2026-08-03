@@ -901,7 +901,7 @@ hypothesis whose death is informative is worth more here than a safe one.
   Δ_lo is weak (LiH M=8–16) and sharp where healthy (M≥20) — pair with `gap_selfcheck` to know when
   Δ_lo is trustworthy. **Bug caught:** the reference must be the HF-*reachable* ground, not the
   global lowest eigenvector (a different particle-number sector for the charged HeH⁺ — G1 pins it).
-  100% reuse (`gap_bracket`, `_mean_and_variance`, `build_dipole_operators`). Gates G1–G4 in
+  100% reuse (`gap_bracket`, `mean_and_variance`, `build_dipole_operators`). Gates G1–G4 in
   `tests/test_certified_dipole_spec.py`; `certified_dipole.py`.
   → [`SPEC_certified_dipole.md`](SPEC_certified_dipole.md) (Davis–Kahan on QKSD + certified gap;
   sector-restricted, exact statevector, inherits the certified_gaps premise).
@@ -931,7 +931,7 @@ hypothesis whose death is informative is worth more here than a safe one.
   z·λ_H/√N (54→5.4→0.54 mHa as N×100) — **inflation buys coverage, shots buy tightness** (the
   shot-cost law, cf. the visibility law). **Boundary:** λ_{H²}≫λ_H (H4: 63 vs 10) so the Temple lower
   bound is the noise-expensive side; idealized i.i.d. Gaussian, oracle gap, can't see systematic
-  bias. Reuses `_mean_and_variance`. Gates G1–G4 in `tests/test_certified_noise_spec.py`;
+  bias. Reuses `mean_and_variance`. Gates G1–G4 in `tests/test_certified_noise_spec.py`;
   `certified_noise.py`. → [`SPEC_certified_noise.md`](SPEC_certified_noise.md) (Monte-Carlo coverage;
   the probabilistic counterpart to the exact-statevector certified arc).
 - [x] **The precision-cost crossover — near-term certified (1/ε²) vs FT-QPE (1/ε)** *(bridges the
