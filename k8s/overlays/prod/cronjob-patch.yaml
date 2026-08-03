@@ -1,0 +1,16 @@
+# JSON 6902 targeted at kind: CronJob. Paths are one level deeper than the Job
+# patch -- a CronJob nests its pod spec under /spec/jobTemplate/spec.
+#
+# Not suspended here: the weekly cross-check is the point of the prod overlay.
+- op: replace
+  path: /spec/jobTemplate/spec/template/spec/containers/0/resources/requests/cpu
+  value: "8"
+- op: replace
+  path: /spec/jobTemplate/spec/template/spec/containers/0/resources/requests/memory
+  value: 16Gi
+- op: replace
+  path: /spec/jobTemplate/spec/template/spec/containers/0/resources/limits/cpu
+  value: "8"
+- op: replace
+  path: /spec/jobTemplate/spec/template/spec/containers/0/resources/limits/memory
+  value: 16Gi

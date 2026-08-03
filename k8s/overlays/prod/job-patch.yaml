@@ -1,0 +1,20 @@
+# JSON 6902 targeted at kind: Job. cpu 8 here pairs with OMP_NUM_THREADS=8 in
+# the overlay's configMapGenerator -- change both or neither.
+- op: replace
+  path: /spec/backoffLimit
+  value: 3
+- op: replace
+  path: /spec/template/spec/containers/0/resources/requests/cpu
+  value: "8"
+- op: replace
+  path: /spec/template/spec/containers/0/resources/requests/memory
+  value: 16Gi
+- op: replace
+  path: /spec/template/spec/containers/0/resources/limits/cpu
+  value: "8"
+# Requests now equal limits -> Guaranteed QoS. Worth it here: these runs are
+# hours long, and a Burstable pod is the first evicted under node memory
+# pressure, which would throw away the whole benchmark.
+- op: replace
+  path: /spec/template/spec/containers/0/resources/limits/memory
+  value: 16Gi

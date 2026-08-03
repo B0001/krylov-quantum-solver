@@ -1,0 +1,72 @@
+# Krylov-vs-FCI benchmark table. One of the three validated gates named in
+# CLAUDE.md, so it is a meaningful "does this still reproduce" workload.
+#
+# Deliberately NOT run_sprint_benchmarks.sh: that script imports
+# orchestrate_hybrid_pipeline, which CLAUDE.md quarantines as the old broken
+# core kept only as a regression fixture. It also writes temp_runner.py into the
+# working directory, which readOnlyRootFilesystem forbids outright.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chem-benchmark-krylov
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 86400
+  activeDeadlineSeconds: 21600
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        # Makes the kubelet chown the PVC to gid 10001 so the non-root process
+        # can write data/krylov_benchmark.csv on a freshly provisioned volume.
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: benchmark
+          image: chem:0.1.0
+          imagePullPolicy: IfNotPresent
+          # Bare `python` is the venv interpreter -- it is first on PATH in the
+          # image, so there is no non-uv interpreter to hit by accident.
+          command: ["python", "benchmark_krylov.py"]
+          envFrom:
+            - configMapRef:
+                name: chem-env
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              # Must match OMP_NUM_THREADS in the ConfigMap. Changing one
+              # without the other silently degrades throughput.
+              cpu: "4"
+              memory: 8Gi
+            limits:
+              cpu: "4"
+              memory: 16Gi
+          volumeMounts:
+            - name: data
+              # Benchmarks write relative paths like data/krylov_benchmark.csv,
+              # resolved against the /app workdir.
+              mountPath: /app/data
+            - name: dmrg-tmp
+              mountPath: /app/.dmrg_tmp
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: chem-data
+        # block2 DMRG scratch. emptyDir, not the PVC: it is large, purely
+        # intermediate, and worthless after the run.
+        - name: dmrg-tmp
+          emptyDir: {}
+        # readOnlyRootFilesystem still needs a writable /tmp -- PySCF scratch
+        # and TMPDIR both land here.
+        - name: tmp
+          emptyDir: {}
