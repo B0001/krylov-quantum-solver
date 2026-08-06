@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "chem",
+  "project_id": "a0b1e487-144e-44d7-b88f-6e09c44b409d"
+}
