@@ -2,8 +2,9 @@
 """Emit certkit certificates from real QKSD Krylov energy bounds (certkit-jn1.1, jn1.3).
 
 The solver produces (eigenvector estimate, gap parameter, bracket). This wraps them in
-the certificate format and hands them to certkit's checker, which re-derives the bracket
-in interval arithmetic without importing anything from here.
+the certificate format and writes them to disk, then runs certkit's checker as a separate
+process over those files. Per certkit INTEGRATION.md the checker is consumed as a protocol,
+not imported: nothing here may call check() in-process.
 
 Nothing in this file is trusted: it is a producer. The only question it answers is
 whether the solver's bound survives an independent re-derivation.
@@ -13,15 +14,16 @@ Run:  PYTHONPATH=../certkit python certkit_bridge.py [H2|H4|H4-stretched|N2]
 from __future__ import annotations
 
 import json
+import re
+import subprocess
 import sys
 from pathlib import Path
 
 import numpy as np
 
-from certkit.checker import check
 from certkit.interval import Iv
 from certkit.operators import DENSE_LIMIT, decode_operator, encode_pauli, operator_ref
-from certkit.producer import _pad          # producer-side padding convention
+from certkit.producer import pad_claim     # public producer-side padding convention
 from certkit.schema import f2h, seal
 
 from hybrid_quantum_solver.molecular_hamiltonian import build_molecular_hamiltonian
@@ -127,14 +129,27 @@ def build_certificate(enc: dict, rule: str, x, lo: float, hi: float,
     return seal(cert)
 
 
-def report(tag: str, enc: dict, cert: dict, fci: float, out: Path, name: str) -> bool:
-    (out / f"{name}.json").write_text(json.dumps(cert, indent=2))
-    v = check(cert, enc)
-    print(f"  [{tag:19s}] {'VERIFIED' if v.ok else 'ABSTAIN '}  {v.reason}")
-    if v.ok:
-        lo, hi = v.enclosure
+def report(tag: str, cert: dict, fci: float, out: Path, name: str) -> bool:
+    """Write the certificate, then check it in a separate process over the files.
+
+    The verdict is the checker's exit status. This file is a producer and is
+    untrusted; it must not adjudicate its own claims in its own process.
+    """
+    cert_path = out / f"{name}.json"
+    cert_path.write_text(json.dumps(cert, indent=2))
+    proc = subprocess.run(
+        [sys.executable, "-m", "certkit.cli", "check",
+         str(cert_path), str(out / "operator.json")],
+        capture_output=True, text=True,
+    )
+    ok = proc.returncode == 0
+    out_text = proc.stdout.strip() or proc.stderr.strip()
+    print(f"  [{tag:19s}] {out_text.splitlines()[0] if out_text else '(no checker output)'}")
+    m = re.search(r"\[(-?[\d.eE+-]+), *(-?[\d.eE+-]+)\]", proc.stdout)
+    if ok and m:
+        lo, hi = float(m.group(1)), float(m.group(2))
         print(f"  {'':19s}   width {hi - lo:.3e}   exact inside: {lo <= fci <= hi}")
-    return v.ok
+    return ok
 
 
 def main() -> int:
@@ -164,13 +179,13 @@ def main() -> int:
               f"  -> premise {'holds' if sector_eps <= vals[1] else 'FAILS'}")
         # (1) the solver's bound transcribed as-is, with the sector's own separator
         lo = th0 - var0 / (sector_eps - th0) if sector_eps > th0 else -np.inf
-        report("temple/sector beta", enc,
+        report("temple/sector beta",
                build_certificate(enc, "temple_inertia", x, lo, th0, sector_eps),
                fci, out, "certificate_sector")
         # (2) same witness, separator taken over the whole matrix
         lo = th0 - var0 / (beta - th0)
-        pad = _pad(th0, 1e-9, len(x), th0 - lo)
-        ok = report("temple/matrix beta", enc,
+        pad = pad_claim(th0, 1e-9, len(x), th0 - lo)
+        ok = report("temple/matrix beta",
                     build_certificate(enc, "temple_inertia", x, lo - pad, th0 + pad, beta),
                     fci, out, "certificate")
     else:
@@ -178,9 +193,9 @@ def main() -> int:
 
     # The loose route needs no gap and no factorisation, and always applies.
     lo = gershgorin_lower(enc)
-    pad = _pad(th0, 1e-9, len(x), th0 - lo)
+    pad = pad_claim(th0, 1e-9, len(x), th0 - lo)
     name = "certificate" if not ok else "certificate_gershgorin"
-    ok |= report("gershgorin_rayleigh", enc,
+    ok |= report("gershgorin_rayleigh",
                  build_certificate(enc, "gershgorin_rayleigh", x, lo - pad, th0 + pad),
                  fci, out, name)
     return 0 if ok else 1
