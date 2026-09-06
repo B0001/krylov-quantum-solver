@@ -25,6 +25,10 @@ GATES = {
     "test_assertfail.py": "def test_bad():\n    assert False\n",
     "test_segv.py": "import os, signal\n\nos.kill(os.getpid(), signal.SIGSEGV)\n",
     "test_oom.py": "import os, signal\n\nos.kill(os.getpid(), signal.SIGKILL)\n",
+    # A gate whose optional dependency is missing: skips at module level, collects nothing,
+    # and so exits 5 -- which is neither a pass nor a failure.
+    "test_uncollected.py": ("import pytest\n\n"
+                            "pytest.skip('optional dep absent', allow_module_level=True)\n"),
 }
 
 
@@ -41,7 +45,7 @@ def report(tmp_path_factory):
     proc = subprocess.run(["bash", str(RUNNER)], cwd=work, env=env,
                           capture_output=True, text=True, timeout=300)
     return {ln.split()[1].rsplit("/", 1)[-1]: ln
-            for ln in proc.stdout.splitlines() if ln.startswith(("PASS", "FAIL"))}
+            for ln in proc.stdout.splitlines() if ln.startswith(("PASS", "FAIL", "SKIP"))}
 
 
 def test_passing_gate_still_passes(report):
@@ -65,6 +69,17 @@ def test_segfault_is_named_not_silently_failed(report):
 def test_oom_kill_is_named(report):
     line = report["test_oom.py"]
     assert "exit=137" in line and "SIGKILL" in line, line
+
+
+def test_uncollected_gate_is_skipped_not_failed(report):
+    """A gate that collected nothing (exit 5, optional dependency absent) did not run.
+
+    Failing it would turn a fresh clone red for a dependency the repo keeps optional;
+    passing it would cache a green for a gate that never executed. Neither is honest.
+    """
+    line = report["test_uncollected.py"]
+    assert line.startswith("SKIP"), line
+    assert "nothing collected" in line, line
 
 
 def test_empty_log_is_called_out(report):

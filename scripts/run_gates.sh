@@ -60,6 +60,15 @@ run_gate() {
         echo "PASS  $f  (${elapsed}s)"
         return 0
     fi
+    # An UNCOLLECTED gate is not a FAILED gate either. pytest exits 5 when it collected
+    # nothing, which here means a gate skipped at module level because an optional dependency
+    # is absent. Caching that as a pass would hide a gate that never ran; failing it turns a
+    # fresh clone red for a dependency the repo deliberately keeps optional. Say so instead,
+    # and do not cache it, so it runs again once the dependency is there.
+    if [ "$rc" -eq 5 ]; then
+        echo "SKIP  $f  (${elapsed}s)  nothing collected -- optional dependency missing?"
+        return 0
+    fi
     # A KILLED gate is not a FAILED gate. pytest exits 1-5 for test outcomes; a signal exits
     # 128+N. Reporting only "FAIL" made a segfault indistinguishable from an assertion failure
     # -- which matters most for 139, since the whole per-process design here exists to stop

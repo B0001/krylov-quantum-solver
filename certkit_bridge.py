@@ -44,8 +44,9 @@ KRYLOV_DIM = 8
 class Verdict(NamedTuple):
     """One certificate, and what the independent checker said about it.
 
-    ``line`` is the checker's first stdout line, verbatim: it is the only thing that tells
-    an ABSTAIN apart from a crash, since both exit 1 and a crash prints nothing.
+    ``line`` is the checker's first stdout line, verbatim, or a ``CRASH``-prefixed
+    diagnostic if it printed no verdict at all. Both an ABSTAIN and a crash exit 1, so
+    the line is the only thing that tells them apart.
     """
 
     name: str
@@ -150,15 +151,23 @@ def check_certificate(cert_path: Path, operator_path: Path) -> tuple[bool, str]:
     """Run the checker as a separate process over the files, and report what it said.
 
     The verdict is the checker's exit status. This file is a producer and is
-    untrusted; it must not adjudicate its own claims in its own process. Exit 1 covers
-    both ABSTAIN and a crash, so the returned line matters: a crash leaves it empty.
+    untrusted; it must not adjudicate its own claims in its own process.
+
+    Exit 1 covers both ABSTAIN and a crash, and confusing the two would let a broken
+    checker pass for an expected abstention. The checker prints its verdict to stdout
+    and nothing else there, so an empty stdout means it died: that is returned with a
+    CRASH prefix, never as a bare traceback line, which a caller matching on the text
+    would otherwise read as a verdict.
     """
     proc = subprocess.run(
         [sys.executable, "-m", "certkit.cli", "check", str(cert_path), str(operator_path)],
         capture_output=True, text=True,
     )
-    out_text = proc.stdout.strip() or proc.stderr.strip()
-    return proc.returncode == 0, out_text.splitlines()[0] if out_text else ""
+    verdict = proc.stdout.strip().splitlines()
+    if verdict:
+        return proc.returncode == 0, verdict[0]
+    err = proc.stderr.strip().splitlines()
+    return False, f"CRASH  {err[-1] if err else '(no output at all)'}"
 
 
 def emit(enc: dict, rule: str, x, lo: float, hi: float, out: Path, name: str,

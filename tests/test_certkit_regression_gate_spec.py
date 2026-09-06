@@ -65,27 +65,31 @@ OUT = Path(__file__).resolve().parent.parent / "certkit_out"
 # premise by inertia count, which is the honest outcome and worth pinning in both directions.
 # Only the status is pinned, never the reason string: the reason varies with Pauli term
 # ordering, which is not stable across processes (PYTHONHASHSEED).
+# Each certificate maps to (expected checker status, how far below exact its certified floor
+# may sit). The floor needs its own pin because the checker accepts ANY lower bound below the
+# one it re-derives -- a certificate claiming lambda_min > -1e6 Ha is perfectly VERIFIED and
+# perfectly useless. Values are ~2x what the producer emits today.
 EXPECTED = {
     "H2": (-1.8523881735695822, {
-        "certificate_sector": "ABSTAIN",
-        "certificate_temple": "VERIFIED",
-        "certificate_gershgorin": "VERIFIED",
+        "certificate_sector": ("ABSTAIN", None),
+        "certificate_temple": ("VERIFIED", 1e-8),
+        "certificate_gershgorin": ("VERIFIED", 0.2),
     }),
     "H4": (-4.728206889123854, {
-        "certificate_sector": "ABSTAIN",
-        "certificate_temple": "VERIFIED",
-        "certificate_gershgorin": "VERIFIED",
+        "certificate_sector": ("ABSTAIN", None),
+        "certificate_temple": ("VERIFIED", 1e-4),
+        "certificate_gershgorin": ("VERIFIED", 1.0),
     }),
     # Self mode gives no finite Temple bound here (eps <= theta), so no sector certificate is
     # emitted at all -- certificate-or-abstention, applied by the producer.
     "H4-stretched": (-3.04433126964987, {
-        "certificate_temple": "VERIFIED",
-        "certificate_gershgorin": "VERIFIED",
+        "certificate_temple": ("VERIFIED", 2e-2),
+        "certificate_gershgorin": ("VERIFIED", 1.5),
     }),
     # 12 qubits: n = 4096 exceeds certkit's DENSE_LIMIT, so there is no inertia route and the
     # loose Gershgorin enclosure (2.6 Ha wide) is all this case can certify. G4 is the only
-    # thing standing between that certificate and vacuity.
-    "N2": (-11.392972038179622, {"certificate_gershgorin": "VERIFIED"}),
+    # thing standing between that certificate and vacuity, at both ends.
+    "N2": (-11.392972038179622, {"certificate_gershgorin": ("VERIFIED", 3.0)}),
 }
 
 _CACHE = {}
@@ -103,12 +107,15 @@ def test_G1_every_certificate_gets_the_verdict_it_is_pinned_to():
     for case, (_, expected) in EXPECTED.items():
         _, verdicts = _case(case)
         for v in verdicts:
-            # Exit 1 means ABSTAIN or a crash; only the output line tells them apart.
-            assert v.line, f"{case}/{v.name}: checker produced no verdict line -- it crashed"
             got = "VERIFIED" if v.ok else "ABSTAIN"
-            assert got == expected.get(v.name), (
+            # Exit 1 means ABSTAIN *or* a crash, and a crash must never be accepted as an
+            # expected abstention. The checker's own word has to agree with its exit code.
+            assert v.line.startswith(got), (
+                f"{case}/{v.name} ({v.rule}): exit code says {got}, the checker's output "
+                f"does not -- {v.line}")
+            assert got == expected[v.name][0], (
                 f"{case}/{v.name} ({v.rule}): checker said {got}, pinned "
-                f"{expected.get(v.name)} -- {v.line}")
+                f"{expected[v.name][0]} -- {v.line}")
 
 
 def test_G2_the_emitted_certificate_set_is_exactly_the_pinned_set():
@@ -132,19 +139,26 @@ def test_G3_every_verified_enclosure_contains_the_exact_energy():
                     f"enclosure [{v.lo!r}, {v.hi!r}]")
 
 
-def test_G4_every_verified_upper_bound_is_within_chemical_accuracy():
+def test_G4_every_verified_enclosure_is_still_tight_at_both_ends():
     """What makes this a regression gate and not only a soundness check.
 
-    The certified upper bound is the solver's energy. The checker will happily verify a
-    sound enclosure around a badly wrong one -- see G5.
+    The certified upper bound is the solver's energy, so it is gated against chemical
+    accuracy. The certified floor is gated too, and separately: the checker accepts any
+    lower bound below the one it re-derives, so an enclosure can stay sound while going
+    slack enough to say nothing. Both ends can be VERIFIED and worthless -- see G5.
     """
-    for case, (_, _expected) in EXPECTED.items():
+    for case, (_, expected) in EXPECTED.items():
         lam, verdicts = _case(case)
         for v in verdicts:
-            if v.ok:
-                assert v.hi - lam <= CHEMICAL_ACCURACY, (
-                    f"{case}/{v.name} ({v.rule}): certified upper bound {v.hi!r} is "
-                    f"{v.hi - lam:.3e} Ha above exact {lam!r}")
+            if not v.ok:
+                continue
+            assert v.hi - lam <= CHEMICAL_ACCURACY, (
+                f"{case}/{v.name} ({v.rule}): certified upper bound {v.hi!r} is "
+                f"{v.hi - lam:.3e} Ha above exact {lam!r}")
+            max_slack = expected[v.name][1]
+            assert lam - v.lo <= max_slack, (
+                f"{case}/{v.name} ({v.rule}): certified floor {v.lo!r} sits "
+                f"{lam - v.lo:.3e} Ha below exact, pinned at {max_slack:.3e}")
 
 
 def test_G5_a_noise_witness_is_verified_by_the_checker_and_caught_by_G4():
