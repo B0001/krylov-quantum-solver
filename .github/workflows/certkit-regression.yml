@@ -1,0 +1,60 @@
+name: certkit regression certificates
+
+# The sibling workflow (certkit-conformance.yml) gates the certkit PIN: it proves the pinned
+# checker still passes certkit's own conformance suite. This one is the other half. The
+# checker being known-good is worth nothing until something asks what it says about THIS
+# repo's certificates, so this job runs the producer for real -- pyscf, qiskit, the Krylov
+# solve -- and has every certificate it emits checked out of process, exactly as a third
+# party would. See specs/SPEC_certkit_regression_gate.md.
+#
+# That costs a full solver install (~130 MB of wheels) and about a minute of compute, which
+# is why it is separate from the pin gate, which needs neither.
+
+on:
+  push:
+    paths:
+      - "hybrid_quantum_solver/**"
+      - "temple_bounds.py"
+      - "certkit_bridge.py"
+      - "tests/test_certkit_regression_gate_spec.py"
+      - "specs/SPEC_certkit_regression_gate.md"
+      - "pyproject.toml"
+      - ".github/workflows/certkit-regression.yml"
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  certificates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # v7 is the newest moving major tag setup-uv publishes; later releases are tagged
+      # only as exact versions.
+      - uses: astral-sh/setup-uv@v7
+
+      # The certkit extra is an exact git tag and is deliberately absent from uv.lock (the
+      # pin is a deliberate act -- see pyproject.toml), so this installs from pyproject
+      # rather than syncing the lock. `uv pip` keeps CLAUDE.md's rule that bare pip and bare
+      # python are never invoked. Editable, so the top-level modules the gate imports
+      # (certkit_bridge, temple_bounds) resolve the same way they do locally.
+      - name: Install the solver and the pinned checker
+        run: |
+          uv venv --python 3.13
+          uv pip install -e ".[certkit,test]"
+
+      # --no-sync: the environment above was built with `uv pip`, and `uv run` would
+      # otherwise re-sync it from uv.lock and drop the certkit extra. `python -m pytest`
+      # (not `pytest`) puts the repo root on sys.path, which is how the suite imports its
+      # top-level modules -- same invocation as the Makefile.
+      - name: Every emitted certificate must pass the independent checker
+        run: uv run --no-sync python -m pytest tests/test_certkit_regression_gate_spec.py -q
+
+      # A failing gate is a claim that stopped verifying. Keep the evidence.
+      - name: Keep the certificates when the gate fails
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: certificates
+          path: certkit_out/
+          if-no-files-found: warn

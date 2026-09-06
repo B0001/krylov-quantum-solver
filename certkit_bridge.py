@@ -9,15 +9,17 @@ not imported: nothing here may call check() in-process.
 Nothing in this file is trusted: it is a producer. The only question it answers is
 whether the solver's bound survives an independent re-derivation.
 
-Run:  pip install -e ".[certkit]"  then  python certkit_bridge.py [H2|H4|H4-stretched|N2]
+Run:  uv pip install -e ".[certkit]"  then  uv run python certkit_bridge.py [H2|H4|H4-stretched|N2]
+
+The gate over what this emits is tests/test_certkit_regression_gate_spec.py.
 """
 from __future__ import annotations
 
 import json
-import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 import numpy as np
 
@@ -37,6 +39,21 @@ CASES = {
     "N2": dict(atom="N 0 0 0; N 0 0 1.1", active_electrons=6, active_orbitals=6),
 }
 KRYLOV_DIM = 8
+
+
+class Verdict(NamedTuple):
+    """One certificate, and what the independent checker said about it.
+
+    ``line`` is the checker's first stdout line, verbatim: it is the only thing that tells
+    an ABSTAIN apart from a crash, since both exit 1 and a crash prints nothing.
+    """
+
+    name: str
+    rule: str
+    ok: bool
+    line: str
+    lo: float
+    hi: float
 
 
 def encode_hamiltonian(mh) -> dict:
@@ -129,34 +146,41 @@ def build_certificate(enc: dict, rule: str, x, lo: float, hi: float,
     return seal(cert)
 
 
-def report(tag: str, cert: dict, fci: float, out: Path, name: str) -> bool:
-    """Write the certificate, then check it in a separate process over the files.
+def check_certificate(cert_path: Path, operator_path: Path) -> tuple[bool, str]:
+    """Run the checker as a separate process over the files, and report what it said.
 
     The verdict is the checker's exit status. This file is a producer and is
-    untrusted; it must not adjudicate its own claims in its own process.
+    untrusted; it must not adjudicate its own claims in its own process. Exit 1 covers
+    both ABSTAIN and a crash, so the returned line matters: a crash leaves it empty.
     """
-    cert_path = out / f"{name}.json"
-    cert_path.write_text(json.dumps(cert, indent=2))
     proc = subprocess.run(
-        [sys.executable, "-m", "certkit.cli", "check",
-         str(cert_path), str(out / "operator.json")],
+        [sys.executable, "-m", "certkit.cli", "check", str(cert_path), str(operator_path)],
         capture_output=True, text=True,
     )
-    ok = proc.returncode == 0
     out_text = proc.stdout.strip() or proc.stderr.strip()
-    print(f"  [{tag:19s}] {out_text.splitlines()[0] if out_text else '(no checker output)'}")
-    m = re.search(r"\[(-?[\d.eE+-]+), *(-?[\d.eE+-]+)\]", proc.stdout)
-    if ok and m:
-        lo, hi = float(m.group(1)), float(m.group(2))
-        print(f"  {'':19s}   width {hi - lo:.3e}   exact inside: {lo <= fci <= hi}")
-    return ok
+    return proc.returncode == 0, out_text.splitlines()[0] if out_text else ""
 
 
-def main() -> int:
-    case = sys.argv[1] if len(sys.argv) > 1 else "H2"
+def emit(enc: dict, rule: str, x, lo: float, hi: float, out: Path, name: str,
+         beta: float | None = None) -> Verdict:
+    """Write one certificate, then have it checked independently over the files."""
+    cert = build_certificate(enc, rule, x, lo, hi, beta)
+    cert_path = out / f"{name}.json"
+    cert_path.write_text(json.dumps(cert, indent=2))
+    ok, line = check_certificate(cert_path, out / "operator.json")
+    print(f"  [{name:23s}] {line or '(no checker output)'}")
+    return Verdict(name, rule, ok, line, float(lo), float(hi))
+
+
+def run_case(case: str, out: Path) -> tuple[float, list[Verdict]]:
+    """Emit every certificate this case supports, and check each one independently.
+
+    Returns the exact electronic-frame lambda_min -- for comparison only, no certificate
+    depends on it -- and one Verdict per certificate actually emitted.
+    """
     mh = build_molecular_hamiltonian(**CASES[case])
     H = mh.qubit_hamiltonian.to_matrix(sparse=True).tocsc()
-    fci = mh.ground_state_energy() - mh.energy_offset     # comparison only
+    lam = mh.ground_state_energy() - mh.energy_offset     # comparison only
 
     enc = encode_hamiltonian(mh)
     x, th0, var0, sector_eps, info = krylov_witness(H, mh, KRYLOV_DIM)
@@ -166,39 +190,57 @@ def main() -> int:
     print(f"  dim {n}   pauli terms {len(enc['terms'])}   krylov_dim {KRYLOV_DIM}")
     print(f"  discarded imaginary weight  {info['imag_weight']:.3e}")
     print(f"  witness variance            {var0:.3e}")
-    print(f"  exact lambda_min            {fci!r}")
+    print(f"  exact lambda_min            {lam!r}")
 
-    out = Path("certkit_out") / case
     out.mkdir(parents=True, exist_ok=True)
     (out / "operator.json").write_text(json.dumps(enc, indent=2))
 
-    ok = False
+    verdicts: list[Verdict] = []
     if n <= DENSE_LIMIT:
         beta, vals = full_space_beta(H)
         print(f"  sector eps {sector_eps:.6f} vs matrix lambda_2 {vals[1]:.6f}"
               f"  -> premise {'holds' if sector_eps <= vals[1] else 'FAILS'}")
-        # (1) the solver's bound transcribed as-is, with the sector's own separator
-        lo = th0 - var0 / (sector_eps - th0) if sector_eps > th0 else -np.inf
-        report("temple/sector beta",
-               build_certificate(enc, "temple_inertia", x, lo, th0, sector_eps),
-               fci, out, "certificate_sector")
+        # (1) the solver's bound transcribed as-is, with the sector's own separator.
+        # Temple says nothing finite unless eps > theta -- a different comparison from the
+        # premise printed above, and the one that decides whether a certificate exists at
+        # all. When it fails, the honest output is no certificate: -inf is "valid but
+        # vacuous" in temple_bounds' vocabulary, and certkit refuses non-finite floats.
+        if sector_eps > th0:
+            lo = th0 - var0 / (sector_eps - th0)
+            verdicts.append(emit(enc, "temple_inertia", x, lo, th0, out,
+                                 "certificate_sector", beta=sector_eps))
+        else:
+            print(f"  [{'certificate_sector':23s}] not emitted: sector eps {sector_eps:.6f}"
+                  f" <= theta {th0:.6f}, so Temple gives no finite bound")
         # (2) same witness, separator taken over the whole matrix
         lo = th0 - var0 / (beta - th0)
         pad = pad_claim(th0, 1e-9, len(x), th0 - lo)
-        ok = report("temple/matrix beta",
-                    build_certificate(enc, "temple_inertia", x, lo - pad, th0 + pad, beta),
-                    fci, out, "certificate")
+        verdicts.append(emit(enc, "temple_inertia", x, lo - pad, th0 + pad, out,
+                             "certificate_temple", beta=beta))
     else:
         print(f"  n > DENSE_LIMIT ({DENSE_LIMIT}): no inertia route, so no gap discharge")
 
     # The loose route needs no gap and no factorisation, and always applies.
     lo = gershgorin_lower(enc)
     pad = pad_claim(th0, 1e-9, len(x), th0 - lo)
-    name = "certificate" if not ok else "certificate_gershgorin"
-    ok |= report("gershgorin_rayleigh",
-                 build_certificate(enc, "gershgorin_rayleigh", x, lo - pad, th0 + pad),
-                 fci, out, name)
-    return 0 if ok else 1
+    verdicts.append(emit(enc, "gershgorin_rayleigh", x, lo - pad, th0 + pad, out,
+                         "certificate_gershgorin"))
+
+    for v in verdicts:
+        if v.ok:
+            print(f"  {v.name:23s}   width {v.hi - v.lo:.3e}"
+                  f"   exact inside: {v.lo <= lam <= v.hi}")
+    return lam, verdicts
+
+
+def main() -> int:
+    case = sys.argv[1] if len(sys.argv) > 1 else "H2"
+    _, verdicts = run_case(case, Path("certkit_out") / case)
+    # "Some route verified" is weaker than "this energy is certified". The Gershgorin route
+    # needs no gap, always applies, and certifies [gershgorin_lower(H), <x|H|x>] for ANY unit
+    # vector x -- noise included. What the certificates are actually worth is decided per
+    # route and against a reference, by tests/test_certkit_regression_gate_spec.py, not here.
+    return 0 if any(v.ok for v in verdicts) else 1
 
 
 if __name__ == "__main__":

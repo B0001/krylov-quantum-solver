@@ -5,9 +5,9 @@ name: certkit conformance
 # this gates the pin itself: if the certkit version named in pyproject stops
 # passing its own conformance suite, that is this repo's problem, not certkit's.
 #
-# Deliberately not here: running certkit_bridge.py end to end. That needs
-# qiskit and pyscf and belongs with the regression-certificate gate, which is
-# tracked separately.
+# Deliberately not here: running certkit_bridge.py end to end. That needs qiskit
+# and pyscf, and now lives in certkit-regression.yml -- which checks every
+# certificate this repo emits against the checker this job vouches for.
 
 on:
   push:
