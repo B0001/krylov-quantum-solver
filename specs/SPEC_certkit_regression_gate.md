@@ -11,8 +11,9 @@
 independent checker. Nothing enforced that the answer stayed *yes*. Claim: every certificate
 this repo's producer emits still verifies under the exact certkit release pinned in
 `pyproject.toml`, and the energy each verified certificate certifies is still within chemical
-accuracy of the exact reachable minimum — checked automatically, on every push, by a checker
-that never shares a process with the solver. Falsifiable at machine precision: one certificate
+accuracy of the exact lowest eigenvalue of the qubit matrix — checked automatically, on every
+push, by a checker that never shares a process with the solver. Falsifiable at machine
+precision: one certificate
 that stops verifying, one route that silently stops being emitted, or one certified upper
 bound that drifts past 1.6 mHa fails the gate.
 
@@ -55,6 +56,14 @@ the exact git tag from `pyproject.toml` — and runs this gate file.
 (`mh.ground_state_energy() - mh.energy_offset`), itself cross-checked against independent
 PySCF FCI in `tests/test_reference_energies.py`. Pinned as a literal *and* re-derived at test
 time, so neither the pin nor the derivation can drift alone.
+
+Note which minimum that is, because this repo has been bitten by the word before (see the
+BACKLOG entry "'Reachable' means two different things inside the certified arc").
+`ground_state_energy()` is `eigvalsh(qubit_hamiltonian)[0]`: the **global** minimum over every
+symmetry sector, not the HF-reachable one that `SPEC_temple_bracket.md` brackets. That is the
+right reference here — a `lambda_min_enclosure` certificate is a claim about the whole matrix,
+which is also why the Temple sector route cannot discharge its premise (G1). It does mean the
+number gated here is not the one the temple_bracket gates compare against.
 
 ## 4. Public interface
 
@@ -139,3 +148,35 @@ information where it means something and avoids the pad where it does not.
 - Byte-reproducible certificates. The producer's Pauli term ordering varies with
   `PYTHONHASHSEED`, so certificate and operator are only valid as a same-run pair. The gate
   regenerates both together, which sidesteps it; committing golden certificates would not.
+
+## 8. Caveats and risks
+
+- **R1 — the gate catches a broken solver, not a degraded one.** G4's threshold is chemical
+  accuracy on a Rayleigh quotient, which is quadratically insensitive to witness error: 1.6 mHa
+  is a 2–4% wrong eigenvector (N2 tightest at 2.3%). Sized to be a regression gate, not a
+  precision monitor.
+- **R2 — the sector certificates are gated on status only.** G3/G4 skip anything that
+  abstained, so their *contents* are unconstrained: a sector certificate claiming λ_min ∈
+  [+1000, +2000] Ha would still abstain, still match the pin, and still pass. Acceptable while
+  the route is a self-mode experiment nobody consumes; not acceptable if anything starts
+  relying on it.
+- **R3 — `krylov_witness` picks the real or imaginary part on `imag_weight < 0.5`.** LAPACK
+  fixes no global-phase convention, so a different BLAS could take the other branch and change
+  the witness. Not observed (green on macOS/Accelerate and linux/OpenBLAS, and the closest case
+  is H4-stretched at 0.256), but it is the one genuinely platform-sensitive knob in the chain.
+- **R4 — the pinned references drift with BLAS threading**, measured at 5.7e-14 Ha on N2
+  between thread counts. G3's 1e-6 tolerance is ~2 decades looser than it needs to be; that
+  slack is deliberate, and it is the reason a *real* Hamiltonian-builder change still trips it
+  (a 0.01 Å bond-length change moves the reference by ~1e-3).
+- The gate writes into `certkit_out/` in the working tree rather than `tmp_path`, unlike every
+  other file-writing test here, so a CI failure can upload the certificates as artifacts. It
+  overwrites only what it emits: stale files from earlier runs are not cleared.
+
+## 9. Deliverables
+
+- `certkit_bridge.py` — `Verdict`, `check_certificate`, `emit`, `run_case` (+ `__main__`).
+- `tests/test_certkit_regression_gate_spec.py` — gates G1–G5.
+- `.github/workflows/certkit-regression.yml` — the CI job.
+- `scripts/run_gates.sh` — exit 5 (nothing collected) reported as SKIP, not FAIL; covered by
+  `tests/test_gate_runner.py`.
+- `BACKLOG.md` entry recording what the gate proved about the checker's own limits.

@@ -4,7 +4,9 @@ CI gate).
 
 Claim: every certificate this repo's producer emits still verifies under the exact certkit
 release pinned in pyproject.toml, and the energy each verified certificate certifies is still
-within chemical accuracy of the exact reachable minimum. The checker runs out of process over
+within chemical accuracy of the exact lowest eigenvalue of the qubit matrix -- the GLOBAL one
+over every symmetry sector, not the HF-reachable minimum SPEC_temple_bracket.md brackets; a
+lambda_min_enclosure is a claim about the whole matrix. The checker runs out of process over
 the files, per certkit's INTEGRATION.md -- nothing here imports check().
 
 Why the checker is not enough on its own, and why G4 exists: the gershgorin_rayleigh route

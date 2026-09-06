@@ -16,6 +16,9 @@ on:
       - "hybrid_quantum_solver/**"
       - "temple_bounds.py"
       - "certkit_bridge.py"
+      # A pytest11 entry point, so it is imported on every pytest run in this environment:
+      # break it and the gate dies before collecting a single test.
+      - "pytest_invariants/**"
       - "tests/test_certkit_regression_gate_spec.py"
       - "specs/SPEC_certkit_regression_gate.md"
       - "pyproject.toml"
@@ -30,8 +33,12 @@ jobs:
       - uses: actions/checkout@v7
 
       # v7 is the newest moving major tag setup-uv publishes; later releases are tagged
-      # only as exact versions.
+      # only as exact versions. `version` is pinned because without it setup-uv installs
+      # whatever uv is latest that day, which is a moving resolver in a job whose entire
+      # premise is a pinned checker. 0.12.3 is the version this gate was verified against.
       - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.12.3"
 
       # The certkit extra is an exact git tag and is deliberately absent from uv.lock (the
       # pin is a deliberate act -- see pyproject.toml), so this installs from pyproject

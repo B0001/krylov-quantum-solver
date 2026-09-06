@@ -515,6 +515,29 @@ hypothesis whose death is informative is worth more here than a safe one.
 
 ## Done
 
+- [x] **An independent checker's VERIFIED is not, by itself, evidence about the producer**
+  *(found 2026-09-06 while gating certkit_bridge's certificates in CI)* — **DONE.** The premise
+  behind consuming certkit as a protocol is that an out-of-process checker re-deriving the claim
+  from the certificate and the operator alone is a real check on the solver. For one of the two
+  routes this repo emits, it is not. `gershgorin_rayleigh` certifies
+  `[gershgorin_lower(H), ⟨x|H|x⟩]`, a true enclosure for **any** unit vector: a witness of pure
+  random noise, **0.84 Ha above the ground state** (θ = −1.0103 vs λ_min = −1.8524 on H₂), is
+  VERIFIED, exit 0. It is also the *only* route above certkit's `DENSE_LIMIT` = 256, so N₂
+  CAS(6,6) has no other. `temple_inertia` does reject the same witness ("inverted claimed
+  enclosure") — θ rising above β makes the Temple bound meaningless — so the discriminating
+  power comes from the **gap premise**, not from the checker being independent. **Consequence:**
+  soundness from the checker (G3), correctness from a pinned reference (G4), and the certified
+  floor needs its own pin, because the checker accepts any lower bound beneath the one it
+  re-derives — an enclosure claiming λ_min > −1e6 Ha is VERIFIED and useless. **Second finding,
+  from adversarial review:** exit 1 means ABSTAIN *or* crash, and a consumer that falls back to
+  stderr when stdout is empty cannot tell them apart — a checker crashing on a certificate
+  pinned ABSTAIN passed silently until G1 was made to compare the checker's own verdict line
+  against its exit code.
+  → [`SPEC_certkit_regression_gate.md`](SPEC_certkit_regression_gate.md) (gates G1–G5 in
+  `tests/test_certkit_regression_gate_spec.py`; electronic frame, global λ_min and **not** the
+  reachable-sector one, coverage is the producer's four cases until certificate emission reaches
+  the solver's return path).
+
 - [x] **Falsifying my own guard: the self-mode subspace floor is heuristic, not rigorous, for
   d ≥ 2** *(a parallel adversarial falsification sweep auditing PRs #20/#21)* — the self-mode floor
   θ_d − σ_d can exceed the true reachable E_d (linear H₆ R=1.2 Å d=3: β_self=−2.251 > −2.583). A

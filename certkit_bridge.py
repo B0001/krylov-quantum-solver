@@ -249,6 +249,11 @@ def main() -> int:
     # needs no gap, always applies, and certifies [gershgorin_lower(H), <x|H|x>] for ANY unit
     # vector x -- noise included. What the certificates are actually worth is decided per
     # route and against a reference, by tests/test_certkit_regression_gate_spec.py, not here.
+    #
+    # This disjunction is now over every emitted certificate, including the sector one, whose
+    # verdict the pre-refactor code dropped on the floor. No observable change -- the sector
+    # route has never verified -- but it is a wider disjunction than what it replaced, so say
+    # so rather than let a reader assume the old exclusion still holds.
     return 0 if any(v.ok for v in verdicts) else 1
 
 
