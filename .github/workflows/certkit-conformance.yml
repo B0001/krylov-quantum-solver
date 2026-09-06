@@ -1,0 +1,50 @@
+name: certkit conformance
+
+# This repo emits certificates (certkit_bridge.py) that an independent checker
+# verifies. The guarantee is only worth what the pinned checker is worth, so
+# this gates the pin itself: if the certkit version named in pyproject stops
+# passing its own conformance suite, that is this repo's problem, not certkit's.
+#
+# Deliberately not here: running certkit_bridge.py end to end. That needs
+# qiskit and pyscf and belongs with the regression-certificate gate, which is
+# tracked separately.
+
+on:
+  push:
+    paths: ["certkit_bridge.py", "pyproject.toml", ".github/workflows/certkit-conformance.yml"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read the certkit pin from pyproject
+        id: pin
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import re, pathlib
+          text = pathlib.Path("pyproject.toml").read_text()
+          m = re.search(r'certkit @ git\+https://github\.com/B0001/certkit@(\S+?)"', text)
+          assert m, "no certkit pin found in pyproject.toml"
+          print(f"ref={m.group(1)}")
+          PY
+
+      - name: Check out the pinned certkit for its conformance suite
+        uses: actions/checkout@v7
+        with:
+          repository: B0001/certkit
+          ref: ${{ steps.pin.outputs.ref }}
+          path: .certkit-pinned
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install only the pinned checker, nothing else
+        run: pip install ./.certkit-pinned
+
+      - name: Conformance suite against the pinned checker
+        run: python .certkit-pinned/conformance/run.py --checker certkit

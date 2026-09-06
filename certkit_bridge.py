@@ -9,7 +9,7 @@ not imported: nothing here may call check() in-process.
 Nothing in this file is trusted: it is a producer. The only question it answers is
 whether the solver's bound survives an independent re-derivation.
 
-Run:  PYTHONPATH=../certkit python certkit_bridge.py [H2|H4|H4-stretched|N2]
+Run:  pip install -e ".[certkit]"  then  python certkit_bridge.py [H2|H4|H4-stretched|N2]
 """
 from __future__ import annotations
 

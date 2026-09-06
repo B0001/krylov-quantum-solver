@@ -35,6 +35,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# certkit_bridge.py emits certificates for the independent checker to verify.
+# Pinned to an exact tag on purpose: the checker's value is that it is a fixed,
+# independent artifact, so tracking a moving ref would defeat it. The bridge
+# previously relied on PYTHONPATH pointing at a sibling checkout, which pinned
+# nothing at all. Bumping this pin is a deliberate act -- see certkit's
+# CHANGELOG and run its conformance suite before you do.
+certkit = ["certkit @ git+https://github.com/B0001/certkit@v0.2.0"]
+
 gpu = [
     # CUDA does not exist on macOS and cupy-cuda12x ships no darwin wheels for any arch, so this
     # is unsatisfiable there. Without the marker it collides with [tool.uv] required-environments
