@@ -1490,6 +1490,30 @@ hypothesis whose death is informative is worth more here than a safe one.
   clean law; not claimed near/above the charge scale E_s−J where the ionic singlets would
   intrude; same isolated-dimer/g=2/density-density-only scope as `SPEC_nb3x8_metamagnetism`).
 
+- [x] **Can a non-uniform shot schedule beat the visibility law?** *(closes `visibility_law.py`'s
+  own open hypothesis — "adaptive schemes could beat it — a hypothesis, not a bug")* — **NO, and
+  the headline spec was falsified, not tuned.** v1.0 claimed 5–10× cheaper resolution from a
+  decaying schedule `S_k ∝ e^{−αk}`; its premise ("late steps are buried in noise") is simply
+  false for a closed system — `|s_k| ≥ 0.85` for every k out to 23 on N₂ CAS(6,6), so there is no
+  tail to defund, and total noise power `V·Σ 1/S_k` is **convex**, making uniform the constrained
+  optimum. Measured at v1.0's own settings (K=12, S=1e4): uniform **5.4 mHa**, best of ten
+  decaying schedules **5.39 mHa** (0.996×), worst 42 mHa; v1.0's "adaptive < 1 mHa vs uniform >
+  8 mHa" is unreachable at any α or γ. **WHAT SURVIVED:** under the validated global-depolarizing
+  damping `s_k → f^k s_k` a dead tail does exist — `α*` is 0 at f=1 and rises to +0.15 by f=0.9
+  (non-decreasing, gated), worth **1.35× in median error / ~1.8× in budget** at K=24, f=0.8, and
+  growing with depth (1.10× at K=12 → 1.35× at K=24). Two further findings: `α*` **saturates**
+  (flat from f=0.9 to f=0.7 — G3 gates monotonicity, and the proportional version would fail),
+  and the error **variance** moves only 1.07× (v1.0 wanted ≥ 5×) because it is set by rare mode
+  misidentifications, not by allocation — a future scheme chasing that number must attack mode
+  selection. Free bonus, gated in G2b: whitening a **geometric** schedule is a geometric rescale,
+  the same algebra as ODMD's depolarizing immunity, so it moves `|λ|` and leaves `arg λ` exact
+  (< 1e-7 Ha across α) — a polynomial schedule's weights are not geometric and bias the energy by
+  > 10 mHa. 100% reuse of `odmd.py` + `device_odmd_energy` (no new DMD code). Gates G1–G4 in
+  `tests/test_adaptive_shots_spec.py`; `adaptive_shots.py`; `data/adaptive_shots_bench.csv`.
+  → [`SPEC_adaptive_shots_planning.md`](SPEC_adaptive_shots_planning.md) (one system, one budget,
+  idealized i.i.d. Hadamard-test noise; damping is the global-depolarizing model, not measured
+  device noise — local gate noise is not a global channel, so α* on hardware must be measured).
+
 ## Killed
 
 - [-] **Hₙ to larger n, *cheaply*** (ramp + D=100/200/400) — → [`SPEC_hchain_largen.md`](SPEC_hchain_largen.md).
