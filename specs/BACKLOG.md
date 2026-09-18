@@ -1548,6 +1548,41 @@ hypothesis whose death is informative is worth more here than a safe one.
   idealized i.i.d. Hadamard-test noise; damping is the global-depolarizing model, not measured
   device noise — local gate noise is not a global channel, so α* on hardware must be measured).
 
+- [x] **Where does Heisenberg superexchange die along the Nb₃(Br₁₋ₓIₓ)₈ alloy line?** *(virtual-
+  crystal interpolation of the two `NB3X8_LT_BULK` endpoints, spin-ODMD on each)* — **x_c =
+  0.296953, and the spec's own predicted window was falsified, not widened.** v1.0 asserted the
+  20%-deviation boundary sits at `x_c ∈ (0.45, 0.65)`; measured it is at **41% iodine**, low by
+  0.153 in x. No simulation was needed to see the error coming: Heisenberg is *already* 14.1% off
+  at the pure bromide (`SPEC_odmd_spin`), so a 20% threshold has ~6 points of headroom and is spent
+  less than a third of the way across the series. The kill is exact rather than numerical, because
+  Δ collapses to **one dimensionless group** `a = (2t/(U₀−U_s))²` with `Δ = 2a/(√(1+4a)−1) − 1`, so
+  `Δ = D ⟺ |2t/(U₀−U_s)| = √(D+D²)` — linear in x on both sides. Bisection matches that closed form
+  to **2.4e-15**, and G3 asserts `x_c ∉ (0.45, 0.65)` explicitly so the falsification cannot decay
+  back into a pass. **The honest headline is that the boundary is soft:** x_c runs 0.052 → 0.297 →
+  0.639 as the threshold moves 15% → 20% → 30% (~0.039 in x per point), and the specced window is
+  exactly what a **25–30%** threshold gives — v1.0's window was self-consistent with a weaker
+  criterion than v1.0 itself defined. Δ(x) is smooth and strictly monotone: **nothing is
+  non-analytic at x_c**, so "phase diagram" here means an approximation's validity boundary, not a
+  thermodynamic one, and the number is meaningless without its threshold (gated as G3b). Secondary,
+  all gated: J rises monotonically 119.11 → 245.92 meV (150.15 at x_c) while the local-moment
+  fraction ‖S_z|ψ₀⟩‖² falls 0.890 → 0.759 — moment collapse and Heisenberg failure are the *same*
+  physics, not independent diagnostics; J_Heis overestimates at every x (one-sided, G5); and v1.0's
+  §3 forgot to interpolate U_s, which moves 24% across the series and enters through U₀−U_s. G4 was
+  *strengthened* rather than inherited: v1.0's `S² ≤ 1e-6` would have passed against an all-zero S²
+  operator, so the gate now also pins S² = 2.000 on the kicked triplet at exactly E₀+J — which
+  doubles as an independent confirmation of J from raw expectation values, not from ODMD. **Also
+  withdrawn: v1.0's framing.** Interpolating ab-initio endpoints does not make the interpolant
+  ab-initio — this is the **virtual crystal approximation** (no site disorder, no local halide
+  configuration, no relaxation, no bowing *by construction*, no re-screening), so the curve is a
+  model prediction under a named approximation, falsifiable by a supercell cRPA calculation, not
+  the "wholly unmapped ab-initio curve" v1.0 claimed. ~100% reuse (`odmd_spin.spin_excitation_lines`
+  + `nb3x8_gaps.dimer_cluster_integrals`; no new solver code). Gates G1, G2, G3, G3b, G4, G5 in
+  `tests/test_nb3x8_alloy_spec.py` (~1 s); `nb3x8_alloy.py`; `data/nb3x8_alloy_diagram.csv`.
+  → [`SPEC_nb3x8_alloy_phase.md`](SPEC_nb3x8_alloy_phase.md) (VCA; isolated interlayer dimer — no
+  in-plane kagome exchange and no band broadening, and unlike the charge gap in `SPEC_nb3x8_gaps`
+  no coordination correction to J has been computed; density-density only; exact statevector;
+  Br–I line only).
+
 ## Killed
 
 - [-] **Hₙ to larger n, *cheaply*** (ramp + D=100/200/400) — → [`SPEC_hchain_largen.md`](SPEC_hchain_largen.md).
