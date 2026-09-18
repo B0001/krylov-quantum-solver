@@ -515,6 +515,40 @@ hypothesis whose death is informative is worth more here than a safe one.
 
 ## Done
 
+- [x] **A certified bracket on the FIRST EXCITED state — and the self-certified version of it is
+  impossible, not merely unbuilt** *(2026-09-18, implementing SPEC_excited_state_certification)* —
+  **DONE, headline FALSIFIED.** The spec asked for the "world's first self-certified excited-state
+  solver": simultaneous rigorous brackets on E₀ and E₁ with the separator β estimated from the same
+  Krylov data as θ₂ − σ₂. The bracket half works — Lehmann's pencil on the QKSD Ritz vectors
+  (`A₂y = τA₁y`, one extra `H|u⟩` per vector) contains E₀ and E₁ at **24/24** brackets over
+  LiH CAS(2,5) / H₄ / N₂ CAS(6,6) at M = 4…24, closes **> 3 orders** (LiH 88.3 → 0.026 mHa) and
+  costs only **1.2–11.7×** the raw Ritz gap error it covers. **The self-certified half is dead, and
+  the argument is a counting argument, not a tuning failure:** Lehmann needs to know how many
+  eigenvalues lie below β, Kato's interval says only that *some* eigenvalue is within σ₂ of θ₂, and
+  when the subspace has not resolved level 2 the pencil's top root — a true bound on E₂ — comes back
+  labelled E₁. It escapes on real molecules inside the claimed domain (N₂ CAS(6,6) **M = 16**, E₁
+  under-bounded by **17.4 mHa**; LiH M = 4–8 by ~2 mHa), and a constructed witness (levels
+  {0, 0.5, 1, 2, 3}, amplitude **1e-4** on the 0.5 level = population 1e-8, *above* the arc's 1e-10
+  reachability cut) certifies **E₁ ≥ 1.000 when E₁ = 0.5** while σ₁ = 6.8e-5 reports convergence.
+  **Exactly the blind spot `SPEC_subspace_floor_resolvability` found** ("a ~1e-4-amplitude reachable
+  level near the cluster boundary"), one rung up: there it corrupted a floor, here it corrupts a
+  certificate. Oracle mode is again the only rigorous path, and when its premise fails it **refuses**
+  (−inf) instead of lying. **Three further corrections to the spec's own mathematics:** (a) §3.2's
+  formula was single-vector **Temple**, not Lehmann — both are implemented and Lehmann is gated
+  tighter (+6.7e-5 Ha on LiH); (b) the unstated precondition is **θ₁ < β ≤ E₂ over the reachable
+  sector**, so a **degenerate E₁ admits no separator at all**; (c) that kills the spec's own
+  showcase — **Be₂** CAS(4,8) has E₁ = E₂ = −29.085033 Ha (a π pair) *and* those states are not
+  HF-reachable (rank saturates at 3, θ₁ sits 147 mHa above E₁^CASCI), so the "certified optical gap
+  curve" is unreachable twice over and ships as a refusal row. v1.0's G2 (STO-3G H₂, "micro-Hartree
+  at M=12") was unsatisfiable too: that reachable sector holds **two** levels, so E₂ does not exist
+  and the Krylov space saturates it at rank 2 from M = 2. Known limit: an arithmetic floor of
+  **~1e-8 Ha** (Ritz orthonormality ~1e-9 divided by β − θ₁), below which nothing here is a
+  certificate. Does **not** plug into certkit (v0.2.0 has only `lambda_min_enclosure`; a second-
+  eigenvalue pencil rule would have to be added first).
+  → [`SPEC_excited_state_certification.md`](SPEC_excited_state_certification.md);
+  `tests/test_excited_bounds_spec.py` (G1, G1b, G1c, G2, G2b, G3, G4, G4b — 10 passed, 98 s);
+  `excited_bounds.py`; `data/excited_certification_bench.csv`.
+
 - [x] **An independent checker's VERIFIED is not, by itself, evidence about the producer**
   *(found 2026-09-06 while gating certkit_bridge's certificates in CI)* — **DONE.** The premise
   behind consuming certkit as a protocol is that an out-of-process checker re-deriving the claim
