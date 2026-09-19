@@ -1583,6 +1583,37 @@ hypothesis whose death is informative is worth more here than a safe one.
   no coordination correction to J has been computed; density-density only; exact statevector;
   Br–I line only).
 
+- [x] **Can certified brackets prune a candidate library cheaply enough to matter?** *(interval
+  dominance on `temple_bounds` brackets at small Krylov M)* — **The arithmetic is sound; the
+  advertised economics are not, and the two are in direct tension.** v1.0 claimed ≥75% (§1 said
+  "over 80%") budget reduction. Measured on 8 H₄ chains (basis-vector cost, max_m=12, brute=96):
+  **sound/oracle saving 62.5% (WIDE) and 66.7% (TIGHT)** — real, and under the bar. **79.2% is
+  reachable only in Temple SELF mode, and that mode is not a bound**: across M=2…16 its lower
+  bound exceeds exact FCI on 5 (candidate, M) pairs, worst by **0.695 mHa**, while oracle mode
+  violates on none. The headline number was bought with an invalid certificate. **This spec
+  INHERITS `SPEC_excited_state_certification`'s kill** — an oracle separator presupposes a solved
+  candidate, and a Krylov subspace cannot certify the eigenvalue count a sound separator needs, so
+  the cheap certificate a screening loop actually has is the unsound one. **THE CONTROLLING LAW:**
+  pruning power is one ratio, library energy spread over bracket width at the cheap M — at M=2,
+  spread/width **4.45 prunes 6/8 instantly** while **1.00 prunes 0/8** and cannot move until M=4.
+  Same loop, same budget: the saving is a property of the LIBRARY, not the method, so
+  `sweep_metrics` returns the ratio beside the saving. Three more findings: v1.0's G3 ("strictly
+  non-increasing staircase") is **vacuous** — an active pool cannot grow by construction — and is
+  replaced by that ratio; a **vacuous −inf Temple bound never prunes** (G5), which makes pruning
+  power non-monotonic in M even though the pool never grows; and near-degeneracy is resolved by
+  **converging**, not tie-breaking — twins 1e-5 Å apart are separated honestly by M=10, so only an
+  EXACT tie exhausts the budget (G4's premise corrected while gating). Why no false prune despite
+  the unsound bound: on a homogeneous library every candidate is inflated together, so the error
+  is common-mode and the winner's margin stays ≤ −0.43 mHa — **measured, not a theorem**, and a
+  heterogeneous library has no such protection. STO-3G H₂ is excluded: it saturates at M=2, the
+  same category error `SPEC_excited_state_certification` G2 records. Gates G1/G1b/G2/G3/G4/G5 in
+  `tests/test_screening_loop_spec.py`; `screening_loop.py`; `data/screening_loop_performance.csv`.
+  → [`SPEC_interval_dominance_screening.md`](SPEC_interval_dominance_screening.md) (exact
+  statevector — shot noise would widen every bracket and push pruning later; cost is a
+  basis-vector count, not gates/shots/wall-clock, and no QPU is involved; soundness gated only for
+  homogeneous libraries; v1.0's "materials and drug discovery" framing withdrawn as scope
+  inflation).
+
 ## Killed
 
 - [-] **Hₙ to larger n, *cheaply*** (ramp + D=100/200/400) — → [`SPEC_hchain_largen.md`](SPEC_hchain_largen.md).
