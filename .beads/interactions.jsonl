@@ -1,0 +1,2 @@
+{"id":"int-612e50fabb41e7b95ec522024a8cce58","kind":"field_change","created_at":"2026-09-19T11:24:19.782778Z","actor":"B0001","issue_id":"chem-ao7","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
+{"id":"int-503b9364e225828ba0448fe749b5a61d","kind":"field_change","created_at":"2026-09-19T11:32:59.306466Z","actor":"B0001","issue_id":"chem-0w1","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}

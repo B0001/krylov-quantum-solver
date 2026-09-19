@@ -1614,6 +1614,35 @@ hypothesis whose death is informative is worth more here than a safe one.
   homogeneous libraries; v1.0's "materials and drug discovery" framing withdrawn as scope
   inflation).
 
+- [x] **Does Trotterization leak through the variational floor, and can signal-domain Richardson
+  plug it?** *(order-2 Suzuki ODMD, `trotter_odmd` reps refinement)* — **NO LEAK EXISTS, and the
+  premise inverts.** v1.0 claimed product-formula discretization pushes the solve below E_FCI and
+  proposed extrapolating the complex signal BEFORE diagonalization to restore the floor. Measured
+  over 2 systems × reps {1,2,4} × 6 window lengths: the raw Trotter energy is **above E_FCI in
+  36/36 configurations**, minimum excess **+0.26 mHa** (the order-2 Suzuki bias is positive:
+  +19.6/+4.2/+1.0 mHa at reps 1/2/4 on stretched H₂). v1.0's G1 demanded a drop of ≥1.0 mHa
+  *below*. **THE INVERSION:** the *extrapolant* lands below E_FCI in 12/24 here and **22/24** on
+  the 4-system benchmark — Richardson's residual is two-sided, so mitigation is the only step in
+  this pipeline that breaks the floor, and the extrapolated energy is **not a bound**.
+  **THE REGIME MAP (v1.0's G4 reversed — and a first draft of the replacement gate asserting
+  "scalar is never worse" was itself falsified by the data):** neither domain dominates. Inside
+  the accumulated-phase window signal-domain wins (H₂ at K=6: **0.0045 vs 0.0476 mHa**, 10×);
+  outside it scalar wins by far more (K=32: **~95×** on H₄, **~21×** on H₂) because the dt² law
+  holds exactly for the eigenPHASE, making `trotter_odmd.richardson_energy` flat in K while the
+  signal extrapolant degenerates onto the raw value. The controlling quantity is K·τ·δE, not the
+  extrapolation domain; the practical answer is the method already shipped. Two structural
+  corrections: v1.0's formula pairs s_k(Δt) with s_k(2Δt), which sit at **different physical
+  times** kΔt and 2kΔt so the O(Δt²) term cannot cancel — refining `reps` at fixed τ is the fix
+  (G5); and v1.0's Lehmann step is **undefined on this path**, not merely unmet — ODMD consumes a
+  scalar series and returns eigenphases, so no Ritz STATE and no ⟨u|H²|u⟩ ever exists to bound
+  (G3 gates the *absence* of a bracket function rather than shipping a certificate in name only).
+  100% reuse of `trotter_odmd` + `odmd`; no new solver. Gates G1/G1b/G2/G3/G4/G5 in
+  `tests/test_trotter_restorer_spec.py`; `trotter_restorer.py`; `data/trotter_restorer_bench.csv`.
+  → [`SPEC_trotter_floor_restorer.md`](SPEC_trotter_floor_restorer.md) (statevector circuits, no
+  device noise; **order-2 Suzuki only** — bias SIGN is a property of the formula and system, so
+  this proves the specced leak does not occur here, NOT that no leak can ever exist, which is the
+  natural follow-up; phase window calibrated, not derived).
+
 ## Killed
 
 - [-] **Hₙ to larger n, *cheaply*** (ramp + D=100/200/400) — → [`SPEC_hchain_largen.md`](SPEC_hchain_largen.md).
