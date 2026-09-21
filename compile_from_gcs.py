@@ -1,269 +1,223 @@
 #!/usr/bin/env python3
 """
-CERTCHEM ADVANCED PHYSICAL RECOVERY: compile_from_gcs.py
-Downloads completed JSON results from GCS and reconstructs their molecular geometries
-and coordinates purely from the calculated energies using local PySCF references.
-Saves over 113 QPU/GCP recalculations!
+CERTCHEM DATASET COMPILER: compile_from_gcs.py
+
+Downloads completed result blobs from GCS and writes one CSV per molecular
+family, reading each point's identity from the provenance the worker recorded
+at compute time.
+
+An earlier version reconstructed the geometry by computing local CASCI
+energies for every candidate coordinate and taking the argmin of
+|E_solver - E_CASCI|, asserting in a comment that the nearest match was
+"mathematically guaranteed to be correct". It was circular: the coordinate
+label came out of the reference, so the resulting dataset agreed with CASCI to
+<1e-4 Ha by construction and could never falsify anything. A reference that
+cannot disagree is not a reference.
+
+Provenance is now stated by the producer. Blobs written before the worker
+stamped provenance cannot be labelled honestly and are reported as skipped,
+not guessed.
+
+Usage:
+    python compile_from_gcs.py [--bucket NAME] [--verify]
+
+    --verify  recompute CASCI from each recorded geometry and check that the
+              certified bracket actually contains it. Slow, and the only part
+              of this script entitled to call itself a check.
 """
-import os
-import json
+import argparse
 import csv
+import json
+import os
 import sys
+from collections import defaultdict
+
 from google.cloud import storage
 
-# Ensure thread pinning
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
+# Thread pinning must precede any BLAS-backed import (pyscf, under --verify).
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
 
-# Import PySCF for exact physical reconstruction
-from pyscf import scf, mcscf, gto
+DEFAULT_BUCKET = "tlsmbl-compute-certchem-results"
 
-# Single source of truth for the torsion geometry. It lived in both files and
-# was wrong in both; importing keeps the recovery labels matched to whatever
-# the sweep actually submitted.
-from run_grand_sweep import ETHYLENE_TORSION_ANGLES, ethylene_geometry
+BASE_FIELDS = [
+    "family",
+    "coordinate_var",
+    "molecule",
+    "basis",
+    "active_space",
+    "best_estimate_hartree",
+    "lower_bound_hartree",
+    "upper_bound_hartree",
+    "bracket_width_hartree",
+    "wall_time_s",
+    "job_id",
+]
+VERIFY_FIELDS = [
+    "casci_reference_hartree",
+    "error_vs_casci_hartree",
+    "bracket_contains_reference",
+]
 
-BUCKET_NAME = "tlsmbl-compute-certchem-results"
 
+def row_from_blob(data: dict) -> dict | None:
+    """Build a dataset row from a result blob, or None if it has no provenance."""
+    prov = data.get("provenance")
+    if not prov or not prov.get("molecule"):
+        return None
 
-def get_standard_geometries():
-    """Define the standard coordinate points for all 7 molecular sweep families."""
-    standard_sweeps = {}
-    
-    # 1. Nitrogen (N2 @ 6-31g / CAS(6,6))
-    standard_sweeps["n2_curve"] = {
-        "basis": "6-31g",
-        "active_space": (6, 6),
-        "coords": [1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.8, 2.0, 2.3, 2.6, 3.0],
-        "geom_fn": lambda R: f"N 0 0 0; N 0 0 {R}"
+    meta = prov.get("metadata") or {}
+    return {
+        "family": meta.get("family", "unlabelled"),
+        "coordinate_var": meta.get("coordinate"),
+        "molecule": prov["molecule"],
+        "basis": prov.get("basis"),
+        "active_space": ",".join(str(n) for n in prov.get("active_space", [])),
+        "best_estimate_hartree": data.get("best_estimate_hartree"),
+        "lower_bound_hartree": data.get("lower_bound_hartree"),
+        "upper_bound_hartree": data.get("upper_bound_hartree"),
+        "bracket_width_hartree": data.get("bracket_width_hartree"),
+        "wall_time_s": data.get("wall_time_s"),
+        "job_id": prov.get("job_id"),
     }
 
-    # 2. Water (H2O @ 6-31g / CAS(4,4))
-    h2o_coords = [0.8, 0.9, 0.96, 1.1, 1.2, 1.4, 1.6, 1.8, 2.0, 2.5, 3.0]
-    def h2o_geom(r):
-        x = r * 0.79
-        z = r * 0.61
-        return f"O 0 0 0; H {x} 0 {z}; H {-x} 0 {z}"
-    standard_sweeps["h2o_double_stretch"] = {
-        "basis": "6-31g",
-        "active_space": (4, 4),
-        "coords": h2o_coords,
-        "geom_fn": h2o_geom
-    }
 
-    # 3. Ethylene Torsion Angle (C2H4 @ sto-3g / CAS(2,2))
-    standard_sweeps["ethylene_torsion"] = {
-        "basis": "sto-3g",
-        "active_space": (2, 2),
-        "coords": list(ETHYLENE_TORSION_ANGLES),
-        "geom_fn": ethylene_geometry
-    }
+def casci_energy(molecule: str, basis: str, active_space: str) -> float | None:
+    """Exact CASCI energy for a recorded geometry -- an independent reference.
 
-    # 4. Beryllium Dimer High-Res (Be2 @ cc-pvdz / CAS(4,8))
-    standard_sweeps["be2_high_res"] = {
-        "basis": "cc-pvdz",
-        "active_space": (4, 8),
-        "coords": [2.0, 2.1, 2.2, 2.3, 2.4, 2.45, 2.5, 2.55, 2.6, 2.7, 2.8, 2.9, 3.0, 3.2, 3.4, 3.6, 4.0, 4.5, 5.0, 6.0, 8.0],
-        "geom_fn": lambda R: f"Be 0 0 0; Be 0 0 {R}"
-    }
+    Independent because the geometry comes from the blob's provenance, not
+    from this calculation. It is free to disagree with the solver, which is
+    the entire point of computing it.
+    """
+    from pyscf import gto, mcscf, scf
 
-    # 5. Lithium Hydride (LiH @ cc-pvdz / CAS(2,4))
-    standard_sweeps["lih_ccpvdz_stretch"] = {
-        "basis": "cc-pvdz",
-        "active_space": (2, 4),
-        "coords": [1.2, 1.4, 1.6, 1.8, 2.0, 2.3, 2.6, 3.0, 3.5, 4.0, 5.0, 6.0],
-        "geom_fn": lambda R: f"Li 0 0 0; H 0 0 {R}"
-    }
-
-    # 6. Carbon Monoxide (CO @ 6-31g / CAS(6,6))
-    standard_sweeps["co_triple_stretch"] = {
-        "basis": "6-31g",
-        "active_space": (6, 6),
-        "coords": [0.9, 1.0, 1.13, 1.2, 1.3, 1.4, 1.6, 1.8, 2.1, 2.4, 2.8, 3.2],
-        "geom_fn": lambda R: f"C 0 0 0; O 0 0 {R}"
-    }
-
-    # 7. Hydrogen Chains (H4, H6, H8 @ sto-3g / CAS(n,n))
-    h_coords = [0.8, 1.0, 1.4, 1.8, 2.2, 2.6, 3.0]
-    standard_sweeps["h4_chain"] = {
-        "basis": "sto-3g", "active_space": (4, 4), "coords": h_coords,
-        "geom_fn": lambda R: "; ".join(f"H 0 0 {i * R:.4f}" for i in range(4))
-    }
-    standard_sweeps["h6_chain"] = {
-        "basis": "sto-3g", "active_space": (6, 6), "coords": h_coords,
-        "geom_fn": lambda R: "; ".join(f"H 0 0 {i * R:.4f}" for i in range(6))
-    }
-    standard_sweeps["h8_chain"] = {
-        "basis": "sto-3g", "active_space": (8, 8), "coords": h_coords,
-        "geom_fn": lambda R: "; ".join(f"H 0 0 {i * R:.4f}" for i in range(8))
-    }
-
-    return standard_sweeps
-
-
-def identify_family_by_energy(energy: float) -> str | None:
-    """Identify the molecular sweep family based on the disjoint total energy signature."""
-    if -109.5 < energy < -108.0:
-        return "n2_curve"
-    elif -113.5 < energy < -112.0:
-        return "co_triple_stretch"
-    elif -77.2 < energy < -77.0:
-        return "ethylene_torsion"
-    elif -76.3 < energy < -75.7:
-        return "h2o_double_stretch"
-    elif -29.25 < energy < -29.10:
-        return "be2_high_res"
-    elif -8.1 < energy < -7.8:
-        return "lih_ccpvdz_stretch"
-    elif -2.4 < energy < -1.7:
-        return "h4_chain"
-    elif -3.6 < energy < -2.5:
-        return "h6_chain"
-    elif -4.8 < energy < -3.4:
-        return "h8_chain"
-    return None
-
-
-def calculate_local_reference_energy(geom_str: str, basis: str, cas: tuple[int, int]) -> float:
-    """Compute the exact statevector ground-state energy for a given geometry."""
     try:
-        # Avoid PySCF verbose logging
-        mol = gto.M(atom=geom_str, basis=basis, spin=0, verbose=0)
-        mf = scf.RHF(mol).run()
-        nelec, norb = cas
-        mc = mcscf.CASCI(mf, norb, nelec)
-        # Compute exact CASCI ground-state energy (the statevector baseline)
+        nelec, norb = (int(n) for n in active_space.split(","))
+        mol = gto.M(atom=molecule, basis=basis, spin=0, verbose=0)
+        mc = mcscf.CASCI(scf.RHF(mol).run(), norb, nelec)
         mc.kernel()
         return float(mc.e_tot)
-    except Exception as e:
-        print(f"Error computing local ref for geom {geom_str[:30]}...: {e}")
-        return 0.0
+    except Exception as err:  # noqa: BLE001 -- one bad point must not kill the batch
+        print(f"     [WARN] CASCI reference failed for {molecule[:40]}...: {err}")
+        return None
 
 
-def main():
-    print("================================================================================")
-    print("CERTCHEM ADVANCED AB-INITIO DATASET RECOVERY ACTIVATED")
-    print("================================================================================")
-    print(f"Connecting to Google Cloud Storage bucket: gs://{BUCKET_NAME}")
-    
+def verify(row: dict) -> dict:
+    """Attach the CASCI reference and whether the certified bracket contains it."""
+    ref = casci_energy(row["molecule"], row["basis"], row["active_space"])
+    row["casci_reference_hartree"] = ref
+    if ref is None:
+        row["error_vs_casci_hartree"] = None
+        row["bracket_contains_reference"] = None
+        return row
+
+    est = row.get("best_estimate_hartree")
+    row["error_vs_casci_hartree"] = None if est is None else est - ref
+
+    lo, hi = row.get("lower_bound_hartree"), row.get("upper_bound_hartree")
+    if lo is None or hi is None:
+        row["bracket_contains_reference"] = None
+    else:
+        row["bracket_contains_reference"] = bool(lo <= ref <= hi)
+    return row
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--bucket", default=DEFAULT_BUCKET)
+    ap.add_argument("--outdir", default="data")
+    ap.add_argument(
+        "--verify",
+        action="store_true",
+        help="recompute CASCI per point and check the certified bracket contains it",
+    )
+    args = ap.parse_args()
+
+    print("=" * 80)
+    print("CERTCHEM DATASET COMPILATION (provenance-based)")
+    print("=" * 80)
+    print(f"Bucket: gs://{args.bucket}")
+
     try:
-        storage_client = storage.Client()
-        bucket = storage_client.bucket(BUCKET_NAME)
-    except Exception as e:
-        print(f"[FATAL] Failed to initialize GCS storage client: {e}")
-        print("Please ensure you are authenticated: gcloud auth application-default login")
-        sys.exit(1)
+        bucket = storage.Client().bucket(args.bucket)
+        blobs = [b for b in bucket.list_blobs(prefix="results/") if b.name.endswith(".json")]
+    except Exception as err:
+        print(f"[FATAL] Could not read the results bucket: {err}")
+        print("Authenticate with: gcloud auth application-default login")
+        return 1
 
-    print("Fetching list of completed GCS JSON results...")
-    blobs = list(bucket.list_blobs(prefix="results/"))
-    json_blobs = [b for b in blobs if b.name.endswith(".json")]
-    
-    print(f"Found {len(json_blobs)} completed result blobs in bucket.")
-    if not json_blobs:
-        print("[WARNING] No result files found. Exiting...")
-        return
+    print(f"Found {len(blobs)} result blobs.\n")
+    if not blobs:
+        print("[WARNING] Nothing to compile.")
+        return 0
 
-    # Parse and bucket the raw energies
-    print("\n[PHASE 1] Bucketing GCS energy results by molecular family...")
-    raw_results = []
-    for blob in json_blobs:
+    families = defaultdict(list)
+    skipped_no_provenance = 0
+    unreadable = 0
+
+    for blob in blobs:
         try:
             data = json.loads(blob.download_as_text())
-            energy = float(data["best_estimate_hartree"])
-            family = identify_family_by_energy(energy)
-            if family:
-                raw_results.append({
-                    "energy": energy,
-                    "family": family,
-                    "data": data
-                })
-        except Exception:
-            pass
-            
-    print(f"Bucketed {len(raw_results)} results. Ignored {len(json_blobs) - len(raw_results)} files.")
-
-    # Get standard geometries and compute references on-the-fly for matching
-    print("\n[PHASE 2] Reconstructing coordinates via local ab-initio matching...")
-    standard_sweeps = get_standard_geometries()
-    
-    results_by_family = {family: [] for family in standard_sweeps.keys()}
-    
-    # Track calculated references to avoid duplicate PySCF runs
-    reference_cache = {}
-    
-    for i, res in enumerate(raw_results):
-        energy = res["energy"]
-        family = res["family"]
-        data = res["data"]
-        
-        config = standard_sweeps[family]
-        basis = config["basis"]
-        cas = config["active_space"]
-        
-        # Calculate local exact energies for all standard coords in this family (if not cached)
-        best_coord = None
-        best_diff = float("inf")
-        
-        for coord in config["coords"]:
-            cache_key = (family, coord)
-            if cache_key not in reference_cache:
-                geom_str = config["geom_fn"](coord)
-                ref_energy = calculate_local_reference_energy(geom_str, basis, cas)
-                reference_cache[cache_key] = ref_energy
-                
-            ref_energy = reference_cache[cache_key]
-            diff = abs(energy - ref_energy)
-            
-            # Since quantum Krylov converges closely to FCI (within 1e-6 Ha),
-            # the closest match is mathematically guaranteed to be correct.
-            if diff < best_diff:
-                best_diff = diff
-                best_coord = coord
-                
-        if best_coord is not None and best_diff < 1e-4:
-            results_by_family[family].append({
-                "coordinate_var": best_coord,
-                "best_estimate_hartree": energy,
-                "lower_bound_hartree": data.get("lower_bound_hartree", energy),
-                "upper_bound_hartree": data.get("upper_bound_hartree", energy),
-                "bracket_width_hartree": data.get("bracket_width_hartree", 0.0),
-                "wall_time_s": data.get("wall_time_s", 0.0)
-            })
-            
-        if (i+1) % 10 == 0:
-            print(f"  Matched {i+1}/{len(raw_results)} files...")
-
-    # 4. Save CSV dataset files for each of the 7 families
-    print("\n================================================================================")
-    print("COMPILING RECOVERED DATASETS")
-    print("================================================================================")
-    os.makedirs("data", exist_ok=True)
-    compiled_count = 0
-    
-    for family, records in results_by_family.items():
-        if not records:
+        except Exception as err:
+            print(f"  [WARN] Unreadable blob {blob.name}: {err}")
+            unreadable += 1
             continue
-            
-        # Deduplicate identical coordinates (if multiple runs exist)
-        deduped = {}
-        for r in records:
-            deduped[r["coordinate_var"]] = r
-        unique_records = list(deduped.values())
-        
-        # Sort by coordinate variable to keep potential energy curve ordered
-        unique_records.sort(key=lambda x: x["coordinate_var"])
-        output_path = f"data/cloud_sweep_{family}.csv"
-        
-        with open(output_path, "w", newline="") as f:
-            w = csv.DictWriter(f, fieldnames=unique_records[0].keys())
-            w.writeheader()
-            w.writerows(unique_records)
-            
-        print(f"  -> [COMPILED] Saved local Potential Energy Curve to: {output_path}")
-        compiled_count += 1
 
-    print(f"\n[SUCCESS] Successfully recovered {compiled_count} of 7 molecular datasets from GCP!")
+        row = row_from_blob(data)
+        if row is None:
+            skipped_no_provenance += 1
+            continue
+        families[row["family"]].append(row)
+
+    labelled = sum(len(v) for v in families.values())
+    print(f"Labelled from provenance: {labelled}")
+    if skipped_no_provenance:
+        print(
+            f"Skipped (no provenance -- predates the stamping worker): "
+            f"{skipped_no_provenance}. These cannot be labelled honestly; "
+            f"recompute them rather than inferring their geometry."
+        )
+    if unreadable:
+        print(f"Unreadable blobs: {unreadable}")
+
+    if args.verify:
+        print(f"\n[VERIFY] Recomputing CASCI references for {labelled} points...")
+        for rows in families.values():
+            for row in rows:
+                verify(row)
+
+    print("\n" + "=" * 80)
+    os.makedirs(args.outdir, exist_ok=True)
+    fields = BASE_FIELDS + (VERIFY_FIELDS if args.verify else [])
+    violations = 0
+
+    for family, rows in sorted(families.items()):
+        rows.sort(key=lambda r: (r["coordinate_var"] is None, r["coordinate_var"]))
+        path = os.path.join(args.outdir, f"cloud_sweep_{family}.csv")
+        with open(path, "w", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=fields)
+            w.writeheader()
+            w.writerows(rows)
+
+        note = ""
+        if args.verify:
+            bad = [r for r in rows if r["bracket_contains_reference"] is False]
+            violations += len(bad)
+            note = f"  [{len(bad)} bracket violations]" if bad else "  [brackets hold]"
+        print(f"  -> {path}  ({len(rows)} points){note}")
+
+    if args.verify and violations:
+        print(
+            f"\n[FAIL] {violations} certified brackets do NOT contain the CASCI "
+            f"reference. A certified bracket that excludes the true energy is a "
+            f"broken certificate, not a small error."
+        )
+        return 1
+
+    print(f"\nCompiled {len(families)} families.")
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

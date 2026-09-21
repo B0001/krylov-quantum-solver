@@ -111,11 +111,16 @@ def test_torsion_barrier_is_physical():
     assert 50.0 < barrier < 110.0, f"barrier {barrier:.1f} kcal/mol is unphysical"
 
 
-def test_recovery_path_shares_one_generator():
-    """compile_from_gcs must not re-derive the geometry; it was wrong twice."""
-    pytest.importorskip("google.cloud.storage")
-    from compile_from_gcs import get_standard_geometries
+@pytest.mark.parametrize("gone", ["get_standard_geometries", "ethylene_geom"])
+def test_recovery_path_owns_no_second_copy_of_the_geometry(gone):
+    """compile_from_gcs must not re-derive the geometry; it was wrong twice.
 
-    cfg = get_standard_geometries()["ethylene_torsion"]
-    assert cfg["geom_fn"] is ethylene_geometry
-    assert list(cfg["coords"]) == list(ETHYLENE_TORSION_ANGLES)
+    It used to duplicate all nine families and got ethylene wrong in both
+    copies. Since chem-fdq it reads the geometry from each result's recorded
+    provenance instead of regenerating it, so there is no second copy left to
+    drift out of sync with this one.
+    """
+    pytest.importorskip("google.cloud.storage")
+    import compile_from_gcs
+
+    assert not hasattr(compile_from_gcs, gone)

@@ -162,7 +162,11 @@ def main():
                 "basis": basis,
                 "active_space": active_space,
                 "mode": "certified",
-                "krylov_dim": 10
+                "krylov_dim": 10,
+                # Label the point at submission. The compile step reads this
+                # back rather than reverse-engineering the coordinate from the
+                # energy, which would make the reference unable to disagree.
+                "metadata": {"family": family, "coordinate": coord},
             }
             
             req = urllib.request.Request(

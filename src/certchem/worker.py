@@ -81,10 +81,24 @@ def process_job(job_id: str):
         )
         duration = time.time() - t0
 
-        # 5. Format output
+        # 5. Format output.
+        # Provenance first: the blob records WHAT WAS RUN, stated by the
+        # producer. A consumer must never have to infer the geometry back out
+        # of the energy -- doing that against a reference makes the reference
+        # useless as a check (it can no longer disagree).
+        provenance = {
+            "job_id": job_id,
+            "molecule": molecule,
+            "basis": basis,
+            "active_space": list(active_space),
+            "mode": request["mode"],
+            "krylov_dim": krylov_dim,
+            "metadata": request.get("metadata"),
+        }
         serialized_result = {}
         if isinstance(result, CertifiedResult):
             serialized_result = {
+                "provenance": provenance,
                 "best_estimate_hartree": result.bracket.best_estimate_hartree,
                 "lower_bound_hartree": result.bracket.lower_hartree,
                 "upper_bound_hartree": result.bracket.upper_hartree,
@@ -101,6 +115,7 @@ def process_job(job_id: str):
         else:
             # Mode.FAST returns a bare float
             serialized_result = {
+                "provenance": provenance,
                 "best_estimate_hartree": float(result),
                 "certificate": {
                     "method": "fast_point_estimate",
@@ -113,6 +128,7 @@ def process_job(job_id: str):
         job_data["status"] = "completed"
         job_data["completed_at"] = time.time()
         job_data["wall_time_s"] = round(duration, 3)
+        serialized_result["wall_time_s"] = round(duration, 3)
         job_data["result"] = serialized_result
 
         # Upload result blob to GCS

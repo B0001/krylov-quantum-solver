@@ -4,7 +4,7 @@ import json
 import time
 import hashlib
 import logging
-from typing import Tuple
+from typing import Any, Dict, Optional, Tuple
 from fastapi import Depends, FastAPI, HTTPException, Security, status
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
@@ -46,6 +46,8 @@ ALLOWED_KEY_DIGESTS = frozenset(
     _digest(k.strip()) for k in os.getenv("ALLOWED_API_KEYS", "").split(",") if k.strip()
 )
 RATE_LIMIT_PER_MIN = int(os.getenv("RATE_LIMIT_PER_MIN", "100"))
+# Caller metadata is opaque and echoed to storage, so it is bounded.
+METADATA_MAX_BYTES = 1024
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
@@ -96,6 +98,14 @@ class EnergyRequest(BaseModel):
     active_space: Tuple[int, int] = Field(..., description="Active space as (electrons, orbitals)")
     mode: str = Field("certified", description="Execution mode: 'certified' (returns brackets) or 'fast' (bare point-estimate)")
     krylov_dim: int = Field(12, description="Krylov subspace dimension for diagonalization (default 12, must be >= 6 for self-certified)")
+    metadata: Optional[Dict[str, Any]] = Field(
+        None,
+        description=(
+            "Opaque caller-supplied provenance (e.g. {'family': 'n2_curve', "
+            "'coordinate': 1.4}), echoed verbatim into the result blob. Lets a "
+            "batch client label its own points instead of inferring them later."
+        ),
+    )
 
 
 @app.get("/health")
@@ -137,6 +147,12 @@ def submit_energy_job(req: EnergyRequest):
             detail="mode must be either 'certified' or 'fast'"
         )
 
+    if req.metadata is not None and len(json.dumps(req.metadata)) > METADATA_MAX_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"metadata must serialize to at most {METADATA_MAX_BYTES} bytes",
+        )
+
     try:
         check_caps(req.molecule, req.basis, req.active_space)
     except CapExceededError as err:
@@ -163,7 +179,8 @@ def submit_energy_job(req: EnergyRequest):
             "basis": req.basis,
             "active_space": req.active_space,
             "mode": req.mode,
-            "krylov_dim": req.krylov_dim
+            "krylov_dim": req.krylov_dim,
+            "metadata": req.metadata,
         }
     }
 
