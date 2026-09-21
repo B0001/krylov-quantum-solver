@@ -8,8 +8,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY src/ ./src/
-COPY golden_suite/ ./golden_suite/
+# Copy all source folders and install as a local package
+COPY . .
+RUN pip install --no-cache-dir .
 
 # Non-root runtime
 RUN useradd --create-home appuser
