@@ -515,6 +515,27 @@ hypothesis whose death is informative is worth more here than a safe one.
 
 ## Done
 
+- [x] **Does a real, independently-checked certkit certificate drive CADE's D1-D3 actuation
+  chain unmodified, or does the mock TwoSidedClaim contract hide a mismatch?** *(2026-09-21,
+  closing chem-cjl.1 / CADE Milestone D4)* — **DONE, and it surfaces a live footgun plus a
+  genuine safety finding.** D1-D3 gated `robot.planner`/`workspace`/`failclosed` against a local
+  `TwoSidedClaim` stand-in, never against a certificate this repo actually emits. Bridging
+  `certkit_bridge.Verdict` (H2, real inertia + Gershgorin certificates) through unmodified
+  D1/D2/D3 code found: (1) `Verdict.lo`/`hi` are populated from the producer's pre-check numbers,
+  so an `ok=False` ABSTAIN can carry a finite, tight-looking bracket (H2's own
+  `certificate_sector` does this) — a bridge keying off "lo/hi present and finite" instead of
+  `ok` would silently forward an unverified number into an actuation plan (gated, G4). (2) a
+  **VERIFIED** certificate is not the same thing as **safe to actuate**: H2's
+  `certificate_temple` (width 3.7e-9) continues, but the equally-VERIFIED
+  `certificate_gershgorin` (width 0.161, gap-free and loose by construction) trips D3's
+  `SAFETY_FLOOR = 0.15` and halts (G3) — the mapping used is certified-enclosure-width as the
+  model-error bound (a stated modeling choice, not a physical derivation). Zero changes to
+  `robot/planner.py`, `robot/workspace.py`, or `robot/failclosed.py`; the bridge is the only new
+  code. Gates G1-G4 in `tests/test_robot_chem_bridge_d4_spec.py`; `robot/chem_bridge.py`.
+  → [`SPEC_robot_chem_bridge_d4.md`](SPEC_robot_chem_bridge_d4.md) (still no real `certabstain`
+  package — `TwoSidedClaim` remains D1's documented-contract stand-in; no real robot/sensor;
+  `SAFETY_FLOOR` calibration inherited from D3, not re-derived here).
+
 - [x] **A certified bracket on the FIRST EXCITED state — and the self-certified version of it is
   impossible, not merely unbuilt** *(2026-09-18, implementing SPEC_excited_state_certification)* —
   **DONE, headline FALSIFIED.** The spec asked for the "world's first self-certified excited-state
