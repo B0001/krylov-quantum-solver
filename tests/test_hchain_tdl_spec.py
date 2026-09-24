@@ -91,3 +91,29 @@ def test_G5_reproducible():
     r1 = dmrg_energy_extrapolated(h1, eri, ne, ec, bond_dims=(30, 50), seed=42)
     r2 = dmrg_energy_extrapolated(h1, eri, ne, ec, bond_dims=(30, 50), seed=42)
     assert abs(r1.energy - r2.energy) < 1e-8
+
+
+# --- Localized (Loewdin site) orbitals: SPEC_hchain_largen2.md §10, bead chem-rhw ---------------
+# The driver's own integrals(), so the gate covers the code path `--localize` actually runs.
+from benchmark_hchain_tdl import integrals as driver_integrals  # noqa: E402
+
+LOC_FCI_TOL = 1e-8   # a unitary rotation of the full space: FCI must be invariant
+LOC_CONV_TOL = 1e-6  # bead chem-rhw acceptance (2): largest-D localized DMRG vs FCI
+
+
+def test_G1_localized_fci_invariant():
+    for n in (8, 10, 12):
+        e_can = fci_energy(*driver_integrals(n)[:4])
+        e_loc = fci_energy(*driver_integrals(n, localize=True)[:4])
+        assert abs(e_loc - e_can) < LOC_FCI_TOL, (n, e_loc, e_can)
+
+
+def test_G1_localized_extrapolation_matches_fci():
+    for n in (10, 12):
+        h1, eri, ne, ec, _ = driver_integrals(n, localize=True)
+        e_fci = fci_energy(h1, eri, ne, ec)
+        res = dmrg_energy_extrapolated(h1, eri, ne, ec, bond_dims=CONV_DIMS, seed=7)
+        assert res.regime != "uncontrolled", res.regime
+        assert abs(res.energy - e_fci) < G1_TOL, (n, res.energy, e_fci)
+        e_dmax = res.per_D[-1][2]
+        assert abs(e_dmax - e_fci) < LOC_CONV_TOL, (n, e_dmax, e_fci)
