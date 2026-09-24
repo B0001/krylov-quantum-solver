@@ -100,5 +100,32 @@ def report(res):
           f"{res['gap_in_bars']:.2f} bar-widths -> {'INSIDE' if res['inside'] else 'OUTSIDE'}")
 
 
+
+
+# ---- Vendoring (not analysis): merge the driver CSVs into the tracked table the gate reads. ----
+VENDOR_FIELDS = ["n", "e_dmrg_extrap", "e_per_atom", "stderr", "dw_dmax", "regime", "bond_dims",
+                 "dw_per_D", "e_per_D", "extrap_method", "fci_energy", "threads", "wall_s", "source"]
+
+
+def vendor(primary="data/hchain_tdl_localized.csv",
+           rerun="data/hchain_tdl_localized_rerun.csv", out=VENDORED_TABLE):
+    """A rerun row (larger D ladder) replaces the primary row for the same n."""
+    by_n = {}
+    for path, tag in ((primary, "ladder 100/200/400"), (rerun, "ladder 200/400/800")):
+        with open(path) as f:
+            for r in csv.DictReader(f):
+                r["source"] = tag
+                r["dw_dmax"] = r["dw_per_D"].split("/")[-1]
+                by_n[int(r["n"])] = r
+    with open(out, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=VENDOR_FIELDS, extrasaction="ignore")
+        w.writeheader()
+        for n in sorted(by_n):
+            w.writerow(by_n[n])
+
+
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["--vendor"]:
+        vendor()
+        sys.argv.pop(1)
     report(analyse(load_table(sys.argv[1] if len(sys.argv) > 1 else VENDORED_TABLE)))

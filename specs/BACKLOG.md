@@ -437,8 +437,17 @@ hypothesis whose death is informative is worth more here than a safe one.
 
 ### Scale, references, harnesses
 
-- [ ] **The Hₙ TDL error bar is not an error bar — it misses the published benchmark by 5× its own
-  width** — *Claim:* the headline e_∞ = −0.539967 ± 0.000107 Ha/atom does not contain the Simons/Motta
+- [x] **The Hₙ TDL error bar is not an error bar — it misses the published benchmark by 5× its own
+  width** — **RESOLVED (2026-09-24, bead chem-oxm; [`SPEC_hchain_largen2.md`](SPEC_hchain_largen2.md)
+  §11). CONFIRMED, then fixed.** In Loewdin site orbitals to n = 40 (every point in regime), the
+  pre-registered 8-fit systematic-inclusive headline is **e∞ = −0.540353 ± 0.000192 Ha/atom**, and
+  Motta's −0.540493 lies **inside** it (0.73 bar). LOO = 0.037 mHa/atom. The linear a + b/n fits
+  still drift with n_min (−0.540209 → −0.540403), and bulk vs fit disagree by 0.232 mHa/atom: the
+  1/n form is biased at n ≤ 40, exactly the systematic the old ± hid. The a + b/n + c/n² fits give
+  −0.540494 ± 0.000002, a post-hoc observation, not the headline. The n ≤ 16 canonical
+  −0.539967 ± 0.000107 is superseded. Table vendored at `specs/hchain_tdl_localized_table.csv`;
+  gate G4 in `tests/test_hchain_largen2_spec.py`.
+  *(original entry follows)* — *Claim:* the headline e_∞ = −0.539967 ± 0.000107 Ha/atom does not contain the Simons/Motta
   DMRG STO-6G TDL value (−0.540493, PRX **7**, 031059), and the quoted ± is a *fit* stderr blind to the
   dominant finite-size systematic. *(scout probe: e_∞ drifts monotonically −0.539769 (n≤12) →
   −0.539933 (n≤16, the committed claim, 8.4σ out) → −0.540185 (n≤22) while the stderr stays ~1e-4 —
@@ -751,7 +760,8 @@ hypothesis whose death is informative is worth more here than a safe one.
   run via block2 `get_dmrg_results()` agrees with the per-D protocol < 0.1 mHa, lands at FCI, and
   uses half the sweeps (gates G1–G3 in `tests/test_singleramp_spec.py`). `protocol="ramp"`.
 - [x] **Hₙ thermodynamic limit** — bond-dim + n→∞ extrapolation. → [`SPEC_hchain_tdl.md`](SPEC_hchain_tdl.md)
-  (e_∞ = −0.539967 ± 0.000107 Ha/atom; gates G1–G5 in `tests/test_hchain_tdl_spec.py`).
+  (e_∞ = −0.539967 ± 0.000107 Ha/atom; gates G1–G5 in `tests/test_hchain_tdl_spec.py`). **Superseded**
+  by SPEC_hchain_largen2 §11: e∞ = −0.540353 ± 0.000192 (localized orbitals, n ≤ 40, systematic-inclusive bar).
 - [x] **SKQD reproduces the exact-Krylov floor** — sample-based Krylov in determinants sampled from
   e^(−ikΔtH)|HF⟩ converges to FCI from above on H₄ / N₂ CAS(6,6) (`E_skqd ≥ E_fci − 1e-6`,
   `|E_skqd − E_fci| < 1.6 mHa` at depth ≥ 6). Gates G1–G4 in `tests/test_skqd_spec.py`;
