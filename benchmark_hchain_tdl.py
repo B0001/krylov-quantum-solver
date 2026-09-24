@@ -21,6 +21,7 @@ import argparse
 import csv
 import math
 import os
+import time
 
 from pyscf import gto, scf, ao2mo, lo
 
@@ -44,7 +45,9 @@ FCI_DET_CUTOFF = 5_000_000
 OUTPUT = "data/hchain_tdl.csv"
 OUTPUT_LOCALIZED = "data/hchain_tdl_localized.csv"
 FIELDS = ["n", "qubits", "ndet", "hf_energy", "e_dmrg_extrap", "stderr",
-          "e_per_atom", "fci_energy", "dmrg_vs_fci", "extrap_method"]
+          "e_per_atom", "fci_energy", "dmrg_vs_fci", "extrap_method",
+          # chem-oxm: recorded per point, never inferred afterwards
+          "regime", "bond_dims", "dw_per_D", "e_per_D", "threads", "wall_s"]
 
 
 def integrals(n, localize=False):
@@ -84,6 +87,8 @@ def main():
     ap.add_argument("--bond-dims", default=None, help="comma-separated D schedule (overrides default).")
     ap.add_argument("--stack-mem-gb", type=float, default=None,
                     help="block2 memory pool in GB (raise for large D at large n; default ~0.5).")
+    ap.add_argument("--output", default=None,
+                    help="CSV path (default: data/hchain_tdl[_localized].csv).")
     ap.add_argument("--localize", action="store_true",
                     help="Loewdin site orbitals (chain order) instead of canonical RHF MOs; "
                          "writes data/hchain_tdl_localized.csv so the two bases never mix.")
@@ -94,7 +99,7 @@ def main():
 
     ns_list = [int(x) for x in args.ns.split(",")] if args.ns else CHAIN_LENGTHS
     dims = tuple(int(x) for x in args.bond_dims.split(",")) if args.bond_dims else BOND_DIMS
-    output = OUTPUT_LOCALIZED if args.localize else OUTPUT
+    output = args.output or (OUTPUT_LOCALIZED if args.localize else OUTPUT)
 
     print(f"H_n TDL study | R={R_ANG:.4f} A | sto-6g | D={dims} | protocol={args.protocol} "
           f"| orbitals={'localized' if args.localize else 'canonical'}")
@@ -115,9 +120,11 @@ def main():
         h1, eri, ne, ec, e_hf = integrals(n, localize=args.localize)
         ndet = math.comb(n, ne[0]) * math.comb(n, ne[1])
         stack_mem = int(args.stack_mem_gb * 1024**3) if args.stack_mem_gb else None
+        t0 = time.time()
         res = dmrg_energy_extrapolated(h1, eri, ne, ec, bond_dims=dims,
                                        protocol=args.protocol, n_threads=args.threads,
                                        stack_mem=stack_mem)
+        wall = time.time() - t0
         e_fci = fci_energy(h1, eri, ne, ec) if ndet <= FCI_DET_CUTOFF else None
         d_fci = abs(res.energy - e_fci) if e_fci is not None else None
         epa = res.energy / n
@@ -126,13 +133,22 @@ def main():
         def c(x, w=13, p=6): return f"{x:{w}.{p}f}" if x is not None else f"{'--':>{w}}"
         cf = f"{d_fci:9.1e}" if d_fci is not None else f"{'--':>9}"
         print(f"{n:>4} {2 * n:6d} {ndet:16,d} {c(e_hf, 12)} {c(res.energy)} {res.stderr:9.1e} "
-              f"{epa:11.6f} {c(e_fci)} {cf}")
+              f"{epa:11.6f} {c(e_fci)} {cf}  {res.regime} {wall:.0f}s")
 
         row = {"n": n, "qubits": 2 * n, "ndet": ndet, "hf_energy": e_hf,
                "e_dmrg_extrap": res.energy, "stderr": res.stderr, "e_per_atom": epa,
-               "fci_energy": e_fci, "dmrg_vs_fci": d_fci, "extrap_method": res.method}
+               "fci_energy": e_fci, "dmrg_vs_fci": d_fci, "extrap_method": res.method,
+               "regime": res.regime, "bond_dims": "/".join(str(d) for d, _, _ in res.per_D),
+               "dw_per_D": "/".join(f"{w:.3e}" for _, w, _ in res.per_D),
+               "e_per_D": "/".join(f"{e:.10f}" for _, _, e in res.per_D),
+               "threads": args.threads, "wall_s": round(wall, 1)}
         with open(output, "a", newline="") as fh:
-            w = csv.DictWriter(fh, fieldnames=FIELDS)
+            # Append under the file's OWN header, so a pre-existing (older-schema) CSV stays valid.
+            fields = FIELDS
+            if file_exists:
+                with open(output) as rf:
+                    fields = next(csv.reader(rf))
+            w = csv.DictWriter(fh, fieldnames=fields, extrasaction="ignore")
             if not file_exists:
                 w.writeheader()
                 file_exists = True
