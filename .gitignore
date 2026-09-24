@@ -62,3 +62,11 @@ sandbox.sh
 
 # certkit bridge outputs (regenerate: PYTHONPATH=../certkit python certkit_bridge.py <case>)
 certkit_out/
+
+# Terraform / Terragrunt working state (architecture/deployment/)
+.terraform/
+.terragrunt-cache/
+.terraform.lock.hcl
+backend.tf
+*.tfstate
+*.tfstate.*

@@ -23,7 +23,11 @@ too-early apparent detection at a sloppy tolerance).
 HONEST SCOPE (specs/SPEC_visibility_law.md): Gaussian per-element noise with known sigma (the
 repo's conventions; fold measured device damping into w before budgeting hardware); the law
 prices DETECTION, not precision; c = 1.2 is calibrated, not derived (Hankel noise is
-correlated); uniform shot allocation (adaptive schemes could beat it -- a hypothesis, not a bug).
+correlated); uniform shot allocation -- now CLOSED NEGATIVE: with equal signal in every
+element, total noise
+power V*sum_k 1/S_k is convex, so uniform is the constrained optimum and no decaying schedule
+beats it (specs/SPEC_adaptive_shots_planning.md G2). Non-uniform allocation pays only once the
+signal is DAMPED, and then by ~1.3x in error, not the 5-10x hypothesized.
 """
 from __future__ import annotations
 

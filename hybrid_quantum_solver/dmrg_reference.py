@@ -38,14 +38,25 @@ def _as_pair(n_elec) -> Tuple[int, int]:
     return (int(n_elec[0]), int(n_elec[1]))
 
 
-def fci_energy(h1: np.ndarray, eri: np.ndarray, n_elec, e_core: float = 0.0) -> float:
-    """Exact active-space FCI total energy via PySCF's direct solver on raw integrals."""
+def fci_energy(h1: np.ndarray, eri: np.ndarray, n_elec, e_core: float = 0.0, *,
+               max_cycle: int = 1000) -> float:
+    """Exact active-space FCI total energy via PySCF's direct solver on raw integrals.
+
+    Raises ``RuntimeError`` if Davidson does not converge. PySCF's default (100 iterations, no
+    check) silently returned energies 0.3 mHa (n=10) and 91 mHa (n=12) too high for H_n in
+    Loewdin site orbitals, where the diagonal initial guess is poor (SPEC_hchain_largen2 §10).
+    """
     from pyscf import fci
 
     norb = h1.shape[0]
     na, nb = _as_pair(n_elec)
-    energy, _ = fci.direct_spin1.kernel(np.asarray(h1), np.asarray(eri), norb, (na, nb),
-                                        ecore=float(e_core))
+    solver = fci.direct_spin1.FCI()
+    solver.max_cycle = int(max_cycle)
+    energy, _ = solver.kernel(np.asarray(h1), np.asarray(eri), norb, (na, nb),
+                              ecore=float(e_core))
+    if not solver.converged:
+        raise RuntimeError(f"FCI Davidson did not converge in {max_cycle} iterations "
+                           f"(last E = {float(energy):.10f})")
     return float(energy)
 
 

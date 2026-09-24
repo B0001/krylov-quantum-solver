@@ -35,7 +35,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# certkit_bridge.py emits certificates for the independent checker to verify.
+# certkit_bridge.py emits certificates for the independent checker to verify; robot/workspace.py
+# (CADE Milestone D2) reuses certkit.interval.Iv for outward-rounded workspace-boundary checks.
 # Pinned to an exact tag on purpose: the checker's value is that it is a fixed,
 # independent artifact, so tracking a moving ref would defeat it. The bridge
 # previously relied on PYTHONPATH pointing at a sibling checkout, which pinned
@@ -60,6 +61,13 @@ test = [
 ]
 dev = [
     "ruff>=0.5",
+]
+api = [
+    "fastapi>=0.141.1",
+    "google-cloud-storage>=3.14.1",
+    "httpx>=0.28.1",
+    "redis>=8.1.0",
+    "uvicorn>=0.53.0",
 ]
 
 [project.entry-points.pytest11]

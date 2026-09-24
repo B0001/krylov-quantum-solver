@@ -21,3 +21,10 @@ ase>=3.22
 
 # Tests
 pytest>=7.0.0
+
+# API and Queue Worker dependencies (GCP Cloud Run / Redis)
+fastapi>=0.100.0
+uvicorn>=0.20.0
+redis>=4.5.0
+google-cloud-storage>=2.0.0
+

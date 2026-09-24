@@ -515,6 +515,84 @@ hypothesis whose death is informative is worth more here than a safe one.
 
 ## Done
 
+- [x] **Does a real, independently-checked certkit certificate drive CADE's D1-D3 actuation
+  chain unmodified, or does the mock TwoSidedClaim contract hide a mismatch?** *(2026-09-21,
+  closing chem-cjl.1 / CADE Milestone D4)* — **DONE, and it surfaces a live footgun plus a
+  genuine safety finding.** D1-D3 gated `robot.planner`/`workspace`/`failclosed` against a local
+  `TwoSidedClaim` stand-in, never against a certificate this repo actually emits. Bridging
+  `certkit_bridge.Verdict` (H2, real inertia + Gershgorin certificates) through unmodified
+  D1/D2/D3 code found: (1) `Verdict.lo`/`hi` are populated from the producer's pre-check numbers,
+  so an `ok=False` ABSTAIN can carry a finite, tight-looking bracket (H2's own
+  `certificate_sector` does this) — a bridge keying off "lo/hi present and finite" instead of
+  `ok` would silently forward an unverified number into an actuation plan (gated, G4). (2) a
+  **VERIFIED** certificate is not the same thing as **safe to actuate**: H2's
+  `certificate_temple` (width 3.7e-9) continues, but the equally-VERIFIED
+  `certificate_gershgorin` (width 0.161, gap-free and loose by construction) trips D3's
+  `SAFETY_FLOOR = 0.15` and halts (G3) — the mapping used is certified-enclosure-width as the
+  model-error bound (a stated modeling choice, not a physical derivation). Zero changes to
+  `robot/planner.py`, `robot/workspace.py`, or `robot/failclosed.py`; the bridge is the only new
+  code. Gates G1-G4 in `tests/test_robot_chem_bridge_d4_spec.py`; `robot/chem_bridge.py`.
+  → [`SPEC_robot_chem_bridge_d4.md`](SPEC_robot_chem_bridge_d4.md) (still no real `certabstain`
+  package — `TwoSidedClaim` remains D1's documented-contract stand-in; no real robot/sensor;
+  `SAFETY_FLOOR` calibration inherited from D3, not re-derived here).
+
+- [x] **A certified bracket on the FIRST EXCITED state — and the self-certified version of it is
+  impossible, not merely unbuilt** *(2026-09-18, implementing SPEC_excited_state_certification)* —
+  **DONE, headline FALSIFIED.** The spec asked for the "world's first self-certified excited-state
+  solver": simultaneous rigorous brackets on E₀ and E₁ with the separator β estimated from the same
+  Krylov data as θ₂ − σ₂. The bracket half works — Lehmann's pencil on the QKSD Ritz vectors
+  (`A₂y = τA₁y`, one extra `H|u⟩` per vector) contains E₀ and E₁ at **24/24** brackets over
+  LiH CAS(2,5) / H₄ / N₂ CAS(6,6) at M = 4…24, closes **> 3 orders** (LiH 88.3 → 0.026 mHa) and
+  costs only **1.2–11.7×** the raw Ritz gap error it covers. **The self-certified half is dead, and
+  the argument is a counting argument, not a tuning failure:** Lehmann needs to know how many
+  eigenvalues lie below β, Kato's interval says only that *some* eigenvalue is within σ₂ of θ₂, and
+  when the subspace has not resolved level 2 the pencil's top root — a true bound on E₂ — comes back
+  labelled E₁. It escapes on real molecules inside the claimed domain (N₂ CAS(6,6) **M = 16**, E₁
+  under-bounded by **17.4 mHa**; LiH M = 4–8 by ~2 mHa), and a constructed witness (levels
+  {0, 0.5, 1, 2, 3}, amplitude **1e-4** on the 0.5 level = population 1e-8, *above* the arc's 1e-10
+  reachability cut) certifies **E₁ ≥ 1.000 when E₁ = 0.5** while σ₁ = 6.8e-5 reports convergence.
+  **Exactly the blind spot `SPEC_subspace_floor_resolvability` found** ("a ~1e-4-amplitude reachable
+  level near the cluster boundary"), one rung up: there it corrupted a floor, here it corrupts a
+  certificate. Oracle mode is again the only rigorous path, and when its premise fails it **refuses**
+  (−inf) instead of lying. **Three further corrections to the spec's own mathematics:** (a) §3.2's
+  formula was single-vector **Temple**, not Lehmann — both are implemented and Lehmann is gated
+  tighter (+6.7e-5 Ha on LiH); (b) the unstated precondition is **θ₁ < β ≤ E₂ over the reachable
+  sector**, so a **degenerate E₁ admits no separator at all**; (c) that kills the spec's own
+  showcase — **Be₂** CAS(4,8) has E₁ = E₂ = −29.085033 Ha (a π pair) *and* those states are not
+  HF-reachable (rank saturates at 3, θ₁ sits 147 mHa above E₁^CASCI), so the "certified optical gap
+  curve" is unreachable twice over and ships as a refusal row. v1.0's G2 (STO-3G H₂, "micro-Hartree
+  at M=12") was unsatisfiable too: that reachable sector holds **two** levels, so E₂ does not exist
+  and the Krylov space saturates it at rank 2 from M = 2. Known limit: an arithmetic floor of
+  **~1e-8 Ha** (Ritz orthonormality ~1e-9 divided by β − θ₁), below which nothing here is a
+  certificate. Does **not** plug into certkit (v0.2.0 has only `lambda_min_enclosure`; a second-
+  eigenvalue pencil rule would have to be added first).
+  → [`SPEC_excited_state_certification.md`](SPEC_excited_state_certification.md);
+  `tests/test_excited_bounds_spec.py` (G1, G1b, G1c, G2, G2b, G3, G4, G4b — 10 passed, 98 s);
+  `excited_bounds.py`; `data/excited_certification_bench.csv`.
+
+- [x] **An independent checker's VERIFIED is not, by itself, evidence about the producer**
+  *(found 2026-09-06 while gating certkit_bridge's certificates in CI)* — **DONE.** The premise
+  behind consuming certkit as a protocol is that an out-of-process checker re-deriving the claim
+  from the certificate and the operator alone is a real check on the solver. For one of the two
+  routes this repo emits, it is not. `gershgorin_rayleigh` certifies
+  `[gershgorin_lower(H), ⟨x|H|x⟩]`, a true enclosure for **any** unit vector: a witness of pure
+  random noise, **0.84 Ha above the ground state** (θ = −1.0103 vs λ_min = −1.8524 on H₂), is
+  VERIFIED, exit 0. It is also the *only* route above certkit's `DENSE_LIMIT` = 256, so N₂
+  CAS(6,6) has no other. `temple_inertia` does reject the same witness ("inverted claimed
+  enclosure") — θ rising above β makes the Temple bound meaningless — so the discriminating
+  power comes from the **gap premise**, not from the checker being independent. **Consequence:**
+  soundness from the checker (G3), correctness from a pinned reference (G4), and the certified
+  floor needs its own pin, because the checker accepts any lower bound beneath the one it
+  re-derives — an enclosure claiming λ_min > −1e6 Ha is VERIFIED and useless. **Second finding,
+  from adversarial review:** exit 1 means ABSTAIN *or* crash, and a consumer that falls back to
+  stderr when stdout is empty cannot tell them apart — a checker crashing on a certificate
+  pinned ABSTAIN passed silently until G1 was made to compare the checker's own verdict line
+  against its exit code.
+  → [`SPEC_certkit_regression_gate.md`](SPEC_certkit_regression_gate.md) (gates G1–G5 in
+  `tests/test_certkit_regression_gate_spec.py`; electronic frame, global λ_min and **not** the
+  reachable-sector one, coverage is the producer's four cases until certificate emission reaches
+  the solver's return path).
+
 - [x] **Falsifying my own guard: the self-mode subspace floor is heuristic, not rigorous, for
   d ≥ 2** *(a parallel adversarial falsification sweep auditing PRs #20/#21)* — the self-mode floor
   θ_d − σ_d can exceed the true reachable E_d (linear H₆ R=1.2 Å d=3: β_self=−2.251 > −2.583). A
@@ -1466,6 +1544,125 @@ hypothesis whose death is informative is worth more here than a safe one.
   → [`SPEC_nb3x8_metamagnetism_thermal.md`](SPEC_nb3x8_metamagnetism_thermal.md) (T ≲ 0.1·J for the
   clean law; not claimed near/above the charge scale E_s−J where the ionic singlets would
   intrude; same isolated-dimer/g=2/density-density-only scope as `SPEC_nb3x8_metamagnetism`).
+
+- [x] **Can a non-uniform shot schedule beat the visibility law?** *(closes `visibility_law.py`'s
+  own open hypothesis — "adaptive schemes could beat it — a hypothesis, not a bug")* — **NO, and
+  the headline spec was falsified, not tuned.** v1.0 claimed 5–10× cheaper resolution from a
+  decaying schedule `S_k ∝ e^{−αk}`; its premise ("late steps are buried in noise") is simply
+  false for a closed system — `|s_k| ≥ 0.85` for every k out to 23 on N₂ CAS(6,6), so there is no
+  tail to defund, and total noise power `V·Σ 1/S_k` is **convex**, making uniform the constrained
+  optimum. Measured at v1.0's own settings (K=12, S=1e4): uniform **5.4 mHa**, best of ten
+  decaying schedules **5.39 mHa** (0.996×), worst 42 mHa; v1.0's "adaptive < 1 mHa vs uniform >
+  8 mHa" is unreachable at any α or γ. **WHAT SURVIVED:** under the validated global-depolarizing
+  damping `s_k → f^k s_k` a dead tail does exist — `α*` is 0 at f=1 and rises to +0.15 by f=0.9
+  (non-decreasing, gated), worth **1.35× in median error / ~1.8× in budget** at K=24, f=0.8, and
+  growing with depth (1.10× at K=12 → 1.35× at K=24). Two further findings: `α*` **saturates**
+  (flat from f=0.9 to f=0.7 — G3 gates monotonicity, and the proportional version would fail),
+  and the error **variance** moves only 1.07× (v1.0 wanted ≥ 5×) because it is set by rare mode
+  misidentifications, not by allocation — a future scheme chasing that number must attack mode
+  selection. Free bonus, gated in G2b: whitening a **geometric** schedule is a geometric rescale,
+  the same algebra as ODMD's depolarizing immunity, so it moves `|λ|` and leaves `arg λ` exact
+  (< 1e-7 Ha across α) — a polynomial schedule's weights are not geometric and bias the energy by
+  > 10 mHa. 100% reuse of `odmd.py` + `device_odmd_energy` (no new DMD code). Gates G1–G4 in
+  `tests/test_adaptive_shots_spec.py`; `adaptive_shots.py`; `data/adaptive_shots_bench.csv`.
+  → [`SPEC_adaptive_shots_planning.md`](SPEC_adaptive_shots_planning.md) (one system, one budget,
+  idealized i.i.d. Hadamard-test noise; damping is the global-depolarizing model, not measured
+  device noise — local gate noise is not a global channel, so α* on hardware must be measured).
+
+- [x] **Where does Heisenberg superexchange die along the Nb₃(Br₁₋ₓIₓ)₈ alloy line?** *(virtual-
+  crystal interpolation of the two `NB3X8_LT_BULK` endpoints, spin-ODMD on each)* — **x_c =
+  0.296953, and the spec's own predicted window was falsified, not widened.** v1.0 asserted the
+  20%-deviation boundary sits at `x_c ∈ (0.45, 0.65)`; measured it is at **41% iodine**, low by
+  0.153 in x. No simulation was needed to see the error coming: Heisenberg is *already* 14.1% off
+  at the pure bromide (`SPEC_odmd_spin`), so a 20% threshold has ~6 points of headroom and is spent
+  less than a third of the way across the series. The kill is exact rather than numerical, because
+  Δ collapses to **one dimensionless group** `a = (2t/(U₀−U_s))²` with `Δ = 2a/(√(1+4a)−1) − 1`, so
+  `Δ = D ⟺ |2t/(U₀−U_s)| = √(D+D²)` — linear in x on both sides. Bisection matches that closed form
+  to **2.4e-15**, and G3 asserts `x_c ∉ (0.45, 0.65)` explicitly so the falsification cannot decay
+  back into a pass. **The honest headline is that the boundary is soft:** x_c runs 0.052 → 0.297 →
+  0.639 as the threshold moves 15% → 20% → 30% (~0.039 in x per point), and the specced window is
+  exactly what a **25–30%** threshold gives — v1.0's window was self-consistent with a weaker
+  criterion than v1.0 itself defined. Δ(x) is smooth and strictly monotone: **nothing is
+  non-analytic at x_c**, so "phase diagram" here means an approximation's validity boundary, not a
+  thermodynamic one, and the number is meaningless without its threshold (gated as G3b). Secondary,
+  all gated: J rises monotonically 119.11 → 245.92 meV (150.15 at x_c) while the local-moment
+  fraction ‖S_z|ψ₀⟩‖² falls 0.890 → 0.759 — moment collapse and Heisenberg failure are the *same*
+  physics, not independent diagnostics; J_Heis overestimates at every x (one-sided, G5); and v1.0's
+  §3 forgot to interpolate U_s, which moves 24% across the series and enters through U₀−U_s. G4 was
+  *strengthened* rather than inherited: v1.0's `S² ≤ 1e-6` would have passed against an all-zero S²
+  operator, so the gate now also pins S² = 2.000 on the kicked triplet at exactly E₀+J — which
+  doubles as an independent confirmation of J from raw expectation values, not from ODMD. **Also
+  withdrawn: v1.0's framing.** Interpolating ab-initio endpoints does not make the interpolant
+  ab-initio — this is the **virtual crystal approximation** (no site disorder, no local halide
+  configuration, no relaxation, no bowing *by construction*, no re-screening), so the curve is a
+  model prediction under a named approximation, falsifiable by a supercell cRPA calculation, not
+  the "wholly unmapped ab-initio curve" v1.0 claimed. ~100% reuse (`odmd_spin.spin_excitation_lines`
+  + `nb3x8_gaps.dimer_cluster_integrals`; no new solver code). Gates G1, G2, G3, G3b, G4, G5 in
+  `tests/test_nb3x8_alloy_spec.py` (~1 s); `nb3x8_alloy.py`; `data/nb3x8_alloy_diagram.csv`.
+  → [`SPEC_nb3x8_alloy_phase.md`](SPEC_nb3x8_alloy_phase.md) (VCA; isolated interlayer dimer — no
+  in-plane kagome exchange and no band broadening, and unlike the charge gap in `SPEC_nb3x8_gaps`
+  no coordination correction to J has been computed; density-density only; exact statevector;
+  Br–I line only).
+
+- [x] **Can certified brackets prune a candidate library cheaply enough to matter?** *(interval
+  dominance on `temple_bounds` brackets at small Krylov M)* — **The arithmetic is sound; the
+  advertised economics are not, and the two are in direct tension.** v1.0 claimed ≥75% (§1 said
+  "over 80%") budget reduction. Measured on 8 H₄ chains (basis-vector cost, max_m=12, brute=96):
+  **sound/oracle saving 62.5% (WIDE) and 66.7% (TIGHT)** — real, and under the bar. **79.2% is
+  reachable only in Temple SELF mode, and that mode is not a bound**: across M=2…16 its lower
+  bound exceeds exact FCI on 5 (candidate, M) pairs, worst by **0.695 mHa**, while oracle mode
+  violates on none. The headline number was bought with an invalid certificate. **This spec
+  INHERITS `SPEC_excited_state_certification`'s kill** — an oracle separator presupposes a solved
+  candidate, and a Krylov subspace cannot certify the eigenvalue count a sound separator needs, so
+  the cheap certificate a screening loop actually has is the unsound one. **THE CONTROLLING LAW:**
+  pruning power is one ratio, library energy spread over bracket width at the cheap M — at M=2,
+  spread/width **4.45 prunes 6/8 instantly** while **1.00 prunes 0/8** and cannot move until M=4.
+  Same loop, same budget: the saving is a property of the LIBRARY, not the method, so
+  `sweep_metrics` returns the ratio beside the saving. Three more findings: v1.0's G3 ("strictly
+  non-increasing staircase") is **vacuous** — an active pool cannot grow by construction — and is
+  replaced by that ratio; a **vacuous −inf Temple bound never prunes** (G5), which makes pruning
+  power non-monotonic in M even though the pool never grows; and near-degeneracy is resolved by
+  **converging**, not tie-breaking — twins 1e-5 Å apart are separated honestly by M=10, so only an
+  EXACT tie exhausts the budget (G4's premise corrected while gating). Why no false prune despite
+  the unsound bound: on a homogeneous library every candidate is inflated together, so the error
+  is common-mode and the winner's margin stays ≤ −0.43 mHa — **measured, not a theorem**, and a
+  heterogeneous library has no such protection. STO-3G H₂ is excluded: it saturates at M=2, the
+  same category error `SPEC_excited_state_certification` G2 records. Gates G1/G1b/G2/G3/G4/G5 in
+  `tests/test_screening_loop_spec.py`; `screening_loop.py`; `data/screening_loop_performance.csv`.
+  → [`SPEC_interval_dominance_screening.md`](SPEC_interval_dominance_screening.md) (exact
+  statevector — shot noise would widen every bracket and push pruning later; cost is a
+  basis-vector count, not gates/shots/wall-clock, and no QPU is involved; soundness gated only for
+  homogeneous libraries; v1.0's "materials and drug discovery" framing withdrawn as scope
+  inflation).
+
+- [x] **Does Trotterization leak through the variational floor, and can signal-domain Richardson
+  plug it?** *(order-2 Suzuki ODMD, `trotter_odmd` reps refinement)* — **NO LEAK EXISTS, and the
+  premise inverts.** v1.0 claimed product-formula discretization pushes the solve below E_FCI and
+  proposed extrapolating the complex signal BEFORE diagonalization to restore the floor. Measured
+  over 2 systems × reps {1,2,4} × 6 window lengths: the raw Trotter energy is **above E_FCI in
+  36/36 configurations**, minimum excess **+0.26 mHa** (the order-2 Suzuki bias is positive:
+  +19.6/+4.2/+1.0 mHa at reps 1/2/4 on stretched H₂). v1.0's G1 demanded a drop of ≥1.0 mHa
+  *below*. **THE INVERSION:** the *extrapolant* lands below E_FCI in 12/24 here and **22/24** on
+  the 4-system benchmark — Richardson's residual is two-sided, so mitigation is the only step in
+  this pipeline that breaks the floor, and the extrapolated energy is **not a bound**.
+  **THE REGIME MAP (v1.0's G4 reversed — and a first draft of the replacement gate asserting
+  "scalar is never worse" was itself falsified by the data):** neither domain dominates. Inside
+  the accumulated-phase window signal-domain wins (H₂ at K=6: **0.0045 vs 0.0476 mHa**, 10×);
+  outside it scalar wins by far more (K=32: **~95×** on H₄, **~21×** on H₂) because the dt² law
+  holds exactly for the eigenPHASE, making `trotter_odmd.richardson_energy` flat in K while the
+  signal extrapolant degenerates onto the raw value. The controlling quantity is K·τ·δE, not the
+  extrapolation domain; the practical answer is the method already shipped. Two structural
+  corrections: v1.0's formula pairs s_k(Δt) with s_k(2Δt), which sit at **different physical
+  times** kΔt and 2kΔt so the O(Δt²) term cannot cancel — refining `reps` at fixed τ is the fix
+  (G5); and v1.0's Lehmann step is **undefined on this path**, not merely unmet — ODMD consumes a
+  scalar series and returns eigenphases, so no Ritz STATE and no ⟨u|H²|u⟩ ever exists to bound
+  (G3 gates the *absence* of a bracket function rather than shipping a certificate in name only).
+  100% reuse of `trotter_odmd` + `odmd`; no new solver. Gates G1/G1b/G2/G3/G4/G5 in
+  `tests/test_trotter_restorer_spec.py`; `trotter_restorer.py`; `data/trotter_restorer_bench.csv`.
+  → [`SPEC_trotter_floor_restorer.md`](SPEC_trotter_floor_restorer.md) (statevector circuits, no
+  device noise; **order-2 Suzuki only** — bias SIGN is a property of the formula and system, so
+  this proves the specced leak does not occur here, NOT that no leak can ever exist, which is the
+  natural follow-up; phase window calibrated, not derived).
 
 ## Killed
 

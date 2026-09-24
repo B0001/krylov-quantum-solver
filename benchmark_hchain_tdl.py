@@ -15,14 +15,15 @@ HONEST SCOPE (see SPEC §2, §7): minimal-basis MODEL at a fixed geometry, open 
 reproduces benchmark physics (cf. Motta et al., PRX 7, 031059, 2017), it does not extend it, and
 the quantum/statevector solver plays no role at these n.
 
-Run:  python benchmark_hchain_tdl.py [--threads N]   ->  data/hchain_tdl.csv + e_inf estimate
+Run:  python benchmark_hchain_tdl.py [--threads N] [--localize]  ->  data/hchain_tdl[_localized].csv + e_inf
 """
 import argparse
 import csv
 import math
 import os
+import time
 
-from pyscf import gto, scf, ao2mo
+from pyscf import gto, scf, ao2mo, lo
 
 from hybrid_quantum_solver.dmrg_reference import (
     dmrg_energy_extrapolated,
@@ -42,15 +43,26 @@ CHAIN_LENGTHS = [8, 10, 12, 16]
 BOND_DIMS = (200, 400, 800)           # D -> inf schedule (near-exact for 1D chains; raise on big nodes)
 FCI_DET_CUTOFF = 5_000_000
 OUTPUT = "data/hchain_tdl.csv"
+OUTPUT_LOCALIZED = "data/hchain_tdl_localized.csv"
 FIELDS = ["n", "qubits", "ndet", "hf_energy", "e_dmrg_extrap", "stderr",
-          "e_per_atom", "fci_energy", "dmrg_vs_fci", "extrap_method"]
+          "e_per_atom", "fci_energy", "dmrg_vs_fci", "extrap_method",
+          # chem-oxm: recorded per point, never inferred afterwards
+          "regime", "bond_dims", "dw_per_D", "e_per_D", "threads", "wall_s"]
 
 
-def integrals(n):
+def integrals(n, localize=False):
+    """Full-space (n, n) STO-6G integrals for H_n.
+
+    ``localize=False`` (default): canonical, delocalized RHF orbitals (``mf.mo_coeff``).
+    ``localize=True``: Loewdin-orthogonalized site orbitals C = S^(-1/2) over the FULL basis.
+    STO-6G has one AO per H, so these are one orbital per site, already in chain order. Both are
+    unitary rotations of the same full space, so the FCI energy is identical (SPEC_hchain_largen2
+    §10); only the entanglement structure DMRG sees changes.
+    """
     atom = "; ".join(f"H 0 0 {i * R_ANG:.6f}" for i in range(n))
     mol = gto.M(atom=atom, basis="sto-6g", verbose=0)
     mf = scf.RHF(mol).run()
-    mo = mf.mo_coeff
+    mo = lo.orth_ao(mol, "lowdin") if localize else mf.mo_coeff
     h1 = mo.T @ mf.get_hcore() @ mo
     eri = ao2mo.restore(1, ao2mo.kernel(mol, mo), n)
     ne = (mol.nelectron // 2, mol.nelectron // 2)
@@ -75,6 +87,11 @@ def main():
     ap.add_argument("--bond-dims", default=None, help="comma-separated D schedule (overrides default).")
     ap.add_argument("--stack-mem-gb", type=float, default=None,
                     help="block2 memory pool in GB (raise for large D at large n; default ~0.5).")
+    ap.add_argument("--output", default=None,
+                    help="CSV path (default: data/hchain_tdl[_localized].csv).")
+    ap.add_argument("--localize", action="store_true",
+                    help="Loewdin site orbitals (chain order) instead of canonical RHF MOs; "
+                         "writes data/hchain_tdl_localized.csv so the two bases never mix.")
     args = ap.parse_args()
     if not dmrg_available():
         print("[FATAL] block2 required: pip install block2.")
@@ -82,28 +99,32 @@ def main():
 
     ns_list = [int(x) for x in args.ns.split(",")] if args.ns else CHAIN_LENGTHS
     dims = tuple(int(x) for x in args.bond_dims.split(",")) if args.bond_dims else BOND_DIMS
+    output = args.output or (OUTPUT_LOCALIZED if args.localize else OUTPUT)
 
-    print(f"H_n TDL study | R={R_ANG:.4f} A | sto-6g | D={dims} | protocol={args.protocol}")
+    print(f"H_n TDL study | R={R_ANG:.4f} A | sto-6g | D={dims} | protocol={args.protocol} "
+          f"| orbitals={'localized' if args.localize else 'canonical'}")
     hdr = (f"{'n':>4} {'qubits':>6} {'ndet':>16} {'HF':>12} {'E_extrap':>13} {'stderr':>9} "
            f"{'E/atom':>11} {'FCI':>13} {'|D-FCI|':>9}")
     print(hdr)
     print("-" * len(hdr))
 
     os.makedirs("data", exist_ok=True)
-    done = load_done(OUTPUT)
-    file_exists = os.path.exists(OUTPUT)
+    done = load_done(output)
+    file_exists = os.path.exists(output)
     per_atom = dict((n, v[0]) for n, v in done.items())
 
     for n in ns_list:
         if n in done:
             print(f"{n:>4}  (cached)")
             continue
-        h1, eri, ne, ec, e_hf = integrals(n)
+        h1, eri, ne, ec, e_hf = integrals(n, localize=args.localize)
         ndet = math.comb(n, ne[0]) * math.comb(n, ne[1])
         stack_mem = int(args.stack_mem_gb * 1024**3) if args.stack_mem_gb else None
+        t0 = time.time()
         res = dmrg_energy_extrapolated(h1, eri, ne, ec, bond_dims=dims,
                                        protocol=args.protocol, n_threads=args.threads,
                                        stack_mem=stack_mem)
+        wall = time.time() - t0
         e_fci = fci_energy(h1, eri, ne, ec) if ndet <= FCI_DET_CUTOFF else None
         d_fci = abs(res.energy - e_fci) if e_fci is not None else None
         epa = res.energy / n
@@ -112,13 +133,22 @@ def main():
         def c(x, w=13, p=6): return f"{x:{w}.{p}f}" if x is not None else f"{'--':>{w}}"
         cf = f"{d_fci:9.1e}" if d_fci is not None else f"{'--':>9}"
         print(f"{n:>4} {2 * n:6d} {ndet:16,d} {c(e_hf, 12)} {c(res.energy)} {res.stderr:9.1e} "
-              f"{epa:11.6f} {c(e_fci)} {cf}")
+              f"{epa:11.6f} {c(e_fci)} {cf}  {res.regime} {wall:.0f}s")
 
         row = {"n": n, "qubits": 2 * n, "ndet": ndet, "hf_energy": e_hf,
                "e_dmrg_extrap": res.energy, "stderr": res.stderr, "e_per_atom": epa,
-               "fci_energy": e_fci, "dmrg_vs_fci": d_fci, "extrap_method": res.method}
-        with open(OUTPUT, "a", newline="") as fh:
-            w = csv.DictWriter(fh, fieldnames=FIELDS)
+               "fci_energy": e_fci, "dmrg_vs_fci": d_fci, "extrap_method": res.method,
+               "regime": res.regime, "bond_dims": "/".join(str(d) for d, _, _ in res.per_D),
+               "dw_per_D": "/".join(f"{w:.3e}" for _, w, _ in res.per_D),
+               "e_per_D": "/".join(f"{e:.10f}" for _, _, e in res.per_D),
+               "threads": args.threads, "wall_s": round(wall, 1)}
+        with open(output, "a", newline="") as fh:
+            # Append under the file's OWN header, so a pre-existing (older-schema) CSV stays valid.
+            fields = FIELDS
+            if file_exists:
+                with open(output) as rf:
+                    fields = next(csv.reader(rf))
+            w = csv.DictWriter(fh, fieldnames=fields, extrasaction="ignore")
             if not file_exists:
                 w.writeheader()
                 file_exists = True
@@ -135,7 +165,7 @@ def main():
         e_bulk = bulk_per_site_energy(ns, [per_atom[n] * n for n in ns])
         print(f"  bulk per-site (E(n)-E(n-d))/d at n={ns[-1]}: {e_bulk:.6f}  "
               f"(vs 1/n fit {abs(e_bulk - e_inf) * 1e3:.2f} mHa/atom)")
-    print(f"\nMinimal-basis model, open chain -- reproduces benchmark physics, not a new result.  ->  {OUTPUT}")
+    print(f"\nMinimal-basis model, open chain -- reproduces benchmark physics, not a new result.  ->  {output}")
 
 
 if __name__ == "__main__":
