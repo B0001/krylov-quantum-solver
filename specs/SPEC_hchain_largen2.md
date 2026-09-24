@@ -190,3 +190,26 @@ R1 ("D needed grows with n") and the ~21 h cost were largely an orbital-basis ar
 should run with `--localize`, and does not need a bigger machine. This measures n = 20 at R = 1.8 bohr
 only. Whether the needed D stays flat at n = 40, and how it depends on R, are chem-oxm and chem-1uu.
 No TDL extrapolation is done here.
+
+## 11. Thermodynamic limit in localized orbitals (bead chem-oxm)
+
+### 11.1 Pre-registered analysis (committed before any large-n number existed)
+
+The analysis is code, `hchain_tdl_analysis.py`, and was committed before the run finished. It must
+not change after the data are seen.
+
+- **Data:** `benchmark_hchain_tdl.py --localize --protocol ramp --bond-dims 100,200,400`, at
+  n ∈ {8, 10, 12, 16, 20, 24, 28, 32, 40} as far as the budget allows. Any n whose ladder is
+  under-converged is rerun at 200/400/800. Every point records its `regime`.
+- **Fits (8):** e(n) = a + b/n and e(n) = a + b/n + c/n², each over n_min ∈ {8, 12, 16, 20}, with
+  n_max = the largest n reached.
+- **Systematic-inclusive bar:** the envelope of `a` over the 8 fits. Headline = midpoint of
+  [min a, max a], and bar = half the envelope width plus the largest single-fit stderr.
+- **LOO:** the driver's definition: the all-n a + b/n fit minus the same fit with the largest n
+  dropped. Gate: < 0.1 mHa/atom.
+- **Bulk:** `bulk_per_site_energy` on the two largest n, vs the all-n a + b/n fit. Gate:
+  < 0.1 mHa/atom. A miss means the fit form is wrong at these n. That is reported, not tuned away.
+- **Reference:** Motta et al., PRX 7, 031059: −0.540493 Ha/atom. The result is stated as inside or
+  outside the headline bar, with the gap in mHa/atom and in units of the bar. No other window or
+  fit form is substituted to close a gap. Motta's value is itself an N → ∞ extrapolation, so a small
+  disagreement is a finding about two extrapolations, not proof that either energy is wrong.
