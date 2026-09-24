@@ -2,6 +2,12 @@
 
 **Status:** DRAFT — awaiting approval. No implementation until the acceptance gates below are agreed.
 
+> **Superseded headline (2026-09-24).** This spec's n ≤ 16 canonical-orbital result,
+> e∞ = −0.539967 ± 0.000107 Ha/atom, is kept for the record. Its ± was a fit stderr blind to
+> finite-size bias, and it missed Motta's −0.540493 by ~5×. The current value is
+> [`SPEC_hchain_largen2.md`](SPEC_hchain_largen2.md) §11: **−0.540353 ± 0.000192 Ha/atom**, from
+> localized orbitals at n ≤ 40 with a systematic-inclusive bar. Motta's value is inside it.
+
 ---
 
 ## 1. Goal

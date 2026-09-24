@@ -1,14 +1,15 @@
 # SPEC: Hₙ to larger n, done right (adequate-D ramp + bulk per-site estimator)
 
-**Status:** PARTIAL. CI gates G1–G3 PASS (`make gates`, 2026-06-29); `bulk_per_site_energy`
-is merged. The headline large-n ramp (D=400/800/1600, 4 threads, canonical RHF orbitals) **was run**
-(`logs/run_hchain_headline.sh`, 2026-07-04): it took ~21 h to finish n=8..20 (04:50 on 07-04 to 01:53
-on 07-05, `logs/hchain_pipeline.log` on the laptop, not tracked), and the n=22/24 stage was killed
-after ~19.5 h without a row. Its largest points are out of regime (see bead chem-oxm), so the
-definition of done in §5 is still **not met**. An earlier attempt (2026-06-29, n=16..30, 8 threads)
-aborted when block2 ran out of stack memory before the first row. **§10 (2026-09-24):** the cost was
-the orbital basis. In Loewdin site orbitals, n=20 converges at D=50 in 20 s to within 5.4 µHa of the
-D=400 result; canonical orbitals at D=400 are still 6.4 mHa above it after 9.5 min.
+**Status:** DONE (2026-09-24, bead chem-oxm; §11). The definition of done is met in Loewdin site
+orbitals at n ≤ 40: leave-one-out = **0.037 mHa/atom** (< 0.1), with every point in regime.
+**Headline e∞ = −0.540353 ± 0.000192 Ha/atom.** The bar is systematic-inclusive (the 8-fit
+envelope plus the largest stderr). Motta's −0.540493 lies **inside** it (gap 0.140 mHa/atom =
+0.73 bar). The bulk-vs-fit cross-check **fails** as a recorded finding: 0.232 mHa/atom vs the
+0.1 target. The a + b/n form is biased at these n; the four a + b/n + c/n² fits all give
+−0.540492 to −0.540496. The canonical-orbital history is kept below and in §10: the n ≤ 16
+headline −0.539967 ± 0.000107 is **superseded**. The ~21 h canonical ramp to n=20 (2026-07-04,
+killed at n=22/24) and the 2026-06-29 stack-memory abort were the orbital basis, not the
+hardware (§10).
 
 > Supersedes [`SPEC_hchain_largen.md`](SPEC_hchain_largen.md), which was **killed**: the cheap
 > ramp at D=100/200/400 truncated too hard as chain entanglement grew — discarded-weight stderr
@@ -28,7 +29,8 @@ discarded-weight regime (`method == "dweight"`).
 ## 2. Background and honest framing
 
 - Builds directly on the validated `protocol="ramp"` extrapolation ([`SPEC_singleramp.md`]) and the
-  TDL fit ([`SPEC_hchain_tdl.md`], e∞ = −0.539967 ± 0.000107 Ha/atom from n ≤ 16).
+  TDL fit ([`SPEC_hchain_tdl.md`], e∞ = −0.539967 ± 0.000107 Ha/atom from n ≤ 16; **superseded**
+  by §11: that ± was a fit stderr blind to finite-size bias).
 - **What we can claim if gates pass:** a tighter, better-controlled TDL estimate for the
   minimal-basis Hₙ chain, with two independent extrapolation routes agreeing — and an honest
   account of the bond dimension required to stay in regime at large n.
@@ -213,3 +215,70 @@ not change after the data are seen.
   outside the headline bar, with the gap in mHa/atom and in units of the bar. No other window or
   fit form is substituted to close a gap. Motta's value is itself an N → ∞ extrapolation, so a small
   disagreement is a finding about two extrapolations, not proof that either energy is wrong.
+
+### 11.2 Result (2026-09-24)
+
+**Run.** `benchmark_hchain_tdl.py --localize --protocol ramp --bond-dims 100,200,400 --threads 4
+--stack-mem-gb 6` was run at n = 8, 10, 12, 16, 20, 24, 28, 32, 40. The tracked per-n table is
+[`hchain_tdl_localized_table.csv`](hchain_tdl_localized_table.csv), which gate G4 in
+`tests/test_hchain_largen2_spec.py` reads. Hardware: `Linux vm 6.18.44-fc-v37 x86_64`, Intel Xeon
+@ 2.10 GHz, `nproc` = 4, 15 GiB RAM (container limit), no GPU.
+
+| n | E_total (Ha) | E/atom (Ha) | extrap. stderr | dw at D_max | regime | D ladder | E_extrap − E(D_max) | vs FCI | wall (s) |
+|---|---|---|---|---|---|---|---|---|---|
+| 8  | −4.345079401 | −0.5431349 | 1.2e-14 | 3.7e-20 | converged | 100/200/400 | +2.9e-11 | 5.1e-11 | 19 |
+| 10 | −5.424385375 | −0.5424385 | 2.2e-11 | 5.0e-20 | converged | 100/200/400 | −6.4e-11 | 1.3e-10 | 2 |
+| 12 | −6.504226956 | −0.5420189 | 2.6e-10 | 5.9e-17 | converged | 100/200/400 | −4.2e-10 | 4.9e-10 | 6 |
+| 16 | −8.664761408 | −0.5415476 | 4.1e-09 | 9.9e-15 | converged | 100/200/400 | −6.2e-09 | — | 18 |
+| 20 | −10.825878902 | −0.5412939 | 2.2e-08 | 1.2e-13 | converged | 100/200/400 | −3.4e-08 | — | 41 |
+| 24 | −12.987288247 | −0.5411370 | 1.8e-10 | 5.8e-13 | truncation | 100/200/400 | −2.2e-10 | — | 79 |
+| 28 | −15.148861967 | −0.5410308 | 6.4e-10 | 1.8e-12 | truncation | 100/200/400 | −7.1e-10 | — | 142 |
+| 32 | −17.310536221 | −0.5409543 | 9.6e-10 | 7.2e-12 | truncation | 100/200/400 | −1.2e-09 | — | 308 |
+| 40 | −21.634061781 | −0.5408515 | 5.9e-08 | 1.5e-13 | converged | **200/400/800** | −9.1e-08 | — | 1317 |
+
+Wall time is the DMRG time only (4 threads), and excludes FCI at n ≤ 12.
+
+**n=40 needed the 200/400/800 rerun.** On the 100/200/400 ladder, the first ramp stage (D=100, 4
+sweeps from a random MPS) stalled at −20.924 Ha, **0.71 Ha** above the D=200/400 energies. It
+still reported a small, monotone discarded weight, so `regime` read "truncation". The
+discarded-weight fit then extrapolated 0.82 mHa *below* its own D=400 energy (stderr 8.0e-4, 800 s).
+**The regime label did not catch this.** Weights alone cannot see a stage that never converged.
+The flag was the stderr, 4–5 orders above every other point, and E_extrap − E(D_max). The rerun's
+D=400 energy (−21.6340616891) matches the stalled run's D=400 energy to every printed digit, and
+its D=800 point moves it by 1e-9 Ha. G4 now also checks \|E_extrap − E(D_max)\| < 1e-6 Ha for every
+vendored point. That check was added after this failure, and says so. The stalled row is not in
+the table. **n=48 and n=56** (200/400/800) were attempted and **OOM-killed** by the 15 GiB container
+limit, with 13.9 GB resident after ~1 h each. Neither produced a row, so nothing half-finished is
+in the fit.
+
+**Pre-registered analysis** (`uv run python hchain_tdl_analysis.py`, n_max = 40):
+
+| form | n_min | points | a (Ha/atom) | stderr |
+|---|---|---|---|---|
+| a + b/n | 8  | 9 | −0.540209 | 4.8e-05 |
+| a + b/n | 12 | 7 | −0.540320 | 2.7e-05 |
+| a + b/n | 16 | 6 | −0.540373 | 1.7e-05 |
+| a + b/n | 20 | 5 | −0.540403 | 1.2e-05 |
+| a + b/n + c/n² | 8  | 9 | −0.540492 | 1.6e-06 |
+| a + b/n + c/n² | 12 | 7 | −0.540496 | 4.9e-07 |
+| a + b/n + c/n² | 16 | 6 | −0.540495 | 5.8e-07 |
+| a + b/n + c/n² | 20 | 5 | −0.540494 | 4.6e-07 |
+| bulk (E(40) − E(32))/8 | — | 2 | −0.540441 | — |
+
+- Envelope of a: [−0.540496, −0.540209], width 0.288 mHa. Largest stderr: 0.048 mHa.
+- **Headline: e∞ = −0.540353 ± 0.000192 Ha/atom.**
+- **LOO** (all-n a + b/n, dropping n=40): −0.540209 → −0.540172, shift **0.037 mHa/atom**. PASS (< 0.1).
+- **Bulk vs fit:** \|−0.540441 − (−0.540209)\| = **0.232 mHa/atom**. FAIL (target < 0.1). This is
+  reported, not tuned away. The a + b/n form is wrong at n ≤ 40. The linear fits drift monotonically
+  as n_min rises (−0.540209 → −0.540403), which is the finite-size bias the old ± missed. The bulk
+  quotient on (32, 40) still carries its own O(1/n²) curvature.
+- **Motta −0.540493: INSIDE** the headline bar. The gap is +0.140 mHa/atom = 0.73 of the bar.
+
+**Honest reading.** The bar is wide because the pre-registered envelope includes the biased
+a + b/n fits. It contains Motta's value; the old ± (0.107 mHa, a fit stderr) did not, and missed
+it by ~5×. A post-hoc observation, *not* the headline: the four a + b/n + c/n² fits agree with each
+other to 4 µHa (−0.540492 to −0.540496), and with Motta to ≤ 3 µHa. Promoting that to the headline
+would mean choosing the fit form after seeing the data, which §11.1 forbids. A future spec can
+pre-register it. Motta's value is itself an N → ∞ extrapolation from larger N, so agreement or
+disagreement at this level is a statement about two extrapolations. Scope: STO-6G, open chain,
+R = 1.8 bohr. This is a model number that reproduces published physics; it does not extend it.

@@ -90,3 +90,48 @@ def test_G3_stays_in_discarded_weight_regime():
     assert res.regime != "uncontrolled", res.regime
     dws = [w for _, w, _ in res.per_D]
     assert res.regime != "converged" or max(dws) <= DISCARD_WEIGHT_FLOOR, dws
+
+
+# --- G4: the recorded localized-orbital TDL headline (bead chem-oxm, SPEC §11) ------------------
+# Pure: reads the vendored table and re-runs the pre-registered analysis. No DMRG, no block2.
+# The recorded values below are what SPEC_hchain_largen2 §11.2 reports; if the table or the
+# analysis changes, this gate fails until the spec is updated with it.
+RECORDED = {
+    "n_max": 40,
+    "headline": -0.5403525422368446,      # Ha/atom, midpoint of the 8-fit envelope
+    "bar": 0.00019217470782228015,        # half envelope width + largest single-fit stderr
+    "loo_shift": 3.652861726366474e-05,   # all-n a+b/n fit, drop n_max
+    "bulk_vs_fit": 0.00023192516003001096,  # |bulk(32,40) - all-n a+b/n fit|
+    "motta_inside": True,                 # -0.540493 lies inside headline +/- bar
+}
+LOO_GATE = 1e-4          # 0.1 mHa/atom
+BULK_GATE = 1e-4         # 0.1 mHa/atom
+LADDER_CONSISTENCY = 1e-6  # |E_extrap - E(D_max)|, Ha; added after the n=40 D=100 stall (§11.2)
+
+
+def _table():
+    import hchain_tdl_analysis as tdl
+    return tdl, tdl.load_table()
+
+
+def test_G4_every_vendored_point_is_in_regime_and_self_consistent():
+    _, rows = _table()
+    assert [int(r["n"]) for r in rows][-1] == RECORDED["n_max"]
+    for r in rows:
+        assert r["regime"] in ("converged", "truncation"), (r["n"], r["regime"])
+        e_dmax = float(r["e_per_D"].split("/")[-1])
+        assert abs(float(r["e_dmrg_extrap"]) - e_dmax) < LADDER_CONSISTENCY, r["n"]
+        if r["fci_energy"]:
+            assert abs(float(r["e_dmrg_extrap"]) - float(r["fci_energy"])) < 1e-6, r["n"]
+
+
+def test_G4_recorded_headline_is_reproduced_by_the_preregistered_analysis():
+    tdl, rows = _table()
+    res = tdl.analyse(rows)
+    for key in ("headline", "bar", "loo_shift", "bulk_vs_fit"):
+        assert abs(res[key] - RECORDED[key]) < 1e-9, (key, res[key], RECORDED[key])
+    assert res["inside"] is RECORDED["motta_inside"]
+    assert res["loo_shift"] < LOO_GATE
+    # Acceptance (3) FAILS and that is the recorded finding: the a+b/n form is biased at n <= 40.
+    # Pinned so a future table that closes (or widens) the gap has to update the spec to pass.
+    assert (res["bulk_vs_fit"] < BULK_GATE) is False, res["bulk_vs_fit"]
