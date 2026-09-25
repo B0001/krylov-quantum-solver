@@ -27,6 +27,8 @@ pyscf + block2 only -- no qiskit imports (block2 OpenMP isolation; see CLAUDE.md
 """
 from __future__ import annotations
 
+import os
+
 from pyscf import ao2mo, lib, mcscf, scf
 
 from hybrid_quantum_solver.dmrg_reference import dmrg_energy_extrapolated
@@ -61,10 +63,15 @@ def load_nbn_cas(norb: int = 14, nelec_cas: int = 14, chk: str = "data/nbn_scf.c
     return h1, eri, (int(cas.nelecas[0]), int(cas.nelecas[1])), float(e_core)
 
 
-def run_schedule(name: str, n_threads: int = 2, nelec=None):
-    """One independent DMRG schedule by name ('A'/'B' headline, "A'"/"B'" cheap CI variants)."""
+def run_schedule(name: str, n_threads: int = 2, nelec=None, scratch_tag: str = ""):
+    """One independent DMRG schedule by name ('A'/'B' headline, "A'"/"B'" cheap CI variants).
+
+    ``scratch_tag`` suffixes the block2 scratch dir: two processes running the same schedule
+    concurrently (parallel gates) must not share one, or block2 aborts on the clobbered MPS."""
     h1, eri, nelec, e_core = load_nbn_cas(nelec=nelec)
     kw = dict(SCHEDULES[name])
+    kw["scratch"] += scratch_tag
+    os.makedirs(kw["scratch"], exist_ok=True)   # block2 does not create it: "save_data failed"
     return dmrg_energy_extrapolated(h1, eri, nelec, e_core, n_threads=n_threads, **kw)
 
 

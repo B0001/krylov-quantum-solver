@@ -32,7 +32,10 @@ _CACHE = {}
 def _run(tag, nelec):
     key = (tag, nelec)
     if key not in _CACHE:
-        _CACHE[key] = run_schedule(tag, n_threads=2, nelec=nelec)
+        # Own scratch per (schedule, sector): run_gates.sh runs this file alongside
+        # test_nbn_dmrg_reference_spec.py, whose A'/B' would otherwise share the directory.
+        suffix = "_lowspin_" + ("scf" if nelec is None else f"{nelec[0]}{nelec[1]}")
+        _CACHE[key] = run_schedule(tag, n_threads=2, nelec=nelec, scratch_tag=suffix)
     return _CACHE[key]
 
 

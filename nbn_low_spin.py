@@ -182,6 +182,34 @@ def cmd_fci(args):
                      occ=[round(float(x), 6) for x in occ]))
 
 
+def cmd_no(args):
+    """Natural orbitals of the SU(2) target state from a block2 1-RDM (the exact-FCI route needs a
+    spin penalty that did not converge for the singlet; see runs.jsonl). Saves NO_CACHE."""
+    from pyblock2.driver.core import DMRGDriver, SymmetryTypes
+
+    from nbn_dmrg_reference import load_nbn_cas
+
+    h1, eri, nelec, e_core = load_nbn_cas(nelec=tuple(args.nelec))
+    scratch = f"./.dmrg_tmp/nbn_no_{nelec[0]}{nelec[1]}"
+    os.makedirs(scratch, exist_ok=True)
+    t = time.time()
+    drv = DMRGDriver(scratch=scratch, symm_type=SymmetryTypes.SU2, n_threads=args.threads)
+    drv.initialize_system(n_sites=14, n_elec=sum(nelec), spin=nelec[0] - nelec[1], orb_sym=None)
+    mpo = drv.get_qc_mpo(h1e=h1, g2e=eri, ecore=e_core, iprint=0)
+    ket = drv.get_random_mps(tag="KET", bond_dim=args.D // 2, nroots=1)
+    dims = [args.D // 2] * 4 + [args.D] * 8
+    e = drv.dmrg(mpo, ket, n_sweeps=len(dims), bond_dims=dims,
+                 noises=[1e-4] * 4 + [1e-5] * 4 + [0.0] * 4, thrds=[1e-8] * len(dims), iprint=0)
+    dm1 = np.asarray(drv.get_1pdm(ket))
+    occ, u = np.linalg.eigh(dm1)
+    order = np.argsort(-occ)
+    occ, u = occ[order], u[:, order]
+    np.savez(NO_CACHE.format(na=nelec[0], nb=nelec[1]), occ=occ, u=u)
+    _record(dict(kind="natocc", source=f"block2 SU2 D={args.D}", nelec=list(nelec), energy=float(e),
+                 trace=float(occ.sum()), occ=[round(float(x), 6) for x in occ],
+                 wall_s=round(time.time() - t, 1)))
+
+
 def cmd_dmrg(args):
     from hybrid_quantum_solver.dmrg_reference import dmrg_energy_extrapolated
     from nbn_dmrg_reference import SCHEDULES, load_nbn_cas
@@ -217,6 +245,11 @@ if __name__ == "__main__":
     f.add_argument("--nroots", type=int, default=1)
     f.add_argument("--save-no", action="store_true")
     f.set_defaults(fn=cmd_fci)
+    n = sub.add_parser("no")
+    n.add_argument("--nelec", type=int, nargs=2, default=[7, 7])
+    n.add_argument("--D", type=int, default=500)
+    n.add_argument("--threads", type=int, default=4)
+    n.set_defaults(fn=cmd_no)
     d = sub.add_parser("dmrg")
     d.add_argument("--schedule", required=True)
     d.add_argument("--nelec", type=int, nargs=2, default=[7, 7])

@@ -32,7 +32,7 @@ hard, and the sector ordering survives at converged bond dimension.
   regenerates the checkpoint through the committed `benchmark_nbn.ground_state_mf` path.
 - **The reconstruction does NOT reproduce the committed number.** At d = 2.25 Å the same pipeline
   gives E(10,4) = −110.056110 (exact FCI), not −110.046028 — 10.1 mHa lower. A fine scan over the
-  whole rounding window 2.240–2.255 Å stays within −110.0560 ± 0.0003. So either the original CIF
+  whole rounding window 2.240–2.255 Å stays in −110.05594…−110.05643 (`kind: fingerprint` rows). So either the original CIF
   was not at MP's reported d, or something else (pyscf version, SCF solution) differed. Every
   number below is for the reconstruction; the committed −110.046028 is **not reproducible** from
   anything in the repo.
@@ -59,7 +59,7 @@ Raw record: `results/nbn_low_spin/runs.jsonl` (one JSON line per run, per-D weig
 | 3 | FCI, (10,4) sector (1.0e6 dets) — **the committed sector** | −110.0561097 | 12.000 | +15.14 | 1 min |
 | 0 | DMRG A perD 400/800/1200, nelec=(7,7) | −110.0319893 ± 0.002 mHa | — | +39.26 | 30 min |
 | 0 | DMRG B ramp 300/600/1200, nelec=(7,7) | −110.0319942 ± 0.008 mHa | — | +39.25 | 33 min |
-| 0 | FCI, (7,7) with S²-penalty pinned to S=0 | SINGLET_FCI | | | SINGLET_WALL |
+| 0 | FCI, (7,7) with S²-penalty pinned to S=0 | **did not converge** (2 attempts, 300 Davidson cycles each; best upper bound −110.031418) | — | — | 82 + 27 min |
 
 **Table 2 — the pre-registered test, (7,7) singlet, cheap schedules (D ≤ 300).**
 
@@ -70,15 +70,42 @@ Raw record: `results/nbn_low_spin/runs.jsonl` (one JSON line per run, per-D weig
 
 |E_A′ − E_B′| = 0.064 mHa (< 0.1 mHa, so that arm does not fire); dw(300) = 4.8e-5 > 1e-5 ⇒
 **CONFIRM**. The KILL condition misses by ~500× in dw and ~200× in spread. Compare the septet on
-the same checkpoint: dw(300) = SEPTET_DW. At converged D the singlet's cheap dweight
+the same checkpoint: dw(300) = 3.0e-7 and per-D spread 0.088 mHa (A′ −110.056118, 8 µHa from exact FCI) — the
+singlet is ~160× less converged at equal D. At converged D the singlet's cheap dweight
 extrapolation **overshoots** by ~0.16 mHa (A′ −110.03215 vs A/B −110.03199): D ≤ 300 is not in the
 asymptotic regime for this sector.
 
-NATURAL_ORBITALS
+**Table 2b — cross-check in the singlet's OWN natural orbitals** (block2 SU(2) D=500 1-RDM, NOs
+sorted by occupation; `nbn_low_spin.py no`, then `dmrg --orbitals no`). Occupations:
+1.997, 1.996, 1.996, 1.959, **1.592, 1.455, 1.028, 1.025, 0.503, 0.263, 0.140**, 0.026, 0.012,
+0.008 — two near-singly-occupied orbitals and five more far from 0/2: an open-shell,
+genuinely multireference singlet, not an artefact of borrowing septet orbitals.
+
+| schedule | basis | dw at D=300 | E(D=300) | E extrapolated |
+|---|---|---|---|---|
+| A′ | SCF (septet UHF) | 4.8e-5 | −110.0318512 | −110.0321533 |
+| A′ | singlet NOs | **7.2e-5** | −110.0318387 | −110.0322844 |
+| B′ | singlet NOs | **7.1e-5** | −110.0318302 | −110.0324142 |
+
+Energy invariance under the in-CAS rotation holds to 12 µHa at D=300 (truncation-level). The
+discarded weight does *not* drop in the sector's own NOs (occupation ordering is not an
+entanglement-optimised site ordering — not tried here), and |E_A′ − E_B′| = 0.13 mHa now fires the
+second CONFIRM arm too. The verdict is not an orbital-choice artefact.
 
 **Table 3 — reconstruction independence: lowest S≥2 (FCI (9,5)) vs S=3 (FCI (10,4)) across d.**
 
-SCAN_TABLE
+| d (Å) | SCF 2S | E(10,4) S≥3 | E(9,5) S≥2 | E(S≥2) − E(S=3) (mHa) | lower of the two |
+|---|---|---|---|---|---|
+| 2.00 | 6 | −110.048525 | −110.087822 | -39.3 | S=2 |
+| 2.10 | 6 | −110.056333 | −110.082257 | -25.9 | S=2 |
+| 2.20 | 6 | −110.057331 | −110.074056 | -16.7 | S=2 |
+| 2.30 | 6 | −110.030642 | −110.041952 | -11.3 | S=2 |
+| 2.40 | 6 | −110.023289 | −110.029678 | -6.4 | S=2 |
+| 2.50 | 6 | −110.017942 | −110.016381 | +1.6 | S=3 (but S=1 is 28 mHa lower, DMRG) |
+| 2.60 | 6 | −110.022624 | −110.025552 | -2.9 | S=2 |
+| 2.80 | 6 | −110.027910 | −110.041455 | -13.5 | S=2 |
+| 3.00 | 6 | −110.040977 | −110.042432 | -1.5 | S=2 |
+| 2.25 (main) | 6 | −110.056110 | −110.069522 | −13.4 | S=2 (S=1 lower still, FCI) |
 
 At d = 2.5 Å, the one point where the septet beats the quintet, DMRG A′ for S = 1 gives
 −110.04594 (D=300: −110.04582), still **28 mHa below** the septet. The septet is the CAS ground at
@@ -132,9 +159,9 @@ the reference worth pinning — is itself superseded by §4.1.
 ## 7. Out of scope
 
 - Recovering the original CIF (needs MP access or the owner's copy).
-- CASSCF orbital relaxation per spin state (the ordering here is CASCI on the UHF(S=3) orbitals —
-  the orbitals *favour* S = 3, so relaxation can only widen the S = 1 lead unless it reorders
-  the active space; not checked).
+- CASSCF orbital relaxation per spin state. The ordering here is CASCI on orbitals from the
+  UHF(S=3) solution, which one would expect to favour S = 3 — but that is an expectation, not a
+  check; state-specific CASSCF could reorder the active window and is not run here.
 - Materials claims of any kind (finite diatomic, LANL2DZ ECP, 6-31G* N).
 
 ## 8. Caveats
