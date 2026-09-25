@@ -1,0 +1,47 @@
+ccpvtz R=2.00 E_tot=-29.22343220 E_corr=-0.06551439 wall=1.5s
+ccpvtz R=2.10 E_tot=-29.22903752 E_corr=-0.06449295 wall=1.3s
+ccpvtz R=2.20 E_tot=-29.23224383 E_corr=-0.06343174 wall=1.3s
+ccpvtz R=2.30 E_tot=-29.23378532 E_corr=-0.06229727 wall=1.3s
+ccpvtz R=2.40 E_tot=-29.23425833 E_corr=-0.06112335 wall=1.3s
+ccpvtz R=2.50 E_tot=-29.23412457 E_corr=-0.05997067 wall=1.3s
+ccpvtz R=2.60 E_tot=-29.23370852 E_corr=-0.05889160 wall=1.4s
+ccpvtz R=2.70 E_tot=-29.23321260 E_corr=-0.05791516 wall=1.3s
+ccpvtz R=2.80 E_tot=-29.23274680 E_corr=-0.05704884 wall=1.3s
+ccpvtz R=3.00 E_tot=-29.23206209 E_corr=-0.05561557 wall=1.3s
+ccpvtz R=4.00 E_tot=-29.23150581 E_corr=-0.05211395 wall=1.3s
+ccpvtz R=6.00 E_tot=-29.23024411 E_corr=-0.05187103 wall=1.2s
+ccpvtz R=8.00 E_tot=-29.22974252 E_corr=-0.05196564 wall=1.3s
+ccpvqz R=2.00 E_tot=-29.24721093 E_corr=-0.09591329 wall=5.3s
+ccpvqz R=2.10 E_tot=-29.25274719 E_corr=-0.09491422 wall=5.0s
+ccpvqz R=2.20 E_tot=-29.25607204 E_corr=-0.09404819 wall=4.7s
+ccpvqz R=2.30 E_tot=-29.25788946 E_corr=-0.09326962 wall=4.8s
+ccpvqz R=2.40 E_tot=-29.25871749 E_corr=-0.09253904 wall=4.9s
+ccpvqz R=2.50 E_tot=-29.25893248 E_corr=-0.09182934 wall=4.8s
+ccpvqz R=2.60 E_tot=-29.25880356 E_corr=-0.09112959 wall=5.0s
+ccpvqz R=2.70 E_tot=-29.25852058 E_corr=-0.09044944 wall=4.7s
+ccpvqz R=2.80 E_tot=-29.25821102 E_corr=-0.08981623 wall=5.0s
+ccpvqz R=3.00 E_tot=-29.25774762 E_corr=-0.08876522 wall=4.5s
+ccpvqz R=4.00 E_tot=-29.25731603 E_corr=-0.08579599 wall=5.0s
+ccpvqz R=6.00 E_tot=-29.25634108 E_corr=-0.08517337 wall=4.8s
+ccpvqz R=8.00 E_tot=-29.25575346 E_corr=-0.08546808 wall=4.3s
+ccpv5z R=2.00 E_tot=-29.25717167 E_corr=-0.11289384 wall=15.9s
+ccpv5z R=2.10 E_tot=-29.26234061 E_corr=-0.11177902 wall=14.7s
+ccpv5z R=2.20 E_tot=-29.26530895 E_corr=-0.11083173 wall=14.5s
+ccpv5z R=2.30 E_tot=-29.26679368 E_corr=-0.10998730 wall=14.4s
+ccpv5z R=2.40 E_tot=-29.26732605 E_corr=-0.10920321 wall=14.6s
+ccpv5z R=2.50 E_tot=-29.26729195 E_corr=-0.10846058 wall=14.0s
+ccpv5z R=2.60 E_tot=-29.26694980 E_corr=-0.10774614 wall=14.2s
+ccpv5z R=2.70 E_tot=-29.26645932 E_corr=-0.10704842 wall=14.3s
+ccpv5z R=2.80 E_tot=-29.26592190 E_corr=-0.10636976 wall=14.3s
+ccpv5z R=3.00 E_tot=-29.26492246 E_corr=-0.10510927 wall=14.4s
+ccpv5z R=4.00 E_tot=-29.26296187 E_corr=-0.10154075 wall=13.7s
+ccpv5z R=6.00 E_tot=-29.26215600 E_corr=-0.10036353 wall=12.8s
+ccpv5z R=8.00 E_tot=-29.26139857 E_corr=-0.10049491 wall=11.6s
+label,Re_A,De_cm-1,De_minus_expt_cm-1
+ccpvtz,2.4182,996.6,66.9
+ccpvqz,2.4964,698.2,-231.5
+ccpv5z,2.4366,1313.2,383.5
+CBS(TZ/QZ),2.6059,463.8,-465.9
+CBS(QZ/5Z),2.4292,1687.9,758.2
+# De shift CBS(QZ/5Z) - CBS(TZ/QZ) = +1224.1 cm^-1 -> method attribution NOT CONFIRMED (pre-registered threshold ~20 cm^-1)
+# mean wall s/point: ccpvtz=1.3, ccpvqz=4.8, ccpv5z=14.1; host x86_64 4 cpu

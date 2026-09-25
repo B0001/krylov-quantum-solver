@@ -24,13 +24,16 @@ HONEST FINDING (see specs/SPEC_be2_cbs.md G4): this composition does NOT clear t
 original tolerance. It reproduces a genuine bound well at the right general location -- unlike the
 frozen-core CAS(4,8)/cc-pVDZ FCI baseline in study_be2.py, whose ~305 cm^-1 "well" is a spurious
 long-range artifact at R~4.5 A with no real minimum near R_e -- but underbinds by roughly half
-(D_e ~ 460-470 cm^-1 vs 929.7) and overshoots R_e by ~0.15 A (~2.6 A vs 2.45 A). The residual is
-attributed to two known limitations of this composition, not tuned away: (i) NEVPT2 is a
-second-order perturbative correction, weaker than the CCSD(T)-F12/large-active-space MRCI+Q
-treatments the literature needed to match experiment; (ii) the 8-orbital valence active space
-excludes higher Rydberg-like virtuals that contribute non-negligibly to Be2's unusually
-correlation-driven bond. Both are recorded as follow-up scope, not silently absorbed into a passing
-gate.
+(D_e ~ 460-470 cm^-1 vs 929.7) and overshoots R_e by ~0.15 A (~2.6 A vs 2.45 A). The residual was
+originally attributed to the METHOD (second-order NEVPT2 on an 8-orbital valence CAS), not the
+basis. Bead chem-mom (be2_cbs_5z.py, results/be2_cbs_5z/) tested that by adding cc-pV5Z: the
+QZ/5Z CBS well is De ~ 1680-1690 cm^-1 at Re ~ 2.43 A, +1220 cm^-1 from TZ/QZ (pre-registered
+confirmation threshold: ~20 cm^-1). The attribution is therefore NOT supported: this composition's
+TZ->QZ->5Z series is non-monotonic (single-basis De 997 / 698 / 1313 cm^-1) and not in the 1/X^3
+regime the Helgaker extrapolation assumes, so neither CBS number is a converged basis limit and the
+gap to experiment cannot be split into method vs basis from these data. Likely cause: the
+canonical-HF virtual orbitals picked into CASCI(4,8) change character (grow more diffuse) with
+basis, so the active space is not the same physical space across X (see specs/SPEC_be2_cbs.md).
 """
 from __future__ import annotations
 
@@ -41,7 +44,7 @@ import numpy as np
 from pyscf import gto, mcscf, mrpt, scf
 
 HA2CM = 219474.6313702
-BASIS_CARDINAL = {"ccpvdz": 2, "ccpvtz": 3, "ccpvqz": 4}
+BASIS_CARDINAL = {"ccpvdz": 2, "ccpvtz": 3, "ccpvqz": 4, "ccpv5z": 5}
 
 
 @dataclass
