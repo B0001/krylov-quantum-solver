@@ -1,0 +1,2 @@
+route,U,L,bond_dims,e_per_D,dw_per_D,stage_dE,e_extrap,stderr,method,regime,threads,wall_s
+open,4.0,20,200/400/800,-11.112184565547688/-11.112184565557019/-11.112184565557024,3.096e-13/5.296e-20/2.215e-20,3.652e-12/7.105e-15/1.776e-15,-11.112184565561687,3.049e-12,invD,converged,4,26
