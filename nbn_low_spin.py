@@ -129,6 +129,34 @@ def cmd_cif(_):
                  wall_s=round(time.time() - t, 1)))
 
 
+def cmd_scan(args):
+    """Reconstruction-independence check: at each d(Nb-N), regenerate the spin-scanned SCF (own
+    chk under .dmrg_tmp/) and compare exact FCI in the (10,4) sector (lowest S>=3) with (9,5)
+    (lowest S>=2). If (9,5) is lower at every d, the committed S=3 sector is not the CAS ground
+    whatever the lost CIF's exact bond length was."""
+    import benchmark_nbn as bn
+    from pyscf import ao2mo, mcscf
+
+    for d in args.d:
+        tag = f".dmrg_tmp/scan_{d:.4f}"
+        os.makedirs(".dmrg_tmp", exist_ok=True)
+        write_cif(tag + ".cif", d)
+        bn.CHKFILE = tag + ".chk"
+        if os.path.exists(bn.CHKFILE):
+            os.remove(bn.CHKFILE)
+        t = time.time()
+        mf = bn.ground_state_mf(tag + ".cif")
+        row = dict(kind="scan", d_ang=d, scf_spin=int(mf.mol.spin), e_scf=float(mf.e_tot))
+        for nelec in ((10, 4), (9, 5)):
+            cas = mcscf.CASCI(mf, 14, nelec)
+            h1, e_core = cas.get_h1eff()
+            eri = ao2mo.restore(1, cas.get_h2eff(), 14)
+            (e, ss), = spin_fci(h1, eri, nelec, e_core)[0]
+            row[f"E_{nelec[0]}{nelec[1]}"], row[f"s2_{nelec[0]}{nelec[1]}"] = e, ss
+        row["wall_s"] = round(time.time() - t, 1)
+        _record(row)
+
+
 def cmd_fci(args):
     from nbn_dmrg_reference import load_nbn_cas
 
@@ -174,6 +202,9 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[1])
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("cif").set_defaults(fn=cmd_cif)
+    sc = sub.add_parser("scan")
+    sc.add_argument("--d", type=float, nargs="+", required=True)
+    sc.set_defaults(fn=cmd_scan)
     f = sub.add_parser("fci")
     f.add_argument("--nelec", type=int, nargs=2, default=[7, 7])
     f.add_argument("--twos", type=int, default=None)
