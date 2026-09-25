@@ -40,22 +40,25 @@ SCHEDULES = {
 }
 
 
-def load_nbn_cas(norb: int = 14, nelec_cas: int = 14, chk: str = "data/nbn_scf.chk"):
-    """(h1, eri, nelec, e_core) of the NbN CAS from the cached spin-scanned SCF (no SCF run)."""
+def load_nbn_cas(norb: int = 14, nelec_cas: int = 14, chk: str = "data/nbn_scf.chk", nelec=None):
+    """(h1, eri, nelec, e_core) of the NbN CAS from the cached spin-scanned SCF (no SCF run).
+
+    ``nelec=(na, nb)`` forces an active-space spin sector (e.g. the low-spin (7, 7)) while keeping
+    the cached high-spin SCF orbitals; default ``None`` keeps the SCF's own split, (10, 4)."""
     mol = lib.chkfile.load_mol(chk)
     res = lib.chkfile.load(chk, "scf")
     mf = scf.UHF(mol) if mol.nelec[0] != mol.nelec[1] else scf.RHF(mol)
     mf.mo_coeff, mf.mo_occ = res["mo_coeff"], res["mo_occ"]
     mf.mo_energy, mf.e_tot = res["mo_energy"], res["e_tot"]
-    cas = mcscf.CASCI(mf, norb, nelec_cas)
+    cas = mcscf.CASCI(mf, norb, nelec_cas if nelec is None else tuple(nelec))
     h1, e_core = cas.get_h1eff()
     eri = ao2mo.restore(1, cas.get_h2eff(), norb)
     return h1, eri, (int(cas.nelecas[0]), int(cas.nelecas[1])), float(e_core)
 
 
-def run_schedule(name: str, n_threads: int = 2):
+def run_schedule(name: str, n_threads: int = 2, nelec=None):
     """One independent DMRG schedule by name ('A'/'B' headline, "A'"/"B'" cheap CI variants)."""
-    h1, eri, nelec, e_core = load_nbn_cas()
+    h1, eri, nelec, e_core = load_nbn_cas(nelec=nelec)
     kw = dict(SCHEDULES[name])
     return dmrg_energy_extrapolated(h1, eri, nelec, e_core, n_threads=n_threads, **kw)
 
