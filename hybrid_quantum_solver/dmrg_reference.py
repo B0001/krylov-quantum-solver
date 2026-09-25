@@ -250,6 +250,9 @@ class ExtrapResult:
     per_D: List[Tuple[int, float, float]] = field(default_factory=list)  # (D, discarded_weight, E)
     method: str = "dweight"                         # "dweight" (E vs truncation error) or "invD"
     regime: str = "truncation"                      # one of REGIMES -- gate on THIS, not `method`
+    # |E(last sweep) - E(previous sweep)| of each perD stage, Ha (empty for "ramp"). A stage still
+    # moving here never converged; `regime` cannot see that on a 1/D-axis ladder (SPEC_hubbard_bethe §10).
+    stage_dE: List[float] = field(default_factory=list)
 
 
 def extrapolate_ladder(per_D, *, floor: float = DISCARD_WEIGHT_FLOOR) -> ExtrapResult:
@@ -282,6 +285,7 @@ def dmrg_energy_extrapolated(
     n_threads: int = 4,
     stack_mem=None,
     seed=None,
+    init_occs=None,
 ) -> ExtrapResult:
     """DMRG energy extrapolated to infinite bond dimension via the discarded-weight rule.
 
@@ -296,6 +300,12 @@ def dmrg_energy_extrapolated(
       * ``"ramp"`` -- ONE DMRG run whose schedule holds each ``D`` for ``sweeps_per_stage`` sweeps;
         the per-stage points come from block2's ``get_dmrg_results()``. Much cheaper (see
         specs/SPEC_singleramp.md); intermediate-``D`` points are slightly less converged.
+
+    ``init_occs`` -- per-orbital occupations for the initial random MPS's quantum-number
+    distribution (block2 ``get_random_mps(occs=...)``). Default: block2's own. For a Mott insulator
+    pass the uniform filling: the default start leaves charge unevenly spread, and at a charge gap
+    DMRG moves it ~1 Ha per sweep, so a short stage stalls far above the ground state
+    (SPEC_hubbard_bethe §10: open L=40, U=4 read -21.65 Ha at D=100 vs -22.58 with occs=1).
     """
     try:
         from pyblock2.driver.core import DMRGDriver, SymmetryTypes
@@ -320,8 +330,10 @@ def dmrg_energy_extrapolated(
             pass  # converged DMRG energy is independent of the random initial MPS anyway
     drv.initialize_system(n_sites=norb, n_elec=na + nb, spin=na - nb, orb_sym=None)
     mpo = drv.get_qc_mpo(h1e=np.asarray(h1), g2e=np.asarray(eri), ecore=float(e_core), iprint=0)
-    ket = drv.get_random_mps(tag="KET", bond_dim=int(bond_dims[0]), nroots=1)
+    occ_kwargs = {} if init_occs is None else {"occs": np.asarray(init_occs, dtype=float)}
+    ket = drv.get_random_mps(tag="KET", bond_dim=int(bond_dims[0]), nroots=1, **occ_kwargs)
 
+    stage_dE: List[float] = []
     per_D: List[Tuple[int, float, float]] = []
     if protocol == "ramp":
         # one run; schedule holds each target D for sweeps_per_stage sweeps
@@ -344,12 +356,16 @@ def dmrg_energy_extrapolated(
             )
             dw = float(drv._dmrg.discarded_weights[-1])
             per_D.append((int(D), dw, float(e)))
+            sweep_es = [float(np.asarray(x).ravel()[0]) for x in drv._dmrg.energies]
+            stage_dE.append(abs(sweep_es[-1] - sweep_es[-2]) if len(sweep_es) >= 2 else float("nan"))
 
     # The axis choice (inside extrapolate_ladder) is NOT a defect: on a converged ladder the
     # discarded-weight axis is near-degenerate (cond(vander) ~ 2e9 vs ~1e3 for 1/D on the recorded
     # NbN weights), so switching is numerically correct. Only the LABEL was conflated -- `regime`
     # separates "converged" from "uncontrolled", which `method` cannot. See SPEC_extrap_regime.md.
-    return extrapolate_ladder(per_D)
+    res = extrapolate_ladder(per_D)
+    res.stage_dE = stage_dE
+    return res
 
 
 def thermodynamic_limit_fit(ns, e_per_atom) -> Tuple[float, float]:

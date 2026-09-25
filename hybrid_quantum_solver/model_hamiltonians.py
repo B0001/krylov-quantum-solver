@@ -202,6 +202,7 @@ def hubbard_chain_integrals(
     t: float = 1.0,
     *,
     closed_shell: bool = True,
+    open_chain: bool = False,
     e_core: float = 0.0,
     units: str = "Ha",
 ) -> ModelIntegrals:
@@ -214,13 +215,17 @@ def hubbard_chain_integrals(
     per-site energy converges smoothly (``~1/L^2``) to the thermodynamic limit and can be compared
     to :func:`lieb_wu_energy`. Filling is fixed to half (``n_sites/2`` electrons per spin); ``n_sites``
     must be even.
+
+    ``open_chain=True`` drops the wrap bond (open boundaries; ``closed_shell`` is then moot). The
+    open chain's total energy is ``~ n_sites * e_inf + c`` with a constant two-end surface term, so
+    its bulk per-site energy comes from a difference of two lengths (``bulk_per_site_energy``).
     """
     if n_sites % 2:
         raise ValueError("n_sites must be even (half-filling)")
     h = np.zeros((n_sites, n_sites))
     for i in range(n_sites - 1):
         h[i, i + 1] = h[i + 1, i] = -t
-    if n_sites > 2:
+    if n_sites > 2 and not open_chain:
         wrap = -t if (not closed_shell or (n_sites // 2) % 2 == 1) else +t
         h[0, n_sites - 1] = h[n_sites - 1, 0] = wrap
     return hubbard_integrals(h, U, nelec=(n_sites // 2, n_sites // 2), e_core=e_core, units=units)
