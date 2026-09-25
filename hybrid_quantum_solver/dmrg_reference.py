@@ -119,12 +119,86 @@ def dmrg_energy(
 # measured on ONE system, so this is order-of-magnitude justified, not derived.
 DISCARD_WEIGHT_FLOOR = 1e-8
 
+# Energy resolution of a recorded ladder, Ha. The repo's ladders agree between stages to ~1e-9
+# (SPEC_hchain_largen2 §11.2: the n=40 D=400 energy reproduced to every printed digit, D=800 moved
+# it by 1e-9; the converged n=8..20 rows move by <= 5e-10 from D=200 to D=400), so 1e-6 is >= 1e3x above observed
+# noise and 1e2x below the tightest DMRG gate in the repo (SPEC_singleramp, 0.1 mHa). It is the same
+# 1 uHa that gate G4 of SPEC_hchain_largen2 already uses for |E_extrap - E(D_max)|.
+ENERGY_NOISE = 1e-6
+
+# Pairwise slopes dE/d(dw) of a controlled ladder agree: on the three recorded "truncation" H-chain
+# ladders (n=24/28/32) consecutive-pair slopes are 18-29 Ha and differ by <= 1.2x (the check runs
+# on truncation ladders only; converged gaps sit at print precision). "Far larger than the
+# discarded weight implies" is taken as three orders of magnitude. It must also exceed 100: SPEC_extrap_regime G2 pins [1e-3, 1e-5, 1e-9] (slope ratio
+# ~100) as "truncation". See SPEC_regime_stalled_stage.md §3.
+STAGE_SLOPE_RATIO = 1e3
+
+# For a linear ladder E = E_inf + C*dw, the extrapolation lies below E(D_max) by
+#   C*dw_n = gap_last * dw_n / (dw_{n-1} - dw_n),
+# gap_last = E(D_{n-1}) - E(D_n). A drop of more than 10x gap_last therefore needs the weights to
+# fall by less than 10% over the last stage -- no lever arm left. The recorded truncation ladders
+# (weights falling 100-400x per doubling of D) measure drop/gap_last = 0.07-0.10, so 10 leaves
+# ~98x headroom. On converged (1/D-axis) ladders the ENERGY_NOISE term governs: their weights
+# bound every gap by ~C*floor ~ 3e-7 Ha, and their recorded drops are 3e-8 to 9e-8 Ha.
+UNDERSHOOT_FACTOR = 10.0
+
 # Gate on `regime`, not on `method`. See truncation_regime() for why.
 REGIMES = ("converged", "truncation", "uncontrolled")
 
 
-def truncation_regime(per_D, *, floor: float = DISCARD_WEIGHT_FLOOR) -> str:
-    """Classify a bond-dimension ladder by what its discarded weights can support.
+def _weight_regime(dws, floor: float) -> str:
+    """The SPEC_extrap_regime classification from discarded weights alone. It also picks the fit
+    axis (`method`), which therefore stays exactly the legacy one."""
+    if len(dws) < 2:
+        return "uncontrolled"
+    # max(), not dws[-1]: a normally-converging ladder (1e-3, 1e-5, 1e-9) is still extrapolatable,
+    # and calling it converged would abandon the fit and silently change the energy.
+    if float(np.max(dws)) <= floor:
+        return "converged"
+    if np.all(np.diff(dws) <= 1e-12):          # monotone non-increasing
+        return "truncation"
+    return "uncontrolled"
+
+
+def _linear_extrapolate(x, Es) -> Tuple[float, float]:
+    """Intercept (and its standard error) of a straight-line fit of Es vs x, at x = 0."""
+    if len(x) >= 3:
+        coef, cov = np.polyfit(x, Es, 1, cov=True)
+        return float(coef[1]), float(np.sqrt(max(cov[1, 1], 0.0)))
+    if len(x) == 2:
+        return float(np.polyfit(x, Es, 1)[1]), 0.0   # exact line through 2 points; no covariance
+    return float(Es[-1]), 0.0
+
+
+def _ladder_arrays(per_D):
+    per_D = sorted(per_D, key=lambda p: p[0])
+    Ds = np.array([p[0] for p in per_D], dtype=float)
+    dws = np.array([p[1] for p in per_D], dtype=float)
+    Es = np.array([p[2] for p in per_D], dtype=float)
+    return Ds, dws, Es
+
+
+def _stalled_stage(dws, Es, noise: float, ratio: float) -> bool:
+    """True if some stage's energy gap is far larger than another stage's slope allows.
+
+    Each pair's slope is bounded above by (gap + noise) / d(dw), so a pair whose gap sits at noise
+    level constrains the others only loosely -- never falsely.
+    """
+    gaps = -np.diff(Es)                   # E(D_i) - E(D_{i+1}), >= -noise after the variational test
+    ddw = -np.diff(dws)                   # dw_i - dw_{i+1}, >= 0 for a monotone ladder
+    for i in range(len(gaps)):
+        for j in range(len(gaps)):
+            if i == j or ddw[j] <= 0.0:
+                continue
+            s_upper = (max(gaps[j], 0.0) + noise) / ddw[j]
+            if gaps[i] > ratio * s_upper * ddw[i] + noise:
+                return True
+    return False
+
+
+def truncation_regime(per_D, *, floor: float = DISCARD_WEIGHT_FLOOR,
+                      energy_noise: float = ENERGY_NOISE) -> str:
+    """Classify a bond-dimension ladder by what its discarded weights AND energies can support.
 
     ``method`` answers a *factual* question -- which x-axis was fitted -- and lumps two opposite
     states into ``"invD"``: the run CONVERGED (nothing left to extrapolate) or its truncation is
@@ -133,22 +207,39 @@ def truncation_regime(per_D, *, floor: float = DISCARD_WEIGHT_FLOOR) -> str:
     written to demand quality (SPEC_nbn_dmrg_reference.md:55 records exactly that happening to its
     own headline run). This predicate separates the three states.
 
-    Order matters: the floor is tested BEFORE monotonicity, so a converged ladder whose weights
-    wobble by float noise reads as ``"converged"``, not ``"uncontrolled"``.
+    Weights alone cannot see a stage that never converged (SPEC_hchain_largen2 §11.2: an n=40 ramp
+    whose D=100 stage stalled 0.71 Ha high still reported small, monotone weights, and its fit
+    landed 0.82 mHa BELOW its own D=400 energy). So the ladder is also ``"uncontrolled"`` when
+    (SPEC_regime_stalled_stage.md):
+
+      * E(D) rises with D by more than ``energy_noise`` (non-variational);
+      * a truncation ladder has a stage gap ``STAGE_SLOPE_RATIO``x larger than another stage's
+        slope dE/d(dw) allows (the stalled-stage signature);
+      * the extrapolation falls below E(D_max) by more than ``UNDERSHOOT_FACTOR`` x the last stage
+        gap + ``energy_noise`` -- more than any ladder with a lever arm can support.
+
+    Order matters: the floor is tested BEFORE weight monotonicity, so a converged ladder whose
+    weights wobble by float noise reads as ``"converged"``, not ``"uncontrolled"``.
 
     Pure -- no block2, no DMRG run -- so the logic stays covered where the DMRG gates skip.
     """
     per_D = list(per_D)
     if len(per_D) < 2:
         return "uncontrolled"
-    dws = np.array([p[1] for p in per_D], dtype=float)
-    # max(), not dws[-1]: a normally-converging ladder (1e-3, 1e-5, 1e-9) is still extrapolatable,
-    # and calling it converged would abandon the fit and silently change the energy.
-    if float(np.max(dws)) <= floor:
-        return "converged"
-    if np.all(np.diff(dws) <= 1e-12):          # monotone non-increasing
-        return "truncation"
-    return "uncontrolled"
+    Ds, dws, Es = _ladder_arrays(per_D)
+    if np.any(np.diff(Es) > energy_noise):          # non-variational: a larger D raised E
+        return "uncontrolled"
+    regime = _weight_regime(dws, floor)
+    if regime == "uncontrolled":
+        return regime
+    if regime == "truncation" and _stalled_stage(dws, Es, energy_noise, STAGE_SLOPE_RATIO):
+        return "uncontrolled"
+    x = dws if regime == "truncation" else 1.0 / Ds
+    energy, _ = _linear_extrapolate(x, Es)
+    gap_last = max(float(Es[-2] - Es[-1]), 0.0)
+    if Es[-1] - energy > UNDERSHOOT_FACTOR * gap_last + energy_noise:
+        return "uncontrolled"
+    return regime
 
 
 @dataclass
@@ -159,6 +250,22 @@ class ExtrapResult:
     per_D: List[Tuple[int, float, float]] = field(default_factory=list)  # (D, discarded_weight, E)
     method: str = "dweight"                         # "dweight" (E vs truncation error) or "invD"
     regime: str = "truncation"                      # one of REGIMES -- gate on THIS, not `method`
+
+
+def extrapolate_ladder(per_D, *, floor: float = DISCARD_WEIGHT_FLOOR) -> ExtrapResult:
+    """Extrapolate recorded ``(D, discarded_weight, E)`` triples to D -> infinity. Pure (no block2).
+
+    ``method`` (the fitted axis) and so the energy and stderr depend on the weights alone, exactly
+    as before SPEC_regime_stalled_stage; only ``regime`` also reads the energies. An "uncontrolled"
+    ladder still returns its fit -- the label, not a changed number, is what says not to trust it.
+    """
+    per_D = [(int(D), float(w), float(e)) for D, w, e in per_D]
+    Ds, dws, Es = _ladder_arrays(per_D)
+    method = "dweight" if _weight_regime(dws, floor) == "truncation" else "invD"
+    x = dws if method == "dweight" else 1.0 / Ds
+    energy, stderr = _linear_extrapolate(x, Es)
+    return ExtrapResult(energy=energy, stderr=stderr, per_D=per_D, method=method,
+                        regime=truncation_regime(per_D, floor=floor))
 
 
 def dmrg_energy_extrapolated(
@@ -238,29 +345,11 @@ def dmrg_energy_extrapolated(
             dw = float(drv._dmrg.discarded_weights[-1])
             per_D.append((int(D), dw, float(e)))
 
-    Ds = np.array([p[0] for p in per_D], dtype=float)
-    dws = np.array([p[1] for p in per_D], dtype=float)
-    Es = np.array([p[2] for p in per_D], dtype=float)
-
-    # The axis choice below is unchanged and is NOT a defect: on a converged ladder the
+    # The axis choice (inside extrapolate_ladder) is NOT a defect: on a converged ladder the
     # discarded-weight axis is near-degenerate (cond(vander) ~ 2e9 vs ~1e3 for 1/D on the recorded
     # NbN weights), so switching is numerically correct. Only the LABEL was conflated -- `regime`
     # separates "converged" from "uncontrolled", which `method` cannot. See SPEC_extrap_regime.md.
-    regime = truncation_regime(per_D)
-    method = "dweight" if regime == "truncation" else "invD"
-    x = dws if method == "dweight" else 1.0 / Ds
-
-    if len(per_D) >= 3:
-        coef, cov = np.polyfit(x, Es, 1, cov=True)
-        energy = float(coef[1])
-        stderr = float(np.sqrt(max(cov[1, 1], 0.0)))
-    elif len(per_D) == 2:
-        coef = np.polyfit(x, Es, 1)          # exact line through 2 points; no covariance
-        energy, stderr = float(coef[1]), 0.0
-    else:
-        energy, stderr = float(Es[-1]), 0.0
-
-    return ExtrapResult(energy=energy, stderr=stderr, per_D=per_D, method=method, regime=regime)
+    return extrapolate_ladder(per_D)
 
 
 def thermodynamic_limit_fit(ns, e_per_atom) -> Tuple[float, float]:
