@@ -83,13 +83,19 @@ def _record(row: dict) -> None:
     print("RECORD", json.dumps(row), flush=True)
 
 
-def spin_fci(h1, eri, nelec, e_core, twos=None, nroots=1, shift=0.5, max_cycle=300):
+def spin_fci(h1, eri, nelec, e_core, twos=None, nroots=1, shift=0.01, max_cycle=300):
     """Exact CAS FCI in the Ms=(na-nb)/2 sector; with ``twos`` a spin penalty pins S=twos/2.
-    Returns [(E, <S^2>)...] and the CI vectors."""
+    Returns [(E, <S^2>)...] and the CI vectors.
+
+    The penalty is shift*(S^2 - ss)^2. A large shift (0.5 put the septet +72 Ha up) wrecks the
+    Davidson preconditioner -- the first singlet attempt ran 300 cycles to a nonsense -108.53 Ha.
+    For an even-S target in a balanced sector, direct_spin0 (spin-symmetric CI: even S only)
+    removes the odd-S states outright, so a small shift only has to lift S=2,4,6."""
     from pyscf import fci
 
     norb = h1.shape[0]
-    solver = fci.direct_spin1.FCI()
+    even = twos is not None and twos % 2 == 0 and nelec[0] == nelec[1]
+    solver = (fci.direct_spin0 if even else fci.direct_spin1).FCI()
     solver.max_cycle, solver.conv_tol, solver.nroots = max_cycle, 1e-10, nroots
     if twos is not None:
         s = twos / 2
@@ -129,6 +135,34 @@ def cmd_cif(_):
                  wall_s=round(time.time() - t, 1)))
 
 
+def cmd_scan(args):
+    """Reconstruction-independence check: at each d(Nb-N), regenerate the spin-scanned SCF (own
+    chk under .dmrg_tmp/) and compare exact FCI in the (10,4) sector (lowest S>=3) with (9,5)
+    (lowest S>=2). If (9,5) is lower at every d, the committed S=3 sector is not the CAS ground
+    whatever the lost CIF's exact bond length was."""
+    import benchmark_nbn as bn
+    from pyscf import ao2mo, mcscf
+
+    for d in args.d:
+        tag = f".dmrg_tmp/scan_{d:.4f}"
+        os.makedirs(".dmrg_tmp", exist_ok=True)
+        write_cif(tag + ".cif", d)
+        bn.CHKFILE = tag + ".chk"
+        if os.path.exists(bn.CHKFILE):
+            os.remove(bn.CHKFILE)
+        t = time.time()
+        mf = bn.ground_state_mf(tag + ".cif")
+        row = dict(kind="scan", d_ang=d, scf_spin=int(mf.mol.spin), e_scf=float(mf.e_tot))
+        for nelec in ((10, 4), (9, 5)):
+            cas = mcscf.CASCI(mf, 14, nelec)
+            h1, e_core = cas.get_h1eff()
+            eri = ao2mo.restore(1, cas.get_h2eff(), 14)
+            (e, ss), = spin_fci(h1, eri, nelec, e_core)[0]
+            row[f"E_{nelec[0]}{nelec[1]}"], row[f"s2_{nelec[0]}{nelec[1]}"] = e, ss
+        row["wall_s"] = round(time.time() - t, 1)
+        _record(row)
+
+
 def cmd_fci(args):
     from nbn_dmrg_reference import load_nbn_cas
 
@@ -148,22 +182,50 @@ def cmd_fci(args):
                      occ=[round(float(x), 6) for x in occ]))
 
 
+def cmd_no(args):
+    """Natural orbitals of the SU(2) target state from a block2 1-RDM (the exact-FCI route needs a
+    spin penalty that did not converge for the singlet; see runs.jsonl). Saves NO_CACHE."""
+    from pyblock2.driver.core import DMRGDriver, SymmetryTypes
+
+    from nbn_dmrg_reference import load_nbn_cas
+
+    h1, eri, nelec, e_core = load_nbn_cas(nelec=tuple(args.nelec))
+    scratch = f"./.dmrg_tmp/nbn_no_{nelec[0]}{nelec[1]}"
+    os.makedirs(scratch, exist_ok=True)
+    t = time.time()
+    drv = DMRGDriver(scratch=scratch, symm_type=SymmetryTypes.SU2, n_threads=args.threads)
+    drv.initialize_system(n_sites=14, n_elec=sum(nelec), spin=nelec[0] - nelec[1], orb_sym=None)
+    mpo = drv.get_qc_mpo(h1e=h1, g2e=eri, ecore=e_core, iprint=0)
+    ket = drv.get_random_mps(tag="KET", bond_dim=args.D // 2, nroots=1)
+    dims = [args.D // 2] * 4 + [args.D] * 8
+    e = drv.dmrg(mpo, ket, n_sweeps=len(dims), bond_dims=dims,
+                 noises=[1e-4] * 4 + [1e-5] * 4 + [0.0] * 4, thrds=[1e-8] * len(dims), iprint=0)
+    dm1 = np.asarray(drv.get_1pdm(ket))
+    occ, u = np.linalg.eigh(dm1)
+    order = np.argsort(-occ)
+    occ, u = occ[order], u[:, order]
+    np.savez(NO_CACHE.format(na=nelec[0], nb=nelec[1]), occ=occ, u=u)
+    _record(dict(kind="natocc", source=f"block2 SU2 D={args.D}", nelec=list(nelec), energy=float(e),
+                 trace=float(occ.sum()), occ=[round(float(x), 6) for x in occ],
+                 wall_s=round(time.time() - t, 1)))
+
+
 def cmd_dmrg(args):
     from hybrid_quantum_solver.dmrg_reference import dmrg_energy_extrapolated
     from nbn_dmrg_reference import SCHEDULES, load_nbn_cas
 
-    h1, eri, nelec, e_core = load_nbn_cas(nelec=tuple(args.nelec))
+    h1, eri, nelec, e_core = load_nbn_cas(nelec=tuple(args.nelec), chk=args.chk)
     if args.orbitals == "no":
         u = np.load(NO_CACHE.format(na=nelec[0], nb=nelec[1]))["u"]
         h1, eri = rotate(h1, eri, u)
     kw = dict(SCHEDULES[args.schedule])
     if args.dims:
         kw["bond_dims"] = tuple(args.dims)
-    kw["scratch"] = f"{kw['scratch']}_{nelec[0]}{nelec[1]}_{args.orbitals}"
+    kw["scratch"] = f"{kw['scratch']}_{nelec[0]}{nelec[1]}_{args.orbitals}_{os.path.basename(args.chk)}"
     os.makedirs(kw["scratch"], exist_ok=True)
     t = time.time()
     r = dmrg_energy_extrapolated(h1, eri, nelec, e_core, n_threads=args.threads, **kw)
-    _record(dict(kind="dmrg", schedule=args.schedule, nelec=list(nelec), orbitals=args.orbitals,
+    _record(dict(kind="dmrg", chk=args.chk, schedule=args.schedule, nelec=list(nelec), orbitals=args.orbitals,
                  bond_dims=list(kw["bond_dims"]), protocol=kw["protocol"], energy=r.energy,
                  stderr=r.stderr, method=r.method, regime=getattr(r, "regime", None),
                  per_D=[[int(d), float(w), float(e)] for d, w, e in r.per_D],
@@ -174,18 +236,27 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[1])
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("cif").set_defaults(fn=cmd_cif)
+    sc = sub.add_parser("scan")
+    sc.add_argument("--d", type=float, nargs="+", required=True)
+    sc.set_defaults(fn=cmd_scan)
     f = sub.add_parser("fci")
     f.add_argument("--nelec", type=int, nargs=2, default=[7, 7])
     f.add_argument("--twos", type=int, default=None)
     f.add_argument("--nroots", type=int, default=1)
     f.add_argument("--save-no", action="store_true")
     f.set_defaults(fn=cmd_fci)
+    n = sub.add_parser("no")
+    n.add_argument("--nelec", type=int, nargs=2, default=[7, 7])
+    n.add_argument("--D", type=int, default=500)
+    n.add_argument("--threads", type=int, default=4)
+    n.set_defaults(fn=cmd_no)
     d = sub.add_parser("dmrg")
     d.add_argument("--schedule", required=True)
     d.add_argument("--nelec", type=int, nargs=2, default=[7, 7])
     d.add_argument("--orbitals", choices=("scf", "no"), default="scf")
     d.add_argument("--dims", type=int, nargs="*")
     d.add_argument("--threads", type=int, default=2)
+    d.add_argument("--chk", default="data/nbn_scf.chk")
     d.set_defaults(fn=cmd_dmrg)
     a = ap.parse_args()
     a.fn(a)

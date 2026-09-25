@@ -3,8 +3,13 @@
 NbN CAS(14,14) DMRG reference -- the "DMRG-referenced transition-metal active space" backlog item.
 
 The 2-atom NbN cluster's CAS(14,14) holds ~1.18e7 determinants -- beyond the repo's 5e6 FCI
-cutoff -- and its spin-scanned ground state (cached in data/nbn_scf.chk by benchmark_nbn.py)
-sits in the HIGH-SPIN nelec=(10,4) (2S=6) sector. Two genuinely independent sweep schedules
+cutoff -- and its spin-scanned UHF ground state (cached in data/nbn_scf.chk by benchmark_nbn.py)
+sits in the HIGH-SPIN nelec=(10,4) (2S=6) sector.
+
+CORRECTION (2026-09-25, chem-dc7, specs/SPEC_nbn_low_spin.md): (10,4)/S=3 is the UHF ground spin,
+NOT the CAS ground. Exact FCI of the Ms=0 sector puts S=1 15.1 mHa lower (E0 = -110.0712455 Ha on
+the reconstructed d(Nb-N) = 2.25 A geometry); pass nelec=(8, 6) for the S=1 ground. The numbers
+below are the original S=3 record on an uncommitted geometry and do not reproduce. Two genuinely independent sweep schedules
 (perD: separate converged runs per bond dimension; ramp: one ramping run) referee each other:
 
     headline (2026-07-04, 16 GB laptop):
@@ -21,6 +26,8 @@ materials claim (finite cluster, LANL2DZ ECP, fixed geometry).
 pyscf + block2 only -- no qiskit imports (block2 OpenMP isolation; see CLAUDE.md).
 """
 from __future__ import annotations
+
+import os
 
 from pyscf import ao2mo, lib, mcscf, scf
 
@@ -56,10 +63,15 @@ def load_nbn_cas(norb: int = 14, nelec_cas: int = 14, chk: str = "data/nbn_scf.c
     return h1, eri, (int(cas.nelecas[0]), int(cas.nelecas[1])), float(e_core)
 
 
-def run_schedule(name: str, n_threads: int = 2, nelec=None):
-    """One independent DMRG schedule by name ('A'/'B' headline, "A'"/"B'" cheap CI variants)."""
+def run_schedule(name: str, n_threads: int = 2, nelec=None, scratch_tag: str = ""):
+    """One independent DMRG schedule by name ('A'/'B' headline, "A'"/"B'" cheap CI variants).
+
+    ``scratch_tag`` suffixes the block2 scratch dir: two processes running the same schedule
+    concurrently (parallel gates) must not share one, or block2 aborts on the clobbered MPS."""
     h1, eri, nelec, e_core = load_nbn_cas(nelec=nelec)
     kw = dict(SCHEDULES[name])
+    kw["scratch"] += scratch_tag
+    os.makedirs(kw["scratch"], exist_ok=True)   # block2 does not create it: "save_data failed"
     return dmrg_energy_extrapolated(h1, eri, nelec, e_core, n_threads=n_threads, **kw)
 
 
