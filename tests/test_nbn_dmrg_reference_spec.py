@@ -11,12 +11,20 @@ D=300), so this is a soft DMRG target, not a strong-correlation benchmark.
 pyscf + block2 ONLY (no qiskit imports -- block2's OpenMP runtime segfaults in a process that
 already imported pyscf+qiskit-aer; `make gates` runs this file in its own process).
 """
+import os
 from math import comb
 
 import numpy as np
+import pytest
 
-from hybrid_quantum_solver.dmrg_reference import DISCARD_WEIGHT_FLOOR
+from hybrid_quantum_solver.dmrg_reference import DISCARD_WEIGHT_FLOOR, dmrg_available
 from nbn_dmrg_reference import load_nbn_cas, run_schedule
+
+# data/ is gitignored: a fresh clone has no chkfile (regenerate with `nbn_low_spin.py cif`), and
+# block2 is an optional extra. Either absence is a SKIP, not a FAIL (SPEC_extrap_regime.md R-note).
+_CHK = "data/nbn_scf.chk"
+needs_chk = pytest.mark.skipif(not os.path.exists(_CHK), reason=f"{_CHK} missing (gitignored)")
+needs_dmrg = pytest.mark.skipif(not dmrg_available(), reason="block2 not installed")
 
 _CACHE = {}
 
@@ -27,6 +35,7 @@ def _results():
     return _CACHE["res"]
 
 
+@needs_chk
 def test_G1_beyond_fci_and_sector_pin():
     """The CAS(14,14) full Hilbert space (both spins over 14 orbitals, sum over Sz sectors)
     exceeds the 5e6-determinant FCI cutoff; the cached spin-scanned SCF restores without an SCF
@@ -40,6 +49,8 @@ def test_G1_beyond_fci_and_sector_pin():
     assert n_full > 5_000_000, n_full
 
 
+@needs_chk
+@needs_dmrg
 def test_G2_two_independent_schedules_agree():
     """DEFINITION OF DONE: cheap-dims perD (100/200/300) vs ramp (80/160/300), different seeds
     and scratch dirs: |E_A' - E_B'| < 0.1 mHa (measured 0.0012), both in the discarded-weight
@@ -59,6 +70,8 @@ def test_G2_two_independent_schedules_agree():
         assert res[tag].regime != "converged" or max(dws) <= DISCARD_WEIGHT_FLOOR, (tag, dws)
 
 
+@needs_chk
+@needs_dmrg
 def test_G3_softness_finding_is_pinned():
     """The recorded finding: the high-spin sector is low-entanglement -- discarded weight at
     D=300 < 1e-7 and per-D energy spread < 0.01 mHa. Nobody should later mistake this reference
