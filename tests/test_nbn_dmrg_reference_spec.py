@@ -39,7 +39,8 @@ def _results():
 def test_G1_beyond_fci_and_sector_pin():
     """The CAS(14,14) full Hilbert space (both spins over 14 orbitals, sum over Sz sectors)
     exceeds the 5e6-determinant FCI cutoff; the cached spin-scanned SCF restores without an SCF
-    run and lands in the high-spin nelec=(10,4) sector. (The fixed-sector count, comb(14,10)*
+    run and lands in the high-spin nelec=(10,4) sector. (That is the UHF ground spin, not the CAS
+    ground: S=1 is 15.1 mHa lower -- tests/test_nbn_low_spin_spec.py G5.) (The fixed-sector count, comb(14,10)*
     comb(14,4) = 1.0e6, is below the cutoff on its own -- the intractability is the FULL problem
     a black-box FCI would face, and DMRG's advantage is that it stays in-sector.)"""
     h1, eri, nelec, e_core = load_nbn_cas()

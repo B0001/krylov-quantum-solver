@@ -83,13 +83,19 @@ def _record(row: dict) -> None:
     print("RECORD", json.dumps(row), flush=True)
 
 
-def spin_fci(h1, eri, nelec, e_core, twos=None, nroots=1, shift=0.5, max_cycle=300):
+def spin_fci(h1, eri, nelec, e_core, twos=None, nroots=1, shift=0.01, max_cycle=300):
     """Exact CAS FCI in the Ms=(na-nb)/2 sector; with ``twos`` a spin penalty pins S=twos/2.
-    Returns [(E, <S^2>)...] and the CI vectors."""
+    Returns [(E, <S^2>)...] and the CI vectors.
+
+    The penalty is shift*(S^2 - ss)^2. A large shift (0.5 put the septet +72 Ha up) wrecks the
+    Davidson preconditioner -- the first singlet attempt ran 300 cycles to a nonsense -108.53 Ha.
+    For an even-S target in a balanced sector, direct_spin0 (spin-symmetric CI: even S only)
+    removes the odd-S states outright, so a small shift only has to lift S=2,4,6."""
     from pyscf import fci
 
     norb = h1.shape[0]
-    solver = fci.direct_spin1.FCI()
+    even = twos is not None and twos % 2 == 0 and nelec[0] == nelec[1]
+    solver = (fci.direct_spin0 if even else fci.direct_spin1).FCI()
     solver.max_cycle, solver.conv_tol, solver.nroots = max_cycle, 1e-10, nroots
     if twos is not None:
         s = twos / 2
