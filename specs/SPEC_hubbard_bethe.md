@@ -105,3 +105,58 @@ gate fast. t = 1.
 - `model_hamiltonians.py` — `hubbard_chain_integrals`, `lieb_wu_energy`.
 - `tests/test_hubbard_bethe_spec.py` — gates G1–G4.
 - Results summary (per-U TDL agreement + the analytic-limit checks, with §2/§7 caveats) in the PR.
+
+---
+
+## 10. Extension: DMRG at large L (bead chem-tjr)
+
+Caveat (b) above says the few-mHa TDL residual is finite-L-FCI-limited. This section tests that by
+composing `hubbard_chain_integrals` with `dmrg_energy_extrapolated` (block2, SU(2)) at half filling
+far past FCI. Driver `benchmark_hubbard_lieb_wu.py`; analysis `hubbard_tdl_analysis.py`; vendored
+table `specs/hubbard_lieb_wu_table.csv`; gate `tests/test_hubbard_lieb_wu_spec.py`.
+
+### 10.1 Budget probes and the stall they exposed (before pre-registration)
+
+Hardware: `Linux 6.18.44-fc-v37 x86_64`, Intel Xeon @ 2.80GHz, nproc = 4, 15 GiB RAM, no GPU.
+
+- **Stall, labelled `converged`.** Open L=60, U=4, default block2 random MPS, D = 100/200/400, 8
+  sweeps per stage: E = −20.780 / −30.025 / −34.044 Ha (the D=100 stage sits ~13 Ha high), every
+  discarded weight ≤ 4e-9, **`regime = "converged"`**, fit −38.666 Ha, 590 s. The chem-4e9 stall
+  checks do not fire: the slope check runs on truncation ladders only, and the undershoot check
+  allows 10× the last gap (4.0 Ha) while the fit sat 4.6 Ha below E(D_max). **Cause:** the
+  default random MPS spreads the charge unevenly; at the Mott charge gap DMRG moves it ~1 Ha per
+  sweep. Open L=40, U=4, D=100 for 12 sweeps gives −21.648 Ha from the default start (still falling
+  by ~0.6 Ha/sweep) and −22.583594 Ha from a uniform-filling start (`occs = 1`, converged in 4
+  sweeps). This repeats with the generic qc MPO and with a hand-built Hubbard MPO, so the Hamiltonian
+  is not the cause.
+- **Fix (library).** `dmrg_energy_extrapolated(..., init_occs=...)` passes block2's `occs` through.
+  `ExtrapResult.stage_dE` also records each perD stage's last-sweep |ΔE|, a stall detector that
+  does not depend on `regime`. Both are off by default, so existing callers are unchanged.
+- **Probes with `occs = 1`, U=4** (seen before pre-registration, and not in the table):
+  open L=40, D=100/200/400: E(400) = −22.5835938881, 30 s; open L=100: E(400) = −57.0053055086,
+  discarded weight 2.5e-12, stage ΔE ≤ 1e-7, 173 s. Ring L=10: E(D=200) equals PySCF FCI to
+  2e-11. Ring L=16 (folded order), D=400: discarded weight 3.6e-8, 30 s.
+
+### 10.2 Pre-registered protocol and analysis (fixed before any production number)
+
+The analysis code, `hubbard_tdl_analysis.py`, is committed with this section and must not change
+after production numbers exist.
+
+- **Points.** Every ladder uses `protocol="perD"`, 8 sweeps per stage, and `init_occs = 1`.
+  Route (a) uses **open** chains, L ∈ {20, 40, 60, 80, 100}. Route (b) uses **closed-shell rings**
+  (`hubbard_chain_integrals` default boundary phase, sites in folded order 0, L−1, 1, L−2, …),
+  L ∈ {16, 20, 24, 28, 32}. Both routes run U ∈ {2, 4, 8}, t = 1. Bond-dimension ladders are in
+  §10.3; they are chosen from probe **wall times and discarded weights only**.
+- **Point check** (all must hold; `point_check`): regime ∈ {converged, truncation};
+  E(D_max) − E_extrap ≤ the ladder's own spread (max − min of E(D)); E_extrap ≤ E(D_max) + 1 µHa;
+  every stage's last-sweep |ΔE| ≤ 1 µHa. A point's uncertainty is
+  σ = max(stderr, |E_extrap − E(D_max)|). A point that fails is re-run once with a larger ladder,
+  and the re-run is recorded. The analysis does not change.
+- **Route (a):** e_a = `bulk_per_site_energy` over L = 80 and 100.
+  bar_a = |e_a − q(60, 80)| + (σ₁₀₀ + σ₈₀)/20.
+- **Route (b):** e_b = intercept of a least-squares fit e(L) = e_b + a/L² over all ring L.
+  bar_b = |e_b − (the same fit without the smallest L)| + intercept stderr + max_L σ(L)/L.
+- **Acceptance (bead text, unchanged):** (1) |e_a − `lieb_wu_energy`(U)| < 1e-3 Ha/site for
+  U ∈ {2, 4, 8}; route (a) is the headline and U=4 is the headline coupling.
+  (2) |e_a − e_b| < bar_a + bar_b. (3) G2 and G3 above still pass. (4) G1's numbers and caveat (b)
+  are updated from the vendored table, read by the spec gate.
