@@ -156,3 +156,26 @@ def test_G5_tolerances_are_pinned():
     assert ENERGY_NOISE == 1e-6
     assert STAGE_SLOPE_RATIO == 1e3
     assert UNDERSHOOT_FACTOR == 10.0
+
+
+# --- G6: the n=40 stall, reproduced (SPEC §8) -----------------------------------------------------
+# `benchmark_hchain_tdl.py --localize` integrals, n=40, protocol="ramp", bond_dims 100/200/400,
+# 4 threads, stack_mem 6 GB, unseeded -- the §11.2 run's settings. Recorded 2026-09-25, 947 s.
+REPRODUCED_N40 = [
+    (100, 7.37332779285622e-07, -20.924206023061657),
+    (200, 1.6764842710361932e-09, -21.634061152184756),
+    (400, 2.6902054150132614e-11, -21.634061689075224),
+]
+
+
+def test_G6_reproduced_n40_stall_is_rejected_by_the_regime_alone():
+    # It is the §11.2 row: same stalled D=100, same D=400 digits, same undershoot and stderr.
+    assert abs(REPRODUCED_N40[0][2] - (-20.924)) < 1e-3
+    assert abs(REPRODUCED_N40[2][2] - E_D400) < 1e-9
+    res = extrapolate_ladder(REPRODUCED_N40)
+    assert abs((REPRODUCED_N40[2][2] - res.energy) - 0.82e-3) < 0.01e-3
+    assert abs(res.stderr - 8.0e-4) < 0.1e-4
+    # Weights alone certified it; the energies reject it. The numbers themselves are unchanged.
+    assert _legacy_weight_regime(REPRODUCED_N40) == "truncation"
+    assert res.method == "dweight"
+    assert res.regime == "uncontrolled"
