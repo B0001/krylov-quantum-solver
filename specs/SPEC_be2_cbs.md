@@ -8,6 +8,18 @@ Re=2.58 A, De=469 cm^-1** (baseline was 625 cm^-1 from experiment; this composit
 from experiment -- real progress, not closure). Gate G4 records the residual and its attributed
 cause instead of forcing the pass.
 
+**REVISED 2026-09-25 (bead chem-mom, gate G5): the "method, not basis" attribution is NOT
+supported.** Adding cc-pV5Z on the same 13-point grid moves the CBS well from TZ/QZ De=464 cm^-1
+(Re=2.61 A, wide quartic fit; 469 cm^-1 / 2.58 A with the gate's 3-point fit) to **QZ/5Z De=1688
+cm^-1 (Re=2.43 A)** -- a +1224 cm^-1 shift against a pre-registered confirmation threshold of ~20
+cm^-1. It does not "move toward" 929.7 either: it overshoots by 758 cm^-1, further from experiment
+than TZ/QZ. The single-basis wells are non-monotonic in X (TZ 997, QZ 698, 5Z 1313 cm^-1), so this
+composition is not in the 1/X^3 regime the Helgaker two-point form assumes and **neither CBS number
+is a basis-converged limit**. The 461 cm^-1 residual therefore cannot be split into method vs basis
+from these data. G4 is kept as a regression pin on the TZ/QZ code path (its numbers are
+reproduced exactly), but it no longer carries the meaning "basis-converged well depth".
+Numbers, timings and the diagnostic: `results/be2_cbs_5z/` (driver `be2_cbs_5z.py`).
+
 > A spec is a *falsifiable hypothesis*, not a contract: if implementation shows a gate is wrong,
 > change the gate and record why (that mismatch is the finding).
 
@@ -51,6 +63,8 @@ cannot even reproduce a well at the physically correct bond length.
      100 cm^-1 gap from.
   4. Minimal basis for the CBS pair (TZ/QZ only, the standard minimal Helgaker pair); DZ is
      excluded from the extrapolation (it does not show a well near R_e at all -- see G1).
+     **Materialized (G5):** adding 5Z shows the TZ/QZ pair is not in the asymptotic regime --
+     QZ/5Z CBS De is ~1690 cm^-1, not ~470. The basis limit of this composition is unknown.
   5. Isolated-dimer, fixed geometry scan (no vibrational/rotational correction to D_e).
 
 ## 3. Approach
@@ -105,6 +119,16 @@ needed by each gate) keeps the gate to ~1-2 min -- QZ dominates at ~13 s/point.
   silently regresses the number *or* silently "fixes" it back into the original tolerance without
   a recorded reason (either direction is worth knowing about).
 
+- **G5 -- the method attribution does NOT survive cc-pV5Z (bead chem-mom, criterion
+  pre-registered before any 5Z number was computed).** Pre-registered: if CBS(QZ/5Z) De is within
+  ~20 cm^-1 of CBS(TZ/QZ), the residual is the method's (confirmed); a material move falsifies the
+  attribution. MEASURED (13-point wide quartic, `be2_cbs_5z.py`): TZ/QZ 463.8 cm^-1 @ 2.606 A ->
+  QZ/5Z **1687.9 cm^-1 @ 2.429 A** (+1224.1). Gate (cheap 3-point fit on R in {2.4, 2.45, 2.6} +
+  8.0, measured 468.6 -> 1682.0 cm^-1, Re 2.434 A): `|De_QZ5Z - De_TZQZ| > 20`,
+  `Re_QZ5Z` in **(2.35, 2.50) A**, `De_QZ5Z` in **(1500, 1850) cm^-1**. Adds 4 cc-pV5Z points
+  (~14 s each on 4 x86_64 vCPUs) to the gate. The QZ/5Z number is NOT a claimed better answer --
+  it is pinned only to show the series has not converged.
+
 > Definition of done: **G4**, which is the recorded finding -- the original backlog gate is
 > falsified, not satisfied, and that falsification (with cause) is what this spec closes on.
 
@@ -135,10 +159,17 @@ needed by each gate) keeps the gate to ~1-2 min -- QZ dominates at ~13 s/point.
   minimum; cross-checked in `be2_cbs.py.__main__` against a 13-point/quartic-fit curve and agrees
   to within ~4 cm^-1 / 0.02 A (informal, not gated -- the gate uses the cheap 3-point version).
   Honest limitation: reproduces a known result, and reproduces it incompletely.
+- **R3 (materialized, G5):** the TZ/QZ "CBS" was not basis-converged; with 5Z the extrapolated
+  De moves by >1200 cm^-1. A trustworthy basis limit for this method would need an active space
+  whose orbitals are basis-consistent (e.g. valence orbitals localized/projected from a fixed
+  minimal basis, or natural orbitals) before any X-extrapolation -- a follow-up, not attempted.
+- **R4:** `run_on_cloud.sh`'s "cc-pVQZ CBS" cloud curve actually submits `basis: cc-pvdz`
+  (bead chem-80w); `data/be2_cbs_cloud_curve.csv` is NOT a QZ curve and is not used here.
 
 ## 9. Deliverables
 
 - `be2_cbs.py` -- CASCI+NEVPT2 points, CBS extrapolation, quadratic well fit, `__main__` driver
   (writes `data/be2_cbs_curve.csv`).
-- `tests/test_be2_cbs_spec.py` -- gates G1-G4.
+- `tests/test_be2_cbs_spec.py` -- gates G1-G5.
+- `be2_cbs_5z.py` + `results/be2_cbs_5z/` (tracked) -- TZ/QZ/5Z 13-point curves, wells, diagnostic (G5).
 - BACKLOG.md entry moved to Done with the honest numbers (not the original target) recorded.

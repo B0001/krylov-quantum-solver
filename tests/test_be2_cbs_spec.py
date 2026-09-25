@@ -16,7 +16,7 @@ PySCF only (no block2); a small R-grid keeps this to ~1-2 minutes (QZ dominates,
 """
 import pytest
 
-from be2_cbs import casci_nevpt2_point, cbs_extrapolate_correlation, quadratic_well, HA2CM
+from be2_cbs import BASIS_CARDINAL, casci_nevpt2_point, cbs_extrapolate_correlation, quadratic_well, HA2CM
 
 EXPERIMENT_DE = 929.7   # cm^-1, Merritt, Bondybey & Heaven, Science 323, 1671 (2009)
 EXPERIMENT_RE = 2.4498  # Angstrom
@@ -31,15 +31,18 @@ def points():
     for basis in ("ccpvtz", "ccpvqz"):
         for R in (2.4, 2.45, 2.6, 6.0, 8.0):
             pts[(basis, R)] = casci_nevpt2_point(R, basis)
+    for R in (2.4, 2.45, 2.6, 8.0):  # G5 only; ~14 s/point at 5Z
+        pts[("ccpv5z", R)] = casci_nevpt2_point(R, "ccpv5z")
     return pts
 
 
-def _cbs_curve(points, Rs):
-    """CASCI(QZ) reference + CBS(TZ=3/QZ=4)-extrapolated NEVPT2 correlation, per R."""
+def _cbs_curve(points, Rs, lo_basis="ccpvtz", hi_basis="ccpvqz"):
+    """CASCI(hi) reference + CBS(lo/hi)-extrapolated NEVPT2 correlation, per R."""
     out = {}
     for R in Rs:
-        lo, hi = points[("ccpvtz", R)], points[("ccpvqz", R)]
-        e_corr_cbs = cbs_extrapolate_correlation(3, lo.e_corr, 4, hi.e_corr)
+        lo, hi = points[(lo_basis, R)], points[(hi_basis, R)]
+        e_corr_cbs = cbs_extrapolate_correlation(BASIS_CARDINAL[lo_basis], lo.e_corr,
+                                                 BASIS_CARDINAL[hi_basis], hi.e_corr)
         out[R] = hi.e_casci + e_corr_cbs
     return out
 
@@ -128,3 +131,23 @@ def test_G4_cbs_well_falls_short_of_the_original_gate_by_a_pinned_amount(points)
 
     # explicitly outside the original backlog tolerance -- the falsification, on the record
     assert not (abs(De - EXPERIMENT_DE) < 100.0 and abs(Re - EXPERIMENT_RE) < 0.1)
+
+
+# --- G5: the "method, not basis" attribution does NOT survive cc-pV5Z (bead chem-mom) ----------
+
+
+def test_G5_qz5z_cbs_moves_far_from_tzqz_so_basis_is_not_converged(points):
+    """Pre-registered (bead chem-mom): if CBS(QZ/5Z) De is within ~20 cm^-1 of CBS(TZ/QZ), the
+    residual is the method's. MEASURED: it moves by ~+1210 cm^-1 (469 -> ~1682, overshooting
+    929.7), so the TZ/QZ number is NOT basis-converged and the method attribution is unsupported.
+    Pins the QZ/5Z well so a future change is caught whichever way it moves."""
+    Rs = [2.4, 2.45, 2.6, 8.0]
+    wells = {}
+    for lo, hi in (("ccpvtz", "ccpvqz"), ("ccpvqz", "ccpv5z")):
+        c = _cbs_curve(points, Rs, lo, hi)
+        wells[hi] = quadratic_well([2.4, 2.45, 2.6], [c[2.4], c[2.45], c[2.6]], 8.0, c[8.0])
+    (_, de_tzqz), (re_qz5z, de_qz5z) = wells["ccpvqz"], wells["ccpv5z"]
+
+    assert abs(de_qz5z - de_tzqz) > 20.0  # the pre-registered confirmation test FAILS
+    assert 2.35 < re_qz5z < 2.50, re_qz5z
+    assert 1500.0 < de_qz5z < 1850.0, de_qz5z
