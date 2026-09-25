@@ -94,10 +94,14 @@ dmrg_reference.extrapolate_ladder(per_D, *, floor=...) -> ExtrapResult          
   50× on the truncation rows.
 - **G5 — the numbers are unchanged.** For the stalled ladder, the energy and stderr are exactly the
   legacy δ-fit. The tolerances are pinned.
+- **G6 — the reproduced n=40 row (§8).** The weights-only predicate says `"truncation"`. The new
+  regime says `"uncontrolled"`, and `method` stays `dweight`.
 
 ## 6. Reproducing the n=40 row
 
-See §8.
+The reproduction repeats the §11.2 settings: localized H₄₀ from `benchmark_hchain_tdl.integrals`,
+`protocol="ramp"`, D = 100/200/400, 4 sweeps per stage, 4 threads, 6 GB stack, and no seed. It
+takes about 16 minutes on the 4-core container. The result is in §8.
 
 ## 7. Out of scope and caveats
 
@@ -111,7 +115,40 @@ See §8.
   its energies, undershoot, and stderr. The G1 fixture is the small, monotone profile that
   reproduces those three numbers. The parametrized scales show the verdict does not depend on it.
 
-## 8. Result
+## 8. Result (2026-09-25)
 
-See the PR for bead chem-4e9 for gate runs and the n=40 reproduction attempt. A summary is
-recorded below once the results are in.
+**The n=40 stall reproduced**, on the second attempt. The first attempt's process died after about
+12 minutes with a flood of `Intel MKL ERROR: Parameter 13 was incorrect on entry to DGEMM` and
+produced no row. The cause was not investigated. The second attempt ran for 947 s:
+
+| D | δ | E (Ha) |
+|---|---|---|
+| 100 | 7.37e-7 | −20.924206023 |
+| 200 | 1.68e-9 | −21.634061152 |
+| 400 | 2.69e-11 | −21.634061689 |
+
+The D=100 stage stalled 0.71 Ha high, as recorded. The D=400 energy matches the recorded
+−21.6340616891 to 1e-10. The δ-fit gives −21.634881430, which is **0.820 mHa below E(D=400)** with
+stderr **7.96e-4**. Both match the §11.2 record (0.82 mHa, 8.0e-4). The weights-only predicate
+says `"truncation"`. **The new regime says `"uncontrolled"`**, and the triple is vendored as G6.
+
+Each check on its own:
+
+- **Undershoot: rejects with a wide margin.** drop/gap_last = 1527, against a limit of 10.
+- **Stage gap: rejects, but only just.** The pair slopes are 9.6e5 and 325 Ha. After the noise
+  inflation (§2), the D=100 gap of 0.710 Ha exceeds its allowance of 0.685 Ha by only about 4%.
+  The reason is that the D=200 stage was also slightly under-converged: its gap is 5.4e-7, where
+  the 200/400/800 rerun has 1.8e-7. That leaves the later-pair slope loose. The undershoot check
+  is the robust detector here, and the stage-gap check is a second line.
+
+**Gates run** (each file in its own process, `uv run pytest`):
+
+| gate file | result |
+|---|---|
+| `tests/test_regime_stalled_stage_spec.py` | 15 passed |
+| `tests/test_extrap_regime_spec.py` | 18 passed (unchanged file) |
+| `tests/test_hchain_largen2_spec.py` | 5 passed (DMRG, 429 s) |
+| `tests/test_hchain_tdl_spec.py` | 7 passed (DMRG, 163 s) |
+| `tests/test_singleramp_spec.py` | 3 passed (DMRG, 239 s) |
+| `tests/test_dmrg_reference.py` | 2 passed, 1 skipped |
+| `tests/test_nbn_dmrg_reference_spec.py` | **3 failed, environmental**: `FileNotFoundError: data/nbn_scf.chk`. That checkpoint is git-ignored and is built from `data/nb_structures/NbN_mp-2634.cif`, which is also not in the repo. The test fails at file load, before any regime code runs, so it cannot pass or fail on this change here. |

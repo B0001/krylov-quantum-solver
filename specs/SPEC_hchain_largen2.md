@@ -246,7 +246,7 @@ discarded-weight fit then extrapolated 0.82 mHa *below* its own D=400 energy (st
 The flag was the stderr, 4–5 orders above every other point, and E_extrap − E(D_max). The rerun's
 D=400 energy (−21.6340616891) matches the stalled run's D=400 energy to every printed digit, and
 its D=800 point moves it by 1e-9 Ha. G4 now also checks \|E_extrap − E(D_max)\| < 1e-6 Ha for every
-vendored point. That check was added after this failure, and says so. The stalled row is not in
+vendored point. That check was added after this failure, and says so. (Since fixed at the source: `truncation_regime` now reads the energies too and rejects this ladder, reproduced -- see SPEC_regime_stalled_stage.md.) The stalled row is not in
 the table. **n=48 and n=56** (200/400/800) were attempted and **OOM-killed** by the 15 GiB container
 limit, with 13.9 GB resident after ~1 h each. Neither produced a row, so nothing half-finished is
 in the fit.
