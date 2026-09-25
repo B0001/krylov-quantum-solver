@@ -160,3 +160,12 @@ after production numbers exist.
   U ∈ {2, 4, 8}; route (a) is the headline and U=4 is the headline coupling.
   (2) |e_a − e_b| < bar_a + bar_b. (3) G2 and G3 above still pass. (4) G1's numbers and caveat (b)
   are updated from the vendored table, read by the spec gate.
+
+### 10.3 Bond-dimension ladders (from probe cost and weights only)
+
+The ring L=32, U=4 probe used folded order, `occs = 1`, D = 300/600/1200 and 4 threads. It
+finished in 623 s, with discarded weights 1.7e-6 / 1.3e-7 / 7.0e-9 and every stage's ΔE ≤ 5e-7.
+That places it in the truncation regime, and its σ of about 2e-6 Ha is about 1e-7 Ha/site.
+U=2 has a smaller charge gap and more entanglement, so both ladders get headroom above the probes:
+**open D = 200/400/800** and **ring D = 400/800/1600**, with 4 threads and the points run one at a
+time. The production order is U=4 (open, then ring), U=2, then U=8.
