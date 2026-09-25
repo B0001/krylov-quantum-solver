@@ -180,18 +180,18 @@ def cmd_dmrg(args):
     from hybrid_quantum_solver.dmrg_reference import dmrg_energy_extrapolated
     from nbn_dmrg_reference import SCHEDULES, load_nbn_cas
 
-    h1, eri, nelec, e_core = load_nbn_cas(nelec=tuple(args.nelec))
+    h1, eri, nelec, e_core = load_nbn_cas(nelec=tuple(args.nelec), chk=args.chk)
     if args.orbitals == "no":
         u = np.load(NO_CACHE.format(na=nelec[0], nb=nelec[1]))["u"]
         h1, eri = rotate(h1, eri, u)
     kw = dict(SCHEDULES[args.schedule])
     if args.dims:
         kw["bond_dims"] = tuple(args.dims)
-    kw["scratch"] = f"{kw['scratch']}_{nelec[0]}{nelec[1]}_{args.orbitals}"
+    kw["scratch"] = f"{kw['scratch']}_{nelec[0]}{nelec[1]}_{args.orbitals}_{os.path.basename(args.chk)}"
     os.makedirs(kw["scratch"], exist_ok=True)
     t = time.time()
     r = dmrg_energy_extrapolated(h1, eri, nelec, e_core, n_threads=args.threads, **kw)
-    _record(dict(kind="dmrg", schedule=args.schedule, nelec=list(nelec), orbitals=args.orbitals,
+    _record(dict(kind="dmrg", chk=args.chk, schedule=args.schedule, nelec=list(nelec), orbitals=args.orbitals,
                  bond_dims=list(kw["bond_dims"]), protocol=kw["protocol"], energy=r.energy,
                  stderr=r.stderr, method=r.method, regime=getattr(r, "regime", None),
                  per_D=[[int(d), float(w), float(e)] for d, w, e in r.per_D],
@@ -217,6 +217,7 @@ if __name__ == "__main__":
     d.add_argument("--orbitals", choices=("scf", "no"), default="scf")
     d.add_argument("--dims", type=int, nargs="*")
     d.add_argument("--threads", type=int, default=2)
+    d.add_argument("--chk", default="data/nbn_scf.chk")
     d.set_defaults(fn=cmd_dmrg)
     a = ap.parse_args()
     a.fn(a)
