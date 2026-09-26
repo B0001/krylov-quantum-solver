@@ -107,3 +107,15 @@ extend-exclude = ["hybrid_quantum_solver/orchestrate_hybrid_pipeline.py"]
 required-environments = [
     "sys_platform == 'darwin' and platform_machine == 'x86_64'",
 ]
+
+[tool.sandbox]
+# Worker loop knobs (verified-sandbox). One container per bead, sequentially, so
+# DMRG/NEVPT2 beads never share the Docker VM's memory. Beads a Linux worker
+# cannot finish are parked, never dispatched:
+#   chem-dfe  macOS-only libomp abort; a Linux container cannot reproduce it
+#   chem-3z8  research-sized; needs an SDP producer chosen by a human first
+#   chem-80w  run_on_cloud.sh / GCP pipeline; needs the owner's cloud context
+park = ["chem-dfe", "chem-3z8", "chem-80w"]
+# block2 0.5.3 has no Linux arm64 wheel, so chem's workers run as linux/amd64
+# (emulated on Apple silicon); see sandbox.Dockerfile. Build it before the first run.
+image = "claude-chem"
