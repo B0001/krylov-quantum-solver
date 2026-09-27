@@ -8,7 +8,7 @@ rusage), and its own block2 runtime. block2's per-sweep log (iprint=1) streams t
 data/probe_<tag>.log; when a run hits the cap, the last completed sweep in that log is what it
 reached.
 
-Run:  uv run python probe_hchain_localize.py [--n 20] [--D 400] [--cap-min 90]
+Run:  uv run python probe_hchain_localize.py [--n 20] [--D 400] [--R 1.8] [--cap-min 90]
       -> data/hchain_localize_probe.json (untracked; the numbers are transcribed into the spec)
 """
 import argparse
@@ -27,9 +27,9 @@ THRDS = [1e-10] * N_SWEEPS
 SEED = 1234
 
 
-def worker(n, D, localize, threads, stack_gb, scratch):
-    from benchmark_hchain_tdl import integrals
-    h1, eri, ne, ec, e_hf = integrals(n, localize=localize)
+def worker(n, D, localize, threads, stack_gb, scratch, R_bohr):
+    from benchmark_hchain_tdl import integrals, R_BOHR_DEFAULT
+    h1, eri, ne, ec, e_hf = integrals(n, localize=localize, R_bohr=R_bohr if R_bohr else R_BOHR_DEFAULT)
     import block2
     from pyblock2.driver.core import DMRGDriver, SymmetryTypes
     block2.Random.rand_seed(SEED)
@@ -66,12 +66,12 @@ def last_sweep(log_path):
     return e, dw, k
 
 
-def run_one(tag, n, D, localize, threads, stack_gb, cap_s):
+def run_one(tag, n, D, localize, threads, stack_gb, cap_s, R_bohr):
     os.makedirs("data", exist_ok=True)
     log = f"data/probe_{tag}.log"
     cmd = [sys.executable, "-u", __file__, "--worker", "--n", str(n), "--D", str(D),
            "--threads", str(threads), "--stack-mem-gb", str(stack_gb),
-           "--scratch", f".dmrg_tmp/probe_{tag}"] + (["--localize"] if localize else [])
+           "--scratch", f".dmrg_tmp/probe_{tag}", "--R", str(R_bohr)] + (["--localize"] if localize else [])
     t0 = time.time()
     with open(log, "w") as fh:
         p = subprocess.Popen(cmd, stdout=fh, stderr=subprocess.STDOUT)
@@ -89,8 +89,8 @@ def run_one(tag, n, D, localize, threads, stack_gb, cap_s):
             time.sleep(2)
     wall = time.time() - t0
     rec = {"tag": tag, "n": n, "D": D, "localize": localize, "threads": threads,
-           "stack_mem_gb": stack_gb, "wall_seconds": wall, "peak_rss_gb": ru.ru_maxrss / 1024**2,
-           "status": status}
+           "stack_mem_gb": stack_gb, "r_bohr": R_bohr, "wall_seconds": wall,
+           "peak_rss_gb": ru.ru_maxrss / 1024**2, "status": status}
     result = [ln for ln in open(log) if ln.startswith("RESULT ")]
     if result:
         rec.update(json.loads(result[-1][7:]))
@@ -112,17 +112,20 @@ def main():
     ap.add_argument("--cap-min", type=float, default=90.0)
     ap.add_argument("--runs", default="loc,can",
                     help="comma list of loc|can, optionally with @D, e.g. loc@100,loc,can")
+    ap.add_argument("--R", type=float, default=1.8,
+                    help="uniform H-H spacing in Bohr (default 1.8; chem-1uu mechanism tier "
+                         "sweeps this at fixed n, D to ask whether D is set by R, not n).")
     ap.add_argument("--out", default="data/hchain_localize_probe.json")
     a = ap.parse_args()
     if a.worker:
-        worker(a.n, a.D, a.localize, a.threads, a.stack_mem_gb, a.scratch)
+        worker(a.n, a.D, a.localize, a.threads, a.stack_mem_gb, a.scratch, a.R)
         return
     recs = json.load(open(a.out)) if os.path.exists(a.out) else []
     for spec in a.runs.split(","):
         basis, _, d = spec.partition("@")
         D = int(d) if d else a.D
-        tag = f"n{a.n}_{basis}_D{D}"
-        rec = run_one(tag, a.n, D, basis == "loc", a.threads, a.stack_mem_gb, a.cap_min * 60)
+        tag = f"n{a.n}_{basis}_D{D}_R{a.R:g}"
+        rec = run_one(tag, a.n, D, basis == "loc", a.threads, a.stack_mem_gb, a.cap_min * 60, a.R)
         recs = [r for r in recs if r["tag"] != tag] + [rec]
         with open(a.out, "w") as f:
             json.dump(recs, f, indent=1)

@@ -282,3 +282,86 @@ would mean choosing the fit form after seeing the data, which §11.1 forbids. A 
 pre-register it. Motta's value is itself an N → ∞ extrapolation from larger N, so agreement or
 disagreement at this level is a statement about two extrapolations. Scope: STO-6G, open chain,
 R = 1.8 bohr. This is a model number that reproduces published physics; it does not extend it.
+
+## 12. Mechanism tier: is D set by R, not n? (bead chem-1uu, 2026-09-27)
+
+**Background.** `specs/BACKLOG.md` (§"one fixed R was the easy point") proposed that the DMRG bond
+dimension needed is set by the bond length R, not by n: large R (Mott/atomic limit, localized) should
+need less D than small R (metallic). The mechanism-tier check as originally stated — n=20, D fixed,
+kills the claim if `dw(R=3.6) ≥ dw(R=1.8)` — was **blocked**: on canonical orbitals R=1.8 already hit a
+memory abort at n≥16 in the earlier (larger-D) ramp protocol. That block was on canonical, delocalized
+orbitals, so the orbital basis confounded whatever the check would have measured — the same confound
+§10 found for the n-dependence. This bead reruns the check with `benchmark_hchain_tdl.py --R` (new:
+`integrals(n, R_bohr=...)`, gated by `tests/test_hchain_tdl_spec.py::test_G6_R_bohr_changes_geometry_but_not_fci_invariance`),
+using the fixed-D single-ladder protocol from §10's cost probe (`probe_hchain_localize.py`, extended
+with `--R`) rather than the multi-D ramp that hit the memory abort — so n=20, D=400 is affordable in
+**both** bases this time.
+
+**Setup.** n=20, D=400, identical 20-sweep schedule (noise 1e-4×4 / 1e-5×4 / 1e-6×4 / 0×8, Davidson
+threshold 1e-10, block2's default early stop), seed 1234, 4 threads, 6 GB block2 stack, one subprocess
+per run, run one at a time. R ∈ {1.8, 2.4, 3.6} bohr in both canonical and localized (Loewdin site)
+orbitals — six runs total. Hardware: `Linux 7.0.12-linuxkit x86_64` (Docker Desktop on Apple Silicon,
+`VirtualApple @ 2.50GHz`, `nproc` = 4 to block2), `nproc` (container) = 8, 16 GiB RAM. **Caveat:** this
+container runs x86_64 Linux under emulation (`VirtualApple` in `/proc/cpuinfo`), and the first run below
+partially overlapped a concurrent CI gate run (`pytest tests/test_hchain_tdl_spec.py`, ~450 s); wall
+times here run ~2.5–3× the §10 probe's dedicated-Xeon numbers at the *same* R=1.8/D=400/localized
+config (852 s vs 290 s) — consistent with emulation overhead, not a new finding. Energy and discarded
+weight are unaffected by wall-clock contention and are the numbers the verdict rests on.
+
+| R (bohr) | basis | E (Ha) | discarded weight (final sweep) | sweeps | converged? | wall (s) |
+|---|---|---|---|---|---|---|
+| 1.8 | localized | −10.825878868 | 8.542e-14 | 13 | yes (early stop) | 853 |
+| 1.8 | canonical | −10.819532372 | 6.994e-04 | 20 | no (still decreasing) | 1630 |
+| 2.4 | localized | −10.460320192 | 3.092e-17 | 13 | yes (early stop) | 733 |
+| 2.4 | canonical | −10.414273464 | 2.889e-03 | 20 | no (still decreasing) | 2075 |
+| 3.6 | localized |  −9.639583342 | 2.144e-19 | 13 | yes (early stop) | 713 |
+| 3.6 | canonical |  −9.242601950 | 3.497e-03 | 20 | no (still decreasing) | 1977 |
+
+(Raw JSON: `data/hchain_R_sweep.json`, untracked per repo convention — this table is the vendored copy.)
+The localized R=1.8 row reproduces §10's recorded canonical/localized cost probe to every printed
+digit (E = −10.825878868, dw = 8.5e-14), confirming the new `--R` plumbing leaves the R=1.8 default
+path bit-identical.
+
+**Applying the pre-registered kill check** (`dw(R=3.6) ≥ dw(R=1.8)` kills the claim) **per basis:**
+
+- **Localized orbitals: the check PASSES, cleanly and monotonically.** Discarded weight at fixed
+  D=400 falls **five and a half orders of magnitude** as R goes from 1.8 → 2.4 → 3.6 bohr
+  (8.5e-14 → 3.1e-17 → 2.1e-19). D needed drops sharply as R grows, exactly as the Mott-regime
+  mechanism predicts: less entanglement, less bond dimension required, and R=1.8 (equilibrium,
+  more metallic) is the hard end.
+- **Canonical orbitals: the check FAILS. It fails in the wrong direction, not just weakly.**
+  Discarded weight at the *same* fixed D=400 **rises** monotonically from 6.99e-4 (R=1.8) to
+  2.89e-3 (R=2.4) to 3.50e-3 (R=3.6) — a 5× increase, the opposite sign from the localized-basis
+  result. None of the three canonical runs reaches the discarded-weight floor within 20 sweeps
+  (`DE` is still shrinking every sweep at R=3.6's finish), so the canonical ladder is truncation-limited
+  at every R tried, worse so at larger R.
+
+**Verdict: the R-dependence claim is basis-dependent — it does NOT survive the basis change as
+originally stated; it inverts.** In the site (localized) basis the mechanism is real and clean: D
+needed is set by R, and it is set with the sign the Mott-crossover argument predicts. In the
+canonical (delocalized) basis — the basis in which the mechanism tier was originally proposed and
+then blocked — the same fixed-D comparison shows the DMRG truncation cost getting *worse*, not
+better, as R grows. That is not a smaller effect in the same direction; it is the opposite sign. The
+likely mechanism (not separately measured here, so stated as an inference): canonical RHF becomes a
+progressively worse single-reference starting point as the chain stretches toward the dissociation
+limit, so the *canonical*-orbital MPS has to represent more static correlation at large R even though
+the *physical* (basis-invariant) entanglement is falling — the same kind of orbital-basis artifact §10
+found inflating the apparent n-dependence, here inflating (and flipping) the apparent R-dependence.
+
+**Honest caveats, not smoothed over:**
+- **The R=3.6 localized point may be closer to a trivial limit than a "hard" Mott insulator.** At
+  R=3.6 bohr (≈1.9 Å, roughly 2.6× the H₂ equilibrium bond length) the nearest-neighbor hopping
+  matrix element is already small; near-zero discarded weight there is consistent with the
+  Mott-regime mechanism but is also consistent with the chain becoming a near-product state of
+  isolated H atoms. This tier does not distinguish "genuinely correlated but low-entanglement" from
+  "nearly non-interacting"; it establishes the *direction and size* of the D(R) trend, not that
+  R=3.6 is itself a hard benchmark point.
+- **This is a fixed-D diagnostic, not a converged energy at every R.** The canonical rows are not
+  converged (regime would read `truncation`/`invD` if run through `dmrg_energy_extrapolated`); they
+  are deliberately left unconverged here because the *comparison at matched D* is the check, per the
+  pre-registered mechanism tier. No thermodynamic-limit or EOS claim is made from this table.
+- **Part (a) of the original BACKLOG entry — reproducing the published 10-point R EOS curve at
+  n=10 — is untouched by this bead** (chem-1uu is the mechanism tier only) and is filed separately
+  (chem-4y9).
+- Three R points, one n, one D. This is a mechanism check, not a scan; a real EOS curve (part (a))
+  would need the full R grid and n→∞, D→∞ extrapolations at each R.

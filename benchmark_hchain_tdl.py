@@ -15,7 +15,8 @@ HONEST SCOPE (see SPEC §2, §7): minimal-basis MODEL at a fixed geometry, open 
 reproduces benchmark physics (cf. Motta et al., PRX 7, 031059, 2017), it does not extend it, and
 the quantum/statevector solver plays no role at these n.
 
-Run:  python benchmark_hchain_tdl.py [--threads N] [--localize]  ->  data/hchain_tdl[_localized].csv + e_inf
+Run:  python benchmark_hchain_tdl.py [--threads N] [--localize] [--R bohr]
+      ->  data/hchain_tdl[_localized][_R<r>].csv + e_inf
 """
 import argparse
 import csv
@@ -33,7 +34,9 @@ from hybrid_quantum_solver.dmrg_reference import (
     dmrg_available,
 )
 
-R_ANG = 1.8 * 0.529177210903          # 1.8 Bohr ~ 0.9525 A (near the cohesive minimum)
+BOHR_TO_ANG = 0.529177210903
+R_BOHR_DEFAULT = 1.8                   # near the cohesive minimum (Motta et al., PRX 7, 031059)
+R_ANG = R_BOHR_DEFAULT * BOHR_TO_ANG   # 1.8 Bohr ~ 0.9525 A
 # Fast, laptop-tractable default (~minutes) giving a stable e_inf. The per-D protocol in
 # dmrg_energy_extrapolated runs a SEPARATE converged DMRG per bond dimension (clean truncation
 # points but ~3x the cost of a single ramp), so large n is slow: n=20 takes many minutes, n=30
@@ -44,14 +47,15 @@ BOND_DIMS = (200, 400, 800)           # D -> inf schedule (near-exact for 1D cha
 FCI_DET_CUTOFF = 5_000_000
 OUTPUT = "data/hchain_tdl.csv"
 OUTPUT_LOCALIZED = "data/hchain_tdl_localized.csv"
-FIELDS = ["n", "qubits", "ndet", "hf_energy", "e_dmrg_extrap", "stderr",
+FIELDS = ["n", "r_bohr", "qubits", "ndet", "hf_energy", "e_dmrg_extrap", "stderr",
           "e_per_atom", "fci_energy", "dmrg_vs_fci", "extrap_method",
           # chem-oxm: recorded per point, never inferred afterwards
           "regime", "bond_dims", "dw_per_D", "e_per_D", "threads", "wall_s"]
 
 
-def integrals(n, localize=False):
-    """Full-space (n, n) STO-6G integrals for H_n.
+def integrals(n, localize=False, R_bohr=R_BOHR_DEFAULT):
+    """Full-space (n, n) STO-6G integrals for H_n at uniform spacing ``R_bohr`` (default 1.8, the
+    cohesive-minimum geometry every other caller of this function assumes).
 
     ``localize=False`` (default): canonical, delocalized RHF orbitals (``mf.mo_coeff``).
     ``localize=True``: Loewdin-orthogonalized site orbitals C = S^(-1/2) over the FULL basis.
@@ -59,7 +63,8 @@ def integrals(n, localize=False):
     unitary rotations of the same full space, so the FCI energy is identical (SPEC_hchain_largen2
     §10); only the entanglement structure DMRG sees changes.
     """
-    atom = "; ".join(f"H 0 0 {i * R_ANG:.6f}" for i in range(n))
+    r_ang = R_bohr * BOHR_TO_ANG
+    atom = "; ".join(f"H 0 0 {i * r_ang:.6f}" for i in range(n))
     mol = gto.M(atom=atom, basis="sto-6g", verbose=0)
     mf = scf.RHF(mol).run()
     mo = lo.orth_ao(mol, "lowdin") if localize else mf.mo_coeff
@@ -88,10 +93,15 @@ def main():
     ap.add_argument("--stack-mem-gb", type=float, default=None,
                     help="block2 memory pool in GB (raise for large D at large n; default ~0.5).")
     ap.add_argument("--output", default=None,
-                    help="CSV path (default: data/hchain_tdl[_localized].csv).")
+                    help="CSV path (default: data/hchain_tdl[_localized].csv, "
+                         "or data/hchain_tdl[_localized]_R<r>.csv when --R is non-default).")
     ap.add_argument("--localize", action="store_true",
                     help="Loewdin site orbitals (chain order) instead of canonical RHF MOs; "
                          "writes data/hchain_tdl_localized.csv so the two bases never mix.")
+    ap.add_argument("--R", type=float, default=R_BOHR_DEFAULT,
+                    help="uniform H-H spacing in Bohr (default 1.8, the cohesive minimum). "
+                         "A non-default value gets its own CSV so bond lengths never mix "
+                         "(SPEC_hchain_largen2.md mechanism tier, bead chem-1uu).")
     args = ap.parse_args()
     if not dmrg_available():
         print("[FATAL] block2 required: pip install block2.")
@@ -99,9 +109,12 @@ def main():
 
     ns_list = [int(x) for x in args.ns.split(",")] if args.ns else CHAIN_LENGTHS
     dims = tuple(int(x) for x in args.bond_dims.split(",")) if args.bond_dims else BOND_DIMS
-    output = args.output or (OUTPUT_LOCALIZED if args.localize else OUTPUT)
+    base_output = OUTPUT_LOCALIZED if args.localize else OUTPUT
+    if args.R != R_BOHR_DEFAULT:
+        base_output = base_output[:-4] + f"_R{args.R:g}.csv"
+    output = args.output or base_output
 
-    print(f"H_n TDL study | R={R_ANG:.4f} A | sto-6g | D={dims} | protocol={args.protocol} "
+    print(f"H_n TDL study | R={args.R:.4f} bohr | sto-6g | D={dims} | protocol={args.protocol} "
           f"| orbitals={'localized' if args.localize else 'canonical'}")
     hdr = (f"{'n':>4} {'qubits':>6} {'ndet':>16} {'HF':>12} {'E_extrap':>13} {'stderr':>9} "
            f"{'E/atom':>11} {'FCI':>13} {'|D-FCI|':>9}")
@@ -117,7 +130,7 @@ def main():
         if n in done:
             print(f"{n:>4}  (cached)")
             continue
-        h1, eri, ne, ec, e_hf = integrals(n, localize=args.localize)
+        h1, eri, ne, ec, e_hf = integrals(n, localize=args.localize, R_bohr=args.R)
         ndet = math.comb(n, ne[0]) * math.comb(n, ne[1])
         stack_mem = int(args.stack_mem_gb * 1024**3) if args.stack_mem_gb else None
         t0 = time.time()
@@ -135,7 +148,7 @@ def main():
         print(f"{n:>4} {2 * n:6d} {ndet:16,d} {c(e_hf, 12)} {c(res.energy)} {res.stderr:9.1e} "
               f"{epa:11.6f} {c(e_fci)} {cf}  {res.regime} {wall:.0f}s")
 
-        row = {"n": n, "qubits": 2 * n, "ndet": ndet, "hf_energy": e_hf,
+        row = {"n": n, "r_bohr": args.R, "qubits": 2 * n, "ndet": ndet, "hf_energy": e_hf,
                "e_dmrg_extrap": res.energy, "stderr": res.stderr, "e_per_atom": epa,
                "fci_energy": e_fci, "dmrg_vs_fci": d_fci, "extrap_method": res.method,
                "regime": res.regime, "bond_dims": "/".join(str(d) for d, _, _ in res.per_D),

@@ -117,3 +117,21 @@ def test_G1_localized_extrapolation_matches_fci():
         assert abs(res.energy - e_fci) < G1_TOL, (n, res.energy, e_fci)
         e_dmax = res.per_D[-1][2]
         assert abs(e_dmax - e_fci) < LOC_CONV_TOL, (n, e_dmax, e_fci)
+
+
+# --- R_bohr parameter: SPEC_hchain_largen2.md §12, bead chem-1uu (mechanism tier: D set by R?) --
+# `integrals(n, R_bohr=...)` is new code (the driver previously hardcoded R=1.8); this gate is the
+# falsifier for it: a non-default R must (a) actually change the geometry/nuclear energy, and
+# (b) still leave FCI invariant to localization, exactly as at the default R.
+
+
+def test_G6_R_bohr_changes_geometry_but_not_fci_invariance():
+    n = 8
+    ec_18 = driver_integrals(n, R_bohr=1.8)[3]
+    ec_36 = driver_integrals(n, R_bohr=3.6)[3]
+    # Nuclear repulsion of a uniform chain scales as 1/R: doubling R must halve it.
+    assert abs(ec_36 - ec_18 / 2) < 1e-9, (ec_18, ec_36)
+    for R in (1.8, 2.4, 3.6):
+        e_can = fci_energy(*driver_integrals(n, R_bohr=R)[:4])
+        e_loc = fci_energy(*driver_integrals(n, R_bohr=R, localize=True)[:4])
+        assert abs(e_loc - e_can) < LOC_FCI_TOL, (R, e_loc, e_can)
