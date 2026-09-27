@@ -77,25 +77,45 @@ def _tight_scf(mf):
     converges it quadratically from the damped solution; the stability loop guards against settling
     on a saddle point (a real risk for transition metals) by following a lower broken-symmetry
     solution if one exists.
+
+    chem-y6w: on NbN's real geometry the (10,4)/S=3 solution sits essentially exactly at a
+    stability-Hessian eigenvalue of zero, so the Davidson solver inside ``mf.stability()`` can
+    round either side of it -- which of (at least) two genuinely, separately locally-stable UHF
+    minima this loop lands on depended on ambient multi-threaded-BLAS floating-point
+    non-associativity (pyscf's OWN OpenMP thread count, set via `lib.num_threads`, not the
+    OMP_NUM_THREADS env var pyscf reads only at import time -- see `pyscf.lib.num_threads`'s own
+    docstring). Pinning it to 1 for this call makes the result reproducible: same input mf, same
+    output, regardless of what the caller left the ambient thread count at (see
+    tests/test_nbn_scf_determinism_spec.py, specs/SPEC_nbn_scf_determinism.md). This does NOT
+    make a fresh run reproduce the committed `specs/nbn_scf_reference.chk` everywhere -- on the
+    Linux container it lands on the OTHER (lower-energy) minimum, on macOS arm64 on the vendored
+    one (which minimum is BLAS-build dependent; SPEC_nbn_scf_determinism.md Sec 8); that chk remains
+    the pinned reference as a frozen file, not as something this function is expected to
+    regenerate (specs/SPEC_nbn_low_spin.md Section 0/8).
     """
-    mf.max_cycle, mf.level_shift, mf.diis_space = 500, 0.5, 12
-    mf.conv_tol, mf.init_guess = 1e-8, "atom"
-    mf.kernel()
+    ambient_threads = lib.num_threads()
+    lib.num_threads(1)
+    try:
+        mf.max_cycle, mf.level_shift, mf.diis_space = 500, 0.5, 12
+        mf.conv_tol, mf.init_guess = 1e-8, "atom"
+        mf.kernel()
 
-    mf = mf.newton()
-    mf.conv_tol = 1e-10
-    mf.kernel(mf.mo_coeff, mf.mo_occ)
-
-    for _ in range(3):
-        try:
-            mo = mf.stability(return_status=True)[0]
-        except Exception:
-            break
-        if np.allclose(np.asarray(mo), np.asarray(mf.mo_coeff)):
-            break  # internally stable
-        dm = mf.make_rdm1(mo, mf.mo_occ)
         mf = mf.newton()
-        mf.kernel(dm0=dm)
+        mf.conv_tol = 1e-10
+        mf.kernel(mf.mo_coeff, mf.mo_occ)
+
+        for _ in range(3):
+            try:
+                mo = mf.stability(return_status=True)[0]
+            except Exception:
+                break
+            if np.allclose(np.asarray(mo), np.asarray(mf.mo_coeff)):
+                break  # internally stable
+            dm = mf.make_rdm1(mo, mf.mo_occ)
+            mf = mf.newton()
+            mf.kernel(dm0=dm)
+    finally:
+        lib.num_threads(ambient_threads)
     return mf
 
 
