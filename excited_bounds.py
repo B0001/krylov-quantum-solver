@@ -314,7 +314,13 @@ if __name__ == "__main__":
     h1, e_core = cas.get_h1eff()
     eri = ao2mo.restore(1, cas.get_h2eff(), 8)
     ne = (int(cas.nelecas[0]), int(cas.nelecas[1]))
-    roots = fci.direct_spin0.kernel(h1, eri, 8, ne, ecore=float(e_core), nroots=3)[0]
+    fci_solver = fci.direct_spin0.FCI()
+    fci_solver.max_cycle, fci_solver.conv_tol, fci_solver.nroots = 1000, 1e-10, 3
+    roots, _ = fci_solver.kernel(h1, eri, 8, ne, ecore=float(e_core))
+    roots = np.atleast_1d(roots)
+    if not np.all(fci_solver.converged):
+        raise RuntimeError(f"Be2 CASCI FCI did not converge: converged={fci_solver.converged}, "
+                            f"roots={np.round(roots, 6)}")
     mh = build_hamiltonian_from_integrals(h1, eri, num_particles=ne, energy_offset=float(e_core))
     solver = QuantumKrylovSolver(mh)
     print(f"Be2 CAS(4,8)/cc-pVDZ at R={R} A: singlet CASCI roots {np.round(roots, 6)} -- "
