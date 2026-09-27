@@ -1,6 +1,10 @@
 # SPEC: Shift both sides — the symmetry shift helps the near-term arc too, moving the crossover
 
-**Status:** IMPLEMENTED (gates G1–G5 green in `tests/test_shift_both_sides_spec.py`).
+**Status:** IMPLEMENTED (gates G1–G5 green in `tests/test_shift_both_sides_spec.py`). REVISED
+chem-1yr (2026-09-27): §3's H₂/N₂ identity-included figures depended on an arbitrary,
+platform-dependent point on an exactly flat λ_DF valley in b2; the shift now fixes b2 canonically
+and §3 is re-derived on it. N₂(6,6) also depends on a BLAS-selected orbital gauge; the test fixture
+pins it. See §7 R3–R4.
 
 ---
 
@@ -35,22 +39,22 @@ The shot count is N = (z·λ/ε)², where λ must sum only the **non-identity** 
 identity term is a constant with **zero variance**, so it costs zero shots. The repo's
 `precision_cost.measurement_lambda` sums *every* coefficient, identity included. That matters here
 because a large part of what the shift does to the qubit Hamiltonian is **dump weight into the
-identity term** (N₂: identity 8.55 → 0.10 Ha). Scoring the shift with the identity included
+identity term** (N₂: identity 8.55 → 0.04 Ha). Scoring the shift with the identity included
 therefore *flatters* it:
 
 | reduction in λ_meas | H₂ | H₂O(4,3) | N₂(6,6) |
 |---|---|---|---|
-| identity **included** (draft) | 53.9% | 51.4% | 73.2% |
-| identity **excluded** (honest, shot-relevant) | 42.9% | 39.4% | 57.9% |
+| identity **included** (draft) | 56.7% | 51.4% | 73.6% |
+| identity **excluded** (honest, shot-relevant) | 42.9% | 39.4% | 58.0% |
 
 | crossover gain (λ_raw/λ_shift)² | H₂ | H₂O(4,3) | N₂(6,6) |
 |---|---|---|---|
-| identity **included** (draft) | 4.70× | 4.24× | 13.92× |
-| identity **excluded** (honest) | **3.07×** | **2.73×** | **5.65×** |
+| identity **included** (draft) | 5.33× | 4.24× | 14.32× |
+| identity **excluded** (honest) | **3.07×** | **2.73×** | **5.67×** |
 
 **The claim survives, smaller.** The shift really does cut the near-term 1-norm, and the one-sided
 bridge really does overstate FT — but by **2.7–5.7×**, not the 4–14× the draft advertised. N₂'s fair
-flip-ρ is **1.44×10⁴** against the one-sided **8.14×10⁴** (not the drafted 1.5×10⁴ vs 2.1×10⁵, both
+flip-ρ is **1.43×10⁴** against the one-sided **8.11×10⁴** (not the drafted 1.5×10⁴ vs 2.1×10⁵, both
 of which carried identity mass). G5 pins this so the artifact cannot silently return.
 
 **Consequence for the repo:** `precision_cost.measurement_lambda` overstated the near-term shot cost
@@ -104,6 +108,17 @@ shift_both_sides (CLI)                                              # per-molecu
   measured; the 1-norm accounting here does not charge for that.
 - **R2 — constants, not exponents.** Both arcs keep their scaling (1/ε² vs 1/ε). The shift moves
   *where* they cross, never *whether* FT eventually wins.
+- **R3 — N₂(6,6) orbital gauge.** Its active space holds both members of two exactly degenerate π
+  pairs; λ_DF/λ_meas (not the energy) swing ±15–20% with the rotation RHF returns, which BLAS thread
+  count selects. The test fixture pins BLAS to one thread.
+- **R4 — flat b2 valley (chem-1yr, 2026-09-27).** For even norb (H₂, N₂) λ_DF is exactly flat in b2
+  around its optimum (‖h1 + cI‖_nuc is constant while c sits between the two middle eigenvalues).
+  Nelder-Mead used to stop anywhere on it — invisible to λ_DF, but it moved the identity term
+  (H₂ inclusive gain 4.70× on macOS, 2.56× on Linux; a 2026-09-26 revision misread the latter as a
+  physical H₂ "exception"). `df_factorization.symmetry_shift` now sets b2 analytically at the
+  interval midpoint; λ_DF is unchanged. Any other point on the interval is equally λ_DF-optimal, so
+  the identity-included column is a *convention*, not a property of the molecule — the honest
+  column is what the finding rests on.
 
 ## 8. Deliverables
 

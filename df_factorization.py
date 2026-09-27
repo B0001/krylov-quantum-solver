@@ -124,17 +124,26 @@ def symmetry_shift(h1, eri, norb, nelec, b1=None, b2=None):
     if b1 is None or b2 is None:
         from scipy.optimize import minimize
 
+        # b2 only moves the one-body diagonal: h1_s = h1 + c*I with c = b2 + b1 (1 - n_e), and the
+        # two-body term is b2-independent. ||h1 + c I||_nuc = sum_i |mu_i + c| is minimised at
+        # c = -median(mu) -- the unique optimum for odd norb, and for even norb the MIDPOINT of an
+        # exactly flat interval (chem-1yr: letting Nelder-Mead pick b2 there left it at an
+        # arbitrary, platform-dependent point, which moved every identity-sensitive number).
+        # So b2 is analytic given b1 and only b1 is optimised.
+        median_h1 = float(np.median(np.linalg.eigvalsh(0.5 * (np.asarray(h1) + np.asarray(h1).T))))
+
+        def b2_of(b1_):
+            return -median_h1 - b1_ * (1.0 - n_elec)
+
         def objective(params):
-            h1_s, eri_s, _ = _apply_number_shift(h1, eri, norb, n_elec, params[0], params[1])
+            h1_s, eri_s, _ = _apply_number_shift(h1, eri, norb, n_elec, params[0], b2_of(params[0]))
             leaves, _, _ = double_factorize(eri_s, norb)
             return df_lambda(leaves, h1_s, norb)
 
-        # Initialise the one-body shift at the median eigenvalue of h1 (the nuclear-norm
-        # optimum for b1 = 0); let Nelder-Mead refine both b1 and b2.
-        median_h1 = float(np.median(np.linalg.eigvalsh(0.5 * (np.asarray(h1) + np.asarray(h1).T))))
-        res = minimize(objective, x0=[0.0, -median_h1], method="Nelder-Mead",
+        res = minimize(objective, x0=[0.0], method="Nelder-Mead",
                        options={"xatol": 1e-7, "fatol": 1e-9, "maxiter": 400})
-        b1, b2 = float(res.x[0]), float(res.x[1])
+        b1 = float(res.x[0])
+        b2 = b2_of(b1)
 
     h1_s, eri_s, e_shift = _apply_number_shift(h1, eri, norb, n_elec, b1, b2)
     return h1_s, eri_s, e_shift, (b1, b2)

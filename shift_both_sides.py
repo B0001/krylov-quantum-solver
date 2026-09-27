@@ -13,16 +13,30 @@ only the NON-IDENTITY Pauli coefficients: the identity term is a constant with Z
 costs zero shots. The repo's `precision_cost.measurement_lambda` summed ALL coefficients, identity
 included -- overstating near-term cost (fixed since specs/SPEC_lambda_meas_identity.md; this module
 found it). That matters here because a large part of what the shift
-does to the qubit Hamiltonian is dump weight INTO the identity term (N2: identity 8.55 -> 0.10 Ha).
+does to the qubit Hamiltonian is dump weight INTO the identity term (N2: identity 8.55 -> 0.04 Ha).
 Scoring the shift with the identity-inclusive 1-norm therefore FLATTERS it:
 
     reduction in lambda_meas      H2      H2O(4,3)   N2(6,6)
-      identity-INCLUDED         53.9%      51.4%      73.2%   <- overstated
-      identity-EXCLUDED (shot)  42.9%      39.4%      57.9%   <- the honest number
+      identity-INCLUDED         56.7%      51.4%      73.6%   <- overstated
+      identity-EXCLUDED (shot)  42.9%      39.4%      58.0%   <- the honest number
+
+    crossover gain (lambda_raw/lambda_shift)^2   H2      H2O(4,3)   N2(6,6)
+      identity-INCLUDED                        5.33x      4.24x     14.32x
+      identity-EXCLUDED (honest)               3.07x      2.73x      5.67x
 
 Both tell the same qualitative story -- the shift really does cut the near-term 1-norm -- but the
 crossover movement is 2.7-5.7x, not the 4-14x the inclusive metric advertises. `include_identity`
 is exposed so both can be computed; it defaults to False (the honest, shot-relevant one).
+
+chem-1yr (2026-09-27): for even norb (H2, N2) lambda_DF is exactly flat in b2 around the SCDF
+optimum, and the identity-inclusive column used to depend on where Nelder-Mead happened to stop on
+that flat interval (H2: 4.70x on macOS, 2.56x on Linux; a 2026-09-26 revision wrongly read the
+latter as a physical H2 "exception"). `df_factorization.symmetry_shift` now fixes b2 at the
+interval midpoint, analytically; lambda_DF is unchanged to all printed digits. N2(6,6)'s numbers
+are also measured with BLAS/LAPACK pinned to a single thread (see
+tests/test_shift_both_sides_spec.py) -- its active space contains both members of two
+exactly-degenerate orbital pairs, so lambda_DF/lambda_meas (unlike energy) vary by +/-15-20% with
+the arbitrary orthonormal rotation an unpinned RHF/BLAS returns for them.
 
 WHAT WE CLAIM: the shift lowers lambda_meas materially (>= 35%); the certified shot cost drops by
 (lambda_raw/lambda_shift)^2 (2.7-5.7x); the fair both-sided flip-rho is that same factor below the
@@ -139,11 +153,11 @@ def fair_flip_rho(h1, eri, norb: int, nelec, eps: float, z: float = 2.0, *,
 
 def spectrum_preserved(h1, eri, norb: int, nelec, tol: float = 1e-8) -> bool:
     """FCI(shifted) + e_shift == FCI(raw)? The shift is exact, not an approximation (G4)."""
-    from pyscf import fci
+    from hybrid_quantum_solver.dmrg_reference import fci_energy
 
     h1_s, eri_s, e_shift, _ = symmetry_shift(h1, eri, norb, nelec)
-    e_raw = fci.direct_spin1.kernel(np.asarray(h1), np.asarray(eri), norb, nelec)[0]
-    e_shifted = fci.direct_spin1.kernel(np.asarray(h1_s), np.asarray(eri_s), norb, nelec)[0]
+    e_raw = fci_energy(np.asarray(h1), np.asarray(eri), nelec)
+    e_shifted = fci_energy(np.asarray(h1_s), np.asarray(eri_s), nelec)
     return bool(abs((e_shifted + e_shift) - e_raw) < tol)
 
 

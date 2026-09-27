@@ -10,7 +10,30 @@ G5 is the honest correction to the draft spec: lambda_meas must EXCLUDE the iden
 constant of zero variance costs no shots). Scored with the identity wrongly included, the shift
 looks 4-14x better than it is; the honest gain is 2.7-5.7x. See the module docstring of
 shift_both_sides.py. PySCF + qiskit, no block2; `make gates` runs this in its own process.
+
+N2(6,6)'s active space fully contains both the HOMO pi and LUMO pi* degenerate orbital pairs, so
+(unlike energy, which is gauge-invariant) lambda_DF/lambda_meas depend on which arbitrary
+orthonormal rotation RHF returns for those pairs -- an unpinned run can swing +/-15-20% and
+straddle this file's thresholds (chem-1yr, 2026-09-26). BLAS/LAPACK thread count is what selects
+that rotation in practice, so pinning it to a single thread below makes the `cas()` fixture
+reproducible across fresh-process runs without changing any physics. (`symmetry='D2h'` also pins
+the gauge, deterministically, but lands on a *different* stable value -- honest gain 6.81x instead
+of 5.49x, both measured before the canonical-b2 fix below -- that would require revising
+G1/G2/G5's thresholds; thread-pinning was chosen because it reproduces the values this spec's
+thresholds were originally written against.)
+
+A SECOND, separate nondeterminism (chem-1yr, 2026-09-27, found on macOS): for even norb (H2, N2)
+lambda_DF is exactly flat in b2 around the SCDF optimum, so Nelder-Mead left b2 at an arbitrary,
+platform-dependent point on that flat interval -- invisible to lambda_DF but not to the identity
+term (H2's inclusive gain was 4.70x on macOS, 2.56x on Linux). df_factorization.symmetry_shift now
+sets b2 analytically to the interval midpoint.
 """
+import os
+
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+
 import numpy as np
 import pytest
 from pyscf import ao2mo, gto, mcscf, scf
@@ -126,10 +149,14 @@ def test_G4_spectrum_is_preserved(name):
 def test_G5_identity_term_inflates_the_gain(name):
     """THE CORRECTION. `precision_cost.measurement_lambda` sums EVERY Pauli coefficient, identity
     included -- but the identity is a constant of zero variance and costs zero shots. A large part
-    of what the shift does is dump weight into that identity term (N2: 8.55 -> 0.10 Ha), so scoring
+    of what the shift does is dump weight into that identity term (N2: 8.55 -> 0.04 Ha), so scoring
     the shift with the identity included FLATTERS it. This gate pins the artifact: the inclusive
     metric reports a strictly larger gain than the honest shot metric for EVERY molecule (4-14x vs
-    the true 2.7-5.7x). If someone 'fixes' lambda_meas to include identity again, this goes red."""
+    the true 2.7-5.7x). If someone 'fixes' lambda_meas to include identity again, this goes red.
+
+    chem-1yr (2026-09-27): a 2026-09-26 revision made H2 an "exception" (inflated 2.56x < honest
+    3.07x). That was the arbitrary-b2 artifact described in the module docstring, not physics: at
+    the canonical b2 H2's identity term drops 0.812 -> 0.092 Ha and inflated = 5.33x > 3.07x."""
     h1, eri, _, nelec, norb = cas(name)
 
     def gain(include_identity):
