@@ -1,0 +1,9 @@
+label,Re_A,De_cm-1,De_minus_expt_cm-1
+ccpvtz,2.4085,734.7,-195.0
+ccpvqz,2.5152,298.5,-631.2
+ccpv5z,2.5120,441.0,-488.7
+CBS(TZ/QZ),2.6687,58.7,-871.0
+CBS(QZ/5Z),2.5091,588.2,-341.5
+# De shift CBS(QZ/5Z) - CBS(TZ/QZ) = +529.5 cm^-1 -> method attribution NOT CONFIRMED (pre-registered threshold 20 cm^-1)
+# single-basis De(TZ,QZ,5Z) = 734.7, 298.5, 441.0 cm^-1 -> NON-monotone in X
+# mean wall s/point: ccpvtz=1.1, ccpvqz=4.4, ccpv5z=9.9; host x86_64 8 cpu

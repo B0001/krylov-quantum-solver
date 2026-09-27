@@ -159,10 +159,14 @@ needed by each gate) keeps the gate to ~1-2 min -- QZ dominates at ~13 s/point.
   minimum; cross-checked in `be2_cbs.py.__main__` against a 13-point/quartic-fit curve and agrees
   to within ~4 cm^-1 / 0.02 A (informal, not gated -- the gate uses the cheap 3-point version).
   Honest limitation: reproduces a known result, and reproduces it incompletely.
-- **R3 (materialized, G5):** the TZ/QZ "CBS" was not basis-converged; with 5Z the extrapolated
-  De moves by >1200 cm^-1. A trustworthy basis limit for this method would need an active space
-  whose orbitals are basis-consistent (e.g. valence orbitals localized/projected from a fixed
-  minimal basis, or natural orbitals) before any X-extrapolation -- a follow-up, not attempted.
+- **R3 (materialized, G5; follow-up done, bead chem-xqh):** the TZ/QZ "CBS" was not basis-converged;
+  with 5Z the extrapolated De moves by >1200 cm^-1. **Follow-up result
+  (`specs/SPEC_be2_avas_cbs.md`):** replacing the canonical-virtual CAS(4,8) with an
+  AVAS(Be 2s/2p, minao='ano')-selected CAS(4,8) makes the active space genuinely basis-consistent
+  (per-orbital spread agrees to <0.01 bohr TZ vs 5Z, verified directly, not assumed) -- but that
+  alone does NOT rescue the CBS attribution: the QZ/5Z shift shrinks from +1224 to +530 cm^-1,
+  still 27x the pre-registered 20 cm^-1 bar. The active-space confound is fixed; the residual CBS
+  drift has a different, still-open cause (see `SPEC_be2_avas_cbs.md` R4).
 - **R4:** `run_on_cloud.sh`'s "cc-pVQZ CBS" cloud curve actually submits `basis: cc-pvdz`
   (bead chem-80w); `data/be2_cbs_cloud_curve.csv` is NOT a QZ curve and is not used here.
 

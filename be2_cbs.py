@@ -34,6 +34,14 @@ regime the Helgaker extrapolation assumes, so neither CBS number is a converged 
 gap to experiment cannot be split into method vs basis from these data. Likely cause: the
 canonical-HF virtual orbitals picked into CASCI(4,8) change character (grow more diffuse) with
 basis, so the active space is not the same physical space across X (see specs/SPEC_be2_cbs.md).
+
+FOLLOW-UP (bead chem-xqh, be2_avas_cbs.py, specs/SPEC_be2_avas_cbs.md): replacing this module's
+canonical-virtual CASCI(4,8) with an AVAS(Be 2s/2p, minao='ano')-selected CASCI(4,8) makes the
+active space genuinely basis-consistent (per-orbital spread agrees to <0.01 bohr TZ vs 5Z, not the
+2.3 bohr drift above) -- but that alone does NOT rescue the CBS attribution: the QZ/5Z shift shrinks
+from +1220 to +530 cm^-1, still >>20 cm^-1. The active-space confound is fixed; the residual CBS
+drift has a different, still-open cause. This module (`be2_cbs.py`) is left as-is -- its G1-G5 stay
+pinned to the canonical-orbital numbers they measured; the AVAS variant is a separate module/spec.
 """
 from __future__ import annotations
 
