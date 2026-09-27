@@ -25,10 +25,44 @@ convention DMRG relies on.
 """
 from __future__ import annotations
 
+import os
+import shutil
+import tempfile
+from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
+
+# Parent of the auto-generated per-call scratch dirs (see `_scratch_dir`). Git-ignored.
+DEFAULT_SCRATCH_ROOT = "./.dmrg_tmp"
+
+
+@contextmanager
+def _scratch_dir(scratch):
+    """Resolve the ``scratch`` a DMRGDriver should use.
+
+    ``scratch=None`` (the default) creates a fresh, uniquely-named directory under
+    ``DEFAULT_SCRATCH_ROOT`` for THIS call and removes it when the call is done. That is what makes
+    the default safe under `scripts/run_gates.sh`'s concurrent gate processes (chem-c3p): two
+    processes that both took the default used to collide on the literal path
+    ``./.dmrg_tmp``, corrupting each other's block2 scratch files and hanging
+    (`futex_do_wait`, near-zero CPU -- see test_hchain_largen2_spec.py hanging next to another
+    default-scratch DMRG gate).
+
+    An explicit ``scratch`` string is passed straight to the driver, untouched and NOT cleaned up
+    here -- callers that already namespace their own scratch (e.g. per-PID, per-case subdirectories
+    in nbn_dmrg_reference.py / benchmark_hubbard_lieb_wu.py) are relying on it surviving the call.
+    """
+    if scratch is not None:
+        yield scratch
+        return
+    os.makedirs(DEFAULT_SCRATCH_ROOT, exist_ok=True)
+    d = tempfile.mkdtemp(prefix=f"pid{os.getpid()}_", dir=DEFAULT_SCRATCH_ROOT)
+    try:
+        yield d
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
 
 
 def _as_pair(n_elec) -> Tuple[int, int]:
@@ -78,13 +112,17 @@ def dmrg_energy(
     n_sweeps: int = 20,
     noises=(1e-4, 1e-5, 1e-6, 0.0),
     tol: float = 1e-9,
-    scratch: str = "./.dmrg_tmp",
+    scratch: Optional[str] = None,
     n_threads: int = 4,
 ) -> float:
     """DMRG total energy via block2 / pyblock2. Requires ``pip install block2``.
 
     Intended for active spaces too large for exact FCI. On small spaces it reproduces
     ``fci_energy`` (the natural validation in an environment that has block2).
+
+    ``scratch``: block2 working directory. Default (``None``) is a fresh, uniquely-named directory
+    per call, cleaned up afterward -- safe under concurrent DMRG gate processes (see
+    ``_scratch_dir``). Pass an explicit path to reuse/inspect scratch yourself.
     """
     try:
         from pyblock2.driver.core import DMRGDriver, SymmetryTypes
@@ -96,18 +134,20 @@ def dmrg_energy(
 
     norb = h1.shape[0]
     na, nb = _as_pair(n_elec)
-    driver = DMRGDriver(scratch=scratch, symm_type=SymmetryTypes.SU2, n_threads=n_threads)
-    driver.initialize_system(n_sites=norb, n_elec=na + nb, spin=na - nb, orb_sym=None)
-    mpo = driver.get_qc_mpo(h1e=np.asarray(h1), g2e=np.asarray(eri), ecore=float(e_core), iprint=0)
-    ket = driver.get_random_mps(tag="KET", bond_dim=int(bond_dims[0]), nroots=1)
-    energy = driver.dmrg(
-        mpo, ket,
-        n_sweeps=n_sweeps,
-        bond_dims=[int(b) for b in bond_dims],
-        noises=list(noises),
-        thrds=[tol] * len(bond_dims),
-        iprint=0,
-    )
+    with _scratch_dir(scratch) as scratch_dir:
+        driver = DMRGDriver(scratch=scratch_dir, symm_type=SymmetryTypes.SU2, n_threads=n_threads)
+        driver.initialize_system(n_sites=norb, n_elec=na + nb, spin=na - nb, orb_sym=None)
+        mpo = driver.get_qc_mpo(h1e=np.asarray(h1), g2e=np.asarray(eri), ecore=float(e_core),
+                                 iprint=0)
+        ket = driver.get_random_mps(tag="KET", bond_dim=int(bond_dims[0]), nroots=1)
+        energy = driver.dmrg(
+            mpo, ket,
+            n_sweeps=n_sweeps,
+            bond_dims=[int(b) for b in bond_dims],
+            noises=list(noises),
+            thrds=[tol] * len(bond_dims),
+            iprint=0,
+        )
     return float(energy)
 
 
@@ -305,7 +345,7 @@ def dmrg_energy_extrapolated(
     n_sweeps_per: int = 8,
     protocol: str = "perD",
     sweeps_per_stage: int = 4,
-    scratch: str = "./.dmrg_tmp",
+    scratch: Optional[str] = None,
     n_threads: int = 4,
     stack_mem=None,
     seed=None,
@@ -330,6 +370,10 @@ def dmrg_energy_extrapolated(
     pass the uniform filling: the default start leaves charge unevenly spread, and at a charge gap
     DMRG moves it ~1 Ha per sweep, so a short stage stalls far above the ground state
     (SPEC_hubbard_bethe §10: open L=40, U=4 read -21.65 Ha at D=100 vs -22.58 with occs=1).
+
+    ``scratch``: block2 working directory. Default (``None``) is a fresh, uniquely-named directory
+    per call, cleaned up afterward -- safe under concurrent DMRG gate processes (see
+    ``_scratch_dir``). Pass an explicit path to reuse/inspect scratch yourself.
     """
     try:
         from pyblock2.driver.core import DMRGDriver, SymmetryTypes
@@ -340,48 +384,52 @@ def dmrg_energy_extrapolated(
 
     norb = h1.shape[0]
     na, nb = _as_pair(n_elec)
-    # block2 preallocates a fixed memory pool (~0.5 GB by default); large D at large n overruns it
-    # and aborts. stack_mem (bytes) raises that ceiling -- size it to the node, not the problem.
-    driver_kwargs = dict(scratch=scratch, symm_type=SymmetryTypes.SU2, n_threads=n_threads)
-    if stack_mem is not None:
-        driver_kwargs["stack_mem"] = int(stack_mem)
-    drv = DMRGDriver(**driver_kwargs)
-    if seed is not None:
-        try:
-            import block2
-            block2.Random.rand_seed(int(seed))   # seeds the global RNG used by get_random_mps
-        except Exception:
-            pass  # converged DMRG energy is independent of the random initial MPS anyway
-    drv.initialize_system(n_sites=norb, n_elec=na + nb, spin=na - nb, orb_sym=None)
-    mpo = drv.get_qc_mpo(h1e=np.asarray(h1), g2e=np.asarray(eri), ecore=float(e_core), iprint=0)
-    occ_kwargs = {} if init_occs is None else {"occs": np.asarray(init_occs, dtype=float)}
-    ket = drv.get_random_mps(tag="KET", bond_dim=int(bond_dims[0]), nroots=1, **occ_kwargs)
+    with _scratch_dir(scratch) as scratch_dir:
+        # block2 preallocates a fixed memory pool (~0.5 GB by default); large D at large n
+        # overruns it and aborts. stack_mem (bytes) raises that ceiling -- size it to the node,
+        # not the problem.
+        driver_kwargs = dict(scratch=scratch_dir, symm_type=SymmetryTypes.SU2, n_threads=n_threads)
+        if stack_mem is not None:
+            driver_kwargs["stack_mem"] = int(stack_mem)
+        drv = DMRGDriver(**driver_kwargs)
+        if seed is not None:
+            try:
+                import block2
+                block2.Random.rand_seed(int(seed))   # seeds the global RNG used by get_random_mps
+            except Exception:
+                pass  # converged DMRG energy is independent of the random initial MPS anyway
+        drv.initialize_system(n_sites=norb, n_elec=na + nb, spin=na - nb, orb_sym=None)
+        mpo = drv.get_qc_mpo(h1e=np.asarray(h1), g2e=np.asarray(eri), ecore=float(e_core), iprint=0)
+        occ_kwargs = {} if init_occs is None else {"occs": np.asarray(init_occs, dtype=float)}
+        ket = drv.get_random_mps(tag="KET", bond_dim=int(bond_dims[0]), nroots=1, **occ_kwargs)
 
-    stage_dE: List[float] = []
-    per_D: List[Tuple[int, float, float]] = []
-    if protocol == "ramp":
-        # one run; schedule holds each target D for sweeps_per_stage sweeps
-        schedule = [int(D) for D in bond_dims for _ in range(sweeps_per_stage)]
-        nsw = len(schedule)
-        noises = ([1e-4, 1e-5, 1e-6] + [0.0] * nsw)[:nsw]
-        drv.dmrg(mpo, ket, n_sweeps=nsw, bond_dims=schedule, noises=noises,
-                 thrds=[1e-12] * nsw, iprint=0)
-        r_dims, r_dws, r_energies = drv.get_dmrg_results()   # per distinct bond dim
-        by_D = {int(d): (float(w), float(np.asarray(e).ravel()[0]))
-                for d, w, e in zip(r_dims, r_dws, r_energies)}
-        per_D = [(int(D), by_D[int(D)][0], by_D[int(D)][1]) for D in bond_dims if int(D) in by_D]
-    else:
-        # anneal noise to zero so the final sweeps report a clean truncation error
-        noises = ([1e-4, 1e-5, 1e-6] + [0.0] * max(0, n_sweeps_per - 3))[:n_sweeps_per]
-        for D in bond_dims:
-            e = drv.dmrg(
-                mpo, ket, n_sweeps=n_sweeps_per, bond_dims=[int(D)] * n_sweeps_per,
-                noises=noises, thrds=[1e-12] * n_sweeps_per, iprint=0,
-            )
-            dw = float(drv._dmrg.discarded_weights[-1])
-            per_D.append((int(D), dw, float(e)))
-            sweep_es = [float(np.asarray(x).ravel()[0]) for x in drv._dmrg.energies]
-            stage_dE.append(abs(sweep_es[-1] - sweep_es[-2]) if len(sweep_es) >= 2 else float("nan"))
+        stage_dE: List[float] = []
+        per_D: List[Tuple[int, float, float]] = []
+        if protocol == "ramp":
+            # one run; schedule holds each target D for sweeps_per_stage sweeps
+            schedule = [int(D) for D in bond_dims for _ in range(sweeps_per_stage)]
+            nsw = len(schedule)
+            noises = ([1e-4, 1e-5, 1e-6] + [0.0] * nsw)[:nsw]
+            drv.dmrg(mpo, ket, n_sweeps=nsw, bond_dims=schedule, noises=noises,
+                     thrds=[1e-12] * nsw, iprint=0)
+            r_dims, r_dws, r_energies = drv.get_dmrg_results()   # per distinct bond dim
+            by_D = {int(d): (float(w), float(np.asarray(e).ravel()[0]))
+                    for d, w, e in zip(r_dims, r_dws, r_energies)}
+            per_D = [(int(D), by_D[int(D)][0], by_D[int(D)][1])
+                     for D in bond_dims if int(D) in by_D]
+        else:
+            # anneal noise to zero so the final sweeps report a clean truncation error
+            noises = ([1e-4, 1e-5, 1e-6] + [0.0] * max(0, n_sweeps_per - 3))[:n_sweeps_per]
+            for D in bond_dims:
+                e = drv.dmrg(
+                    mpo, ket, n_sweeps=n_sweeps_per, bond_dims=[int(D)] * n_sweeps_per,
+                    noises=noises, thrds=[1e-12] * n_sweeps_per, iprint=0,
+                )
+                dw = float(drv._dmrg.discarded_weights[-1])
+                per_D.append((int(D), dw, float(e)))
+                sweep_es = [float(np.asarray(x).ravel()[0]) for x in drv._dmrg.energies]
+                stage_dE.append(
+                    abs(sweep_es[-1] - sweep_es[-2]) if len(sweep_es) >= 2 else float("nan"))
 
     # The axis choice (inside extrapolate_ladder) is NOT a defect: on a converged ladder the
     # discarded-weight axis is near-degenerate (cond(vander) ~ 2e9 vs ~1e3 for 1/D on the recorded
