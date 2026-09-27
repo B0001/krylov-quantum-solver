@@ -142,6 +142,22 @@ STAGE_SLOPE_RATIO = 1e3
 # bound every gap by ~C*floor ~ 3e-7 Ha, and their recorded drops are 3e-8 to 9e-8 Ha.
 UNDERSHOOT_FACTOR = 10.0
 
+# The 1/D-axis analogue of UNDERSHOOT_FACTOR, for ladders the WEIGHT test alone already calls
+# "converged" (chem-mjz). For E = E_inf + C/D with D doubling at every stage, the exact remaining
+# tail past D_max is gap_last itself: gap_k = C(1/D_k - 1/D_{k+1}) = C/(2*D_k), and the tail
+# C/D_n = 2 * C/(2*D_n) = 2 * gap_{n} ... telescoped from gap_last = C/D_n exactly (D_{n-1} =
+# D_n/2), so drop/gap_last = 1 for a ladder that genuinely follows smooth 1/D convergence.
+# UNDERSHOOT_FACTOR=10 was calibrated for the discarded-weight axis and is far too loose here: the
+# Hubbard L=50 and L=60, U=4 stalls from block2's default random MPS (chem-mjz) both pass the
+# weight floor (every discarded weight <= 4e-9) while a stage is still relaxing out of a metastable
+# charge distribution, giving drop/gap_last = 1.15 (L=60) and 4.2 (L=50) -- both < 10, so
+# UNDERSHOOT_FACTOR let them through as "converged". CONVERGED_UNDERSHOOT_FACTOR = 1 rejects both
+# (drop/gap_last must stay <= 1 + noise/gap_last) while keeping every one of the nine vendored
+# "converged" ladders and the SPEC_extrap_regime synthetic fixtures (drop/gap_last <= 0.5) inside
+# it -- those pass on the ENERGY_NOISE term alone since their gap_last is itself noise-scale, or
+# (the synthetic ones) is a flat 1 mHa/stage regardless of D, unrelated to weight, at 0.5x the bound.
+CONVERGED_UNDERSHOOT_FACTOR = 1.0
+
 # Gate on `regime`, not on `method`. See truncation_regime() for why.
 REGIMES = ("converged", "truncation", "uncontrolled")
 
@@ -215,8 +231,15 @@ def truncation_regime(per_D, *, floor: float = DISCARD_WEIGHT_FLOOR,
       * E(D) rises with D by more than ``energy_noise`` (non-variational);
       * a truncation ladder has a stage gap ``STAGE_SLOPE_RATIO``x larger than another stage's
         slope dE/d(dw) allows (the stalled-stage signature);
-      * the extrapolation falls below E(D_max) by more than ``UNDERSHOOT_FACTOR`` x the last stage
-        gap + ``energy_noise`` -- more than any ladder with a lever arm can support.
+      * the extrapolation falls below E(D_max) by more than the last stage gap times
+        ``UNDERSHOOT_FACTOR`` (truncation ladders) or ``CONVERGED_UNDERSHOOT_FACTOR`` (ladders the
+        weight floor alone already calls converged), plus ``energy_noise`` -- more than any ladder
+        with a lever arm, or genuine 1/D convergence, can support. The floor-only weight test
+        cannot see a stage that stalled in a metastable state with a small but not-yet-converged
+        discarded weight (chem-mjz: Hubbard L=50/60, U=4, default random MPS -- every weight
+        <= 4e-9, but a stage still sat several Ha from the answer); the tighter converged-branch
+        factor catches it because a stalled stage's energy gap is far larger than smooth 1/D
+        convergence with the ladder's own D-doubling would allow.
 
     Order matters: the floor is tested BEFORE weight monotonicity, so a converged ladder whose
     weights wobble by float noise reads as ``"converged"``, not ``"uncontrolled"``.
@@ -237,7 +260,8 @@ def truncation_regime(per_D, *, floor: float = DISCARD_WEIGHT_FLOOR,
     x = dws if regime == "truncation" else 1.0 / Ds
     energy, _ = _linear_extrapolate(x, Es)
     gap_last = max(float(Es[-2] - Es[-1]), 0.0)
-    if Es[-1] - energy > UNDERSHOOT_FACTOR * gap_last + energy_noise:
+    factor = UNDERSHOOT_FACTOR if regime == "truncation" else CONVERGED_UNDERSHOOT_FACTOR
+    if Es[-1] - energy > factor * gap_last + energy_noise:
         return "uncontrolled"
     return regime
 

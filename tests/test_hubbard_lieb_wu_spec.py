@@ -81,15 +81,19 @@ def test_G6_recorded_tdl_numbers_and_acceptance():
         assert r["pass_2"] is ROUTES_AGREE[U], (U, r["diff_ab"], r["a"][1], r["b"][1])
 
 
-def test_G7_stalled_ladder_is_labelled_converged_but_fails_the_spread_free_checks():
-    """§10.1: open L=60, U=4 from block2's default random MPS. Weights all <= 4e-9, so `regime`
-    reads "converged" -- the stall that chem-4e9 targets, missed on the 1/D branch. Pinned so a
-    classifier fix has to update this spec. The ladder's energies are 13 Ha apart; the spec's
-    stage_dE check (not reproducible from these triples) is what rejects such a run."""
+def test_G7_stalled_ladder_is_now_rejected_by_truncation_regime_alone():
+    """§10.1/chem-mjz: open L=60, U=4 from block2's default random MPS. Weights all <= 4e-9, so the
+    weight-only classifier reads "converged" -- the stall that chem-4e9's stalled-stage check
+    couldn't see (it only fires on the "truncation" branch). `truncation_regime` now applies
+    CONVERGED_UNDERSHOOT_FACTOR=1.0 (vs. UNDERSHOOT_FACTOR=10.0 for the dweight axis) on the 1/D
+    branch: the ladder undershoots its own last-stage gap by ~4.2x, well past the 1.0x a smoothly
+    D-doubling 1/D fit can support, so it now reads "uncontrolled" from the recorded triples alone
+    -- no stage_dE input needed. See test_regime_converged_undershoot_spec.py for the cheap (L=50,
+    ~200s) live reproduction and the derivation of the new factor."""
     stalled = [(100, 3.524227915646634e-09, -20.780402942374906),
                (200, 5.688756095253755e-10, -30.024624553972146),
                (400, 1.2913782637611208e-12, -34.04430453150846)]
-    assert truncation_regime(stalled) == "converged"
+    assert truncation_regime(stalled) == "uncontrolled"
 
 
 @requires_dmrg
