@@ -15,9 +15,10 @@ Uses only pyscf (no block2), small CASes so the Pauli oracle is computable.
 """
 import numpy as np
 import pytest
-from pyscf import gto, scf, mcscf, ao2mo, fci
+from pyscf import gto, scf, mcscf, ao2mo
 
 from df_factorization import double_factorize, df_lambda, symmetry_shift  # RED until implemented
+from hybrid_quantum_solver.dmrg_reference import fci_energy
 from lambda_ladder import lambda_and_terms
 
 
@@ -64,9 +65,9 @@ def test_G1_native_lambda_formula():
 def test_G2_shift_preserves_spectrum():
     """FCI(shifted) + correction == FCI(unshifted) to < 1e-8 Ha (the shift must not move E)."""
     for h1, eri, e_core, nelec, norb, casci in (_n2_small(), _h2o_small()):
-        e_unshifted, _ = fci.direct_spin1.kernel(h1, eri, norb, nelec, ecore=e_core)
+        e_unshifted = fci_energy(h1, eri, nelec, e_core=e_core)
         h1_s, eri_s, e_shift, _ = symmetry_shift(h1, eri, norb, nelec)
-        e_shifted, _ = fci.direct_spin1.kernel(h1_s, eri_s, norb, nelec, ecore=e_core)
+        e_shifted = fci_energy(h1_s, eri_s, nelec, e_core=e_core)
         assert abs((e_shifted + e_shift) - e_unshifted) < 1e-8, (e_shifted + e_shift, e_unshifted)
         assert abs(e_unshifted - casci) < 1e-8                # sanity: matches CASCI
 

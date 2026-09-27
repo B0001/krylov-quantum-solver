@@ -23,7 +23,7 @@ import sys
 import contextlib
 import numpy as np
 from functools import partial
-from pyscf import fci
+from hybrid_quantum_solver.dmrg_reference import fci_energy
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from krylov_subspace_solver import krylov_ground_state
@@ -77,8 +77,8 @@ def cross_check(h1, eri, e_core, nelec, norb, tol_mHa=5.0,
     if ci_dim <= fci_max_dim:
         try:
             with _quiet():
-                e_fci, _ = fci.direct_spin1.kernel(h1, eri, norb, nelec)
-            res["CASCI"] = float(e_fci) + e_core
+                e_fci = fci_energy(h1, eri, nelec, e_core=e_core)
+            res["CASCI"] = float(e_fci)
         except Exception:
             res["CASCI"] = None
     else:

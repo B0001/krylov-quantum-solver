@@ -47,15 +47,15 @@ N2 = "N 0 0 0; N 0 0 1.1"
 
 def test_G1_exact_reconstruction_and_fci():
     """DEFINITION OF DONE: linear-LS THC at M=norb(norb+1)/2 reconstructs ERIs exactly, keeps FCI."""
-    from pyscf import fci
+    from hybrid_quantum_solver.dmrg_reference import fci_energy
     for atom in (H2O, N2):
         c = _cas(atom)
         chi, zeta = tensor_hypercontraction(c["eri"], c["norb"])
         assert chi.shape == (c["norb"], thc_rank(c["norb"]))
         eri_thc = reconstruct_thc(chi, zeta)
         assert np.linalg.norm(eri_thc - c["eri"]) < 1e-9, np.linalg.norm(eri_thc - c["eri"])
-        e_thc, _ = fci.direct_spin1.kernel(c["h1"], eri_thc, c["norb"], c["nelec"])
-        assert abs((e_thc + c["ecore"]) - c["e_fci"]) < 1e-6, (e_thc + c["ecore"], c["e_fci"])
+        e_thc = fci_energy(c["h1"], eri_thc, c["nelec"], e_core=c["ecore"])
+        assert abs(e_thc - c["e_fci"]) < 1e-6, (e_thc, c["e_fci"])
 
 
 def test_G2_lambda_matches_df_on_structured_thc():

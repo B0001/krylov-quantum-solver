@@ -113,8 +113,9 @@ def thc_lambda(chi, zeta, h1):
 
 
 if __name__ == "__main__":
-    from pyscf import gto, scf, mcscf, ao2mo, fci
+    from pyscf import gto, scf, mcscf, ao2mo
     from df_factorization import df_lambda
+    from hybrid_quantum_solver.dmrg_reference import fci_energy
 
     for atom, name in [("O 0 0 0.117; H 0 0.757 -0.467; H 0 -0.757 -0.467", "H2O"),
                        ("N 0 0 0; N 0 0 1.1", "N2")]:
@@ -133,13 +134,13 @@ if __name__ == "__main__":
         leaves, _, full = double_factorize(eri, norb)
         chi, zeta = tensor_hypercontraction(eri, norb)
         eri_thc = reconstruct_thc(chi, zeta)
-        e_thc, _ = fci.direct_spin1.kernel(h1, eri_thc, norb, (na, nb))
+        e_thc = fci_energy(h1, eri_thc, (na, nb), e_core=ecore)
         chi_df, zeta_df = thc_from_df(eri, norb)
         print("=" * 78)
         print(f"{name}: norb={norb}  FCI={cas.e_tot:.6f}")
         print(f"  THC rank M = norb(norb+1)/2 = {thc_rank(norb)}   (DF-THC rank = {norb*full})")
         print(f"  recon err = {np.linalg.norm(eri_thc-eri):.2e}   "
-              f"FCI(eri_THC) err = {abs(e_thc+ecore-cas.e_tot)*1e3:.2e} mHa")
+              f"FCI(eri_THC) err = {abs(e_thc-cas.e_tot)*1e3:.2e} mHa")
         print(f"  lambda: thc(DF)= {thc_lambda(chi_df, zeta_df, h1):.3f}  "
               f"df= {df_lambda(leaves, h1, norb):.3f}  (equal: validates the formula)")
         print(f"  lambda: thc(random collocation)= {thc_lambda(chi, zeta, h1):.1f}  "

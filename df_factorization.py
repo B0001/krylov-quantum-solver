@@ -142,18 +142,20 @@ def symmetry_shift(h1, eri, norb, nelec, b1=None, b2=None):
 
 def rank_for_accuracy(h1, eri, norb, nelec, e_core, casci_energy, target_mHa=1.6):
     """Smallest retained rank whose FCI energy is within target_mHa of CASCI."""
-    from pyscf import fci
+    from hybrid_quantum_solver.dmrg_reference import fci_energy
     _, _, full_rank = double_factorize(eri, norb)
     for R in range(1, full_rank + 1):
         leaves, _, _ = double_factorize(eri, norb, rank=R)
-        e_R, _ = fci.direct_spin1.kernel(h1, reconstruct_eri(leaves, norb), norb, nelec)
-        if abs((e_R + e_core) - casci_energy) * 1e3 <= target_mHa:
+        e_R = fci_energy(h1, reconstruct_eri(leaves, norb), nelec, e_core=e_core)
+        if abs(e_R - casci_energy) * 1e3 <= target_mHa:
             return R, full_rank
     return full_rank, full_rank
 
 
 if __name__ == "__main__":
-    from pyscf import gto, scf, mcscf, ao2mo, fci
+    from pyscf import gto, scf, mcscf, ao2mo
+
+    from hybrid_quantum_solver.dmrg_reference import fci_energy
 
     mol = gto.M(atom="O 0 0 0.117; H 0 0.757 -0.467; H 0 -0.757 -0.467", basis="sto-3g")
     mf = scf.RHF(mol)
@@ -177,8 +179,8 @@ if __name__ == "__main__":
     for R in range(1, full_rank + 1):
         leaves, _, _ = double_factorize(eri, norb, rank=R)
         eri_R = reconstruct_eri(leaves, norb)
-        e_R, _ = fci.direct_spin1.kernel(h1, eri_R, norb, (na, nb))
-        derr = abs((e_R + e_core) - cas.e_tot) * 1e3
+        e_R = fci_energy(h1, eri_R, (na, nb), e_core=e_core)
+        derr = abs(e_R - cas.e_tot) * 1e3
         print(f"{R:>7} {np.linalg.norm(eri_R - eri):>12.2e} {derr:>16.4f}")
     R_ca, _ = rank_for_accuracy(h1, eri, norb, (na, nb), e_core, cas.e_tot)
     print("-" * 72)

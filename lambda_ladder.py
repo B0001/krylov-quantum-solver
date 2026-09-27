@@ -39,9 +39,9 @@ def lambda_and_terms(h1, eri, norb):
 
 
 def fci_energy_error(h1, eri, norb, nelec, e_core, casci_energy):
-    from pyscf import fci
-    e, _ = fci.direct_spin1.kernel(h1, eri, norb, nelec)
-    return abs((e + e_core) - casci_energy) * 1e3
+    from hybrid_quantum_solver.dmrg_reference import fci_energy
+    e = fci_energy(h1, eri, nelec, e_core=e_core)
+    return abs(e - casci_energy) * 1e3
 
 
 def fit_thc(eri, norb, M, restarts=4, seed=0):
