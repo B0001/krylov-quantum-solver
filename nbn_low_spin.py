@@ -167,13 +167,14 @@ def cmd_fci(args):
     from nbn_dmrg_reference import load_nbn_cas
 
     nelec = tuple(args.nelec)
-    h1, eri, nelec, e_core = load_nbn_cas(nelec=nelec)
+    h1, eri, nelec, e_core = load_nbn_cas(nelec=nelec, chk=args.chk)
     t = time.time()
     roots, ci = spin_fci(h1, eri, nelec, e_core, twos=args.twos, nroots=args.nroots)
     wall = round(time.time() - t, 1)
     for i, (e, ss) in enumerate(roots):
         _record(dict(kind="fci", nelec=list(nelec), twos_pinned=args.twos, root=i, energy=e,
-                     s2=ss, ndet=math.comb(14, nelec[0]) * math.comb(14, nelec[1]), wall_s=wall))
+                     s2=ss, ndet=math.comb(14, nelec[0]) * math.comb(14, nelec[1]), wall_s=wall,
+                     chk=args.chk))
     if args.save_no:
         occ, u = natural_orbitals(ci[0], 14, nelec)
         os.makedirs("data", exist_ok=True)
@@ -244,6 +245,7 @@ if __name__ == "__main__":
     f.add_argument("--twos", type=int, default=None)
     f.add_argument("--nroots", type=int, default=1)
     f.add_argument("--save-no", action="store_true")
+    f.add_argument("--chk", default="data/nbn_scf.chk")
     f.set_defaults(fn=cmd_fci)
     n = sub.add_parser("no")
     n.add_argument("--nelec", type=int, nargs=2, default=[7, 7])

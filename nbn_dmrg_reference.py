@@ -28,10 +28,32 @@ pyscf + block2 only -- no qiskit imports (block2 OpenMP isolation; see CLAUDE.md
 from __future__ import annotations
 
 import os
+import shutil
 
 from pyscf import ao2mo, lib, mcscf, scf
 
 from hybrid_quantum_solver.dmrg_reference import dmrg_energy_extrapolated
+
+# chem-bbi: data/ is gitignored, so the SCF checkpoint and its source CIF were never committed --
+# a fresh clone had no way to reproduce the reference. These are the tracked source of truth; a
+# fresh clone materializes data/nbn_scf.chk and data/nb_structures/NbN_mp-2634.cif from them.
+VENDORED_CHK = "specs/nbn_scf_reference.chk"
+VENDORED_CIF = "specs/nbn_mp-2634.cif"
+
+
+def ensure_reference_data(chk: str = "data/nbn_scf.chk",
+                           cif: str = "data/nb_structures/NbN_mp-2634.cif") -> None:
+    """Materialize the vendored checkpoint/CIF into their expected `data/` paths if missing.
+
+    No-op if the vendored copies are themselves absent (e.g. `chk` points somewhere else
+    entirely) -- callers still get the pre-existing FileNotFoundError in that case."""
+    if not os.path.exists(chk) and os.path.exists(VENDORED_CHK):
+        os.makedirs(os.path.dirname(chk) or ".", exist_ok=True)
+        shutil.copy(VENDORED_CHK, chk)
+    if not os.path.exists(cif) and os.path.exists(VENDORED_CIF):
+        os.makedirs(os.path.dirname(cif) or ".", exist_ok=True)
+        shutil.copy(VENDORED_CIF, cif)
+
 
 SCHEDULES = {
     # headline (driver-level, ~20 min + ~3 min on a 16 GB laptop)
@@ -52,6 +74,8 @@ def load_nbn_cas(norb: int = 14, nelec_cas: int = 14, chk: str = "data/nbn_scf.c
 
     ``nelec=(na, nb)`` forces an active-space spin sector (e.g. the low-spin (7, 7)) while keeping
     the cached high-spin SCF orbitals; default ``None`` keeps the SCF's own split, (10, 4)."""
+    if chk == "data/nbn_scf.chk":
+        ensure_reference_data(chk)
     mol = lib.chkfile.load_mol(chk)
     res = lib.chkfile.load(chk, "scf")
     mf = scf.UHF(mol) if mol.nelec[0] != mol.nelec[1] else scf.RHF(mol)
