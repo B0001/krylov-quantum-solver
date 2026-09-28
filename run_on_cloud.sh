@@ -57,9 +57,9 @@ echo "Active endpoint: ${API_URL}"
 # Return to root directory
 cd "${ORIGINAL_DIR}"
 
-# 3. Create a Python runner to submit and poll the heavy cc-pVQZ Be2 calculation
-echo "[STEP 3] Running the Be2 cc-pVQZ Complete Basis Set (CBS) experiment..."
-conda run -n chem python -c "
+# 3. Create a Python runner to submit and poll the Be2 cc-pVDZ CAS(4,8) curve (NOT QZ, NOT CBS; chem-80w)
+echo "[STEP 3] Running the Be2 cc-pVDZ CAS(4,8) dissociation curve..."
+uv run python -c "
 import urllib.request
 import json
 import time
@@ -68,7 +68,7 @@ import sys
 api_url = '${API_URL}'.rstrip('/')
 headers = {'Content-Type': 'application/json'}
 
-# Define 13 Beryllium geometry sweep points (cc-pVQZ is extremely large for laptops!)
+# Define 13 Beryllium geometry sweep points (cc-pVDZ; certchem ALLOWED_BASES rejects anything larger)
 R_points = [2.0, 2.1, 2.2, 2.3, 2.4, 2.45, 2.6, 2.7, 2.8, 3.0, 4.0, 6.0, 8.0]
 job_ids = []
 
@@ -151,7 +151,7 @@ while pending_jobs:
 
 # Save local CSV
 if completed_results:
-    output_path = 'data/be2_cbs_cloud_curve.csv'
+    output_path = 'data/be2_cloud_dz_curve.csv'
     import csv
     import os
     os.makedirs('data', exist_ok=True)

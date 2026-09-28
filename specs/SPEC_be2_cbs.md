@@ -168,7 +168,7 @@ needed by each gate) keeps the gate to ~1-2 min -- QZ dominates at ~13 s/point.
   still 27x the pre-registered 20 cm^-1 bar. The active-space confound is fixed; the residual CBS
   drift has a different, still-open cause (see `SPEC_be2_avas_cbs.md` R4).
 - **R4:** `run_on_cloud.sh`'s "cc-pVQZ CBS" cloud curve actually submits `basis: cc-pvdz`
-  (bead chem-80w); `data/be2_cbs_cloud_curve.csv` is NOT a QZ curve and is not used here.
+  (bead chem-80w); `data/be2_cloud_dz_curve.csv` (formerly `be2_cbs_cloud_curve.csv`) is a cc-pVDZ curve, NOT QZ, and is not used here.
 
 ## 9. Deliverables
 
