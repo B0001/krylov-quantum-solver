@@ -1,5 +1,5 @@
 """
-Acceptance gates G1-G6 for specs/SPEC_nb3x8_gaps.md (exact Nb3X8 cluster gaps vs Hubbard-I).
+Acceptance gates G1-G7 for specs/SPEC_nb3x8_gaps.md (exact Nb3X8 cluster gaps vs Hubbard-I).
 
 Test-first origin: the Nb3X8 bilayer cluster (a generalized Hubbard dimer, from the arXiv:2501.10320
 cRPA parameters) is exactly diagonalizable; we compute the exact charge gap and the Hubbard-I gap and
@@ -14,6 +14,10 @@ The gates tell an honest, self-correcting story:
     the exact gap toward Hubbard-I, so the isolated ~29% is an artifact that does NOT translate to the
     solid. The thermodynamic-limit story (block2 DMRG ~708 meV -> ~600-650 with 3-D coordination) is
     in nb3x8_gaps.ssh_chain_gap / the module docstring.
+  * G7 (chem-q9g): ``coordination_gap``'s default ``max_cycle=1000`` FCI cap is too tight for the
+    z=3 Cl/Br clusters (Davidson genuinely needs ~4x more iterations, not a near-degeneracy -- it
+    agrees with a much looser cap to high precision); the function must accept a ``max_cycle``
+    override rather than forcing callers to reimplement the cluster construction.
 
 PySCF FCI / NumPy / SciPy only (no block2); `make gates` runs it in its own process.
 """
@@ -109,3 +113,25 @@ def test_G6_coordination_collapses_the_isolated_cluster_error():
     disc3 = gaps[3] - hub                                            # after z=3 coordination
     assert disc3 < 0.35 * disc0, (gaps, hub)                         # >65% of the discrepancy closed
     assert gaps[3] < gaps[0], gaps                                   # solid gap far below isolated
+
+
+def test_G7_coordination_gap_max_cycle_override():
+    """chem-q9g: the default max_cycle=1000 is too tight for the z=3 Cl/Br clusters (Davidson does
+    not converge in the N=9, (5,4)-electron sector), but the function accepts an override so callers
+    aren't stuck reimplementing the cluster. A looser cap converges, and agrees with an even looser
+    one to high precision -- confirming this is an iteration-cap issue, not genuine non-convergence
+    or near-degeneracy."""
+    import pytest
+
+    for name in ("Nb3Cl8", "Nb3Br8"):
+        p = NB3X8_LT_BULK_5P[name]
+        with pytest.raises(RuntimeError, match="did not converge"):
+            coordination_gap(*p, z=3)                                # default cap: fails
+        g_loose = coordination_gap(*p, z=3, max_cycle=4000)
+        g_looser = coordination_gap(*p, z=3, max_cycle=8000)
+        assert abs(g_loose - g_looser) < 1e-6, (name, g_loose, g_looser)   # same answer, not drifting
+
+    # z=0..2 (and Nb3I8/Nb3F8 at z=3) already converge under the default cap -- the override must not
+    # change their answer.
+    p = NB3X8_LT_BULK_5P["Nb3I8"]
+    assert abs(coordination_gap(*p, z=3) - coordination_gap(*p, z=3, max_cycle=4000)) < 1e-9
