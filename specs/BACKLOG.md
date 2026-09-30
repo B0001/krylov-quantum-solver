@@ -405,18 +405,31 @@ hypothesis whose death is informative is worth more here than a safe one.
   excitonic binding; quote it as scale agreement and let the family/phase tests carry the
   falsifiability. Partially blocked: no measured Nb₃Br₈ optical gap located — that leg may have to drop.
 
-- [ ] **Magnetocaloric S(T,B): the named follow-up, closed as a quantified negative** — *Claim:*
-  `SPEC_nb3x8_thermo` §7 and `SPEC_nb3x8_metamagnetism` §7 both name this; one composition closes both
-  (feed `field_spectrum` into `entropy`'s Boltzmann trace). Two claims: (i) an exact internal identity
-  — the Maxwell relation (∂S/∂B)_T = (∂M/∂T)_B holds to machine precision, cross-tying two
-  independently derived modules; (ii) the verdict — |ΔS_M| peaks at B_c (Cl 572 T, already gated) where
-  the full R ln 2/f.u. unlocks, but at any laboratory field the response is suppressed by exp(−J/k_BT)
-  to orders below GGG. **Nb₃X₈ dimers are quantitatively useless magnetocalorics below megagauss
-  fields.** *Check (killable):* machinery dies if the two derivatives disagree by >1e-6 relative
-  anywhere in the spin window; **the verdict dies (the outcome worth hoping for) if any halide reaches
-  ≥10% of R ln 2 per f.u. at B ≤ 100 T and T ≥ 2 K.** *Cost:* cheap. *Caveat:* a bounding result by
-  construction — say so up front (precedent: `SPEC_senseforge` §3–4). Needs formula-unit molar masses
-  for the J kg⁻¹ K⁻¹ conversion; inherits g = 2, density-density only, isolated dimer.
+- [x] **CLOSED 2026-09-30 (chem-1gr) — Magnetocaloric S(T,B): the named follow-up, closed as a
+  quantified negative, on both counts.** `SPEC_nb3x8_thermo` §7 and `SPEC_nb3x8_metamagnetism` §7
+  both named this; one composition closes both (feed `field_spectrum` into `entropy`'s Boltzmann
+  trace — `SPEC_nb3x8_magnetocaloric`, `nb3x8_magnetocaloric.py`). Two claims, both survived: (i)
+  MACHINERY — the Maxwell relation (∂S/∂B)_T = (∂M/∂T)_B, computed from two independently-derived
+  Boltzmann traces (entropy's `ln Z + <E>/T` vs `nb3x8_metamagnetism_thermal`'s `<Sz>` route),
+  agrees to **< 2e-7 relative** across a documented spin window (a few near-symmetry-zero points,
+  including h=0 itself where both sides vanish by h→−h symmetry, are ill-conditioned for a
+  *relative* comparison and are excluded, not hidden — see G1's scope note). (ii) VERDICT — searched
+  over B ∈ [0,100] T, T ∈ [2 K, 5·J/k_B]: max |ΔS_M| reaches only **1.72% (Cl) / 0.53% (Br) / 0.12%
+  (I)** of R ln2/f.u. — an order of magnitude under the 10% kill threshold — and in physical units
+  is **0.176 / 0.033 / 0.0055 J/(kg·K)**, i.e. **0.34% / 0.065% / 0.011%** of GGG's theoretical
+  full paramagnetic-entropy ceiling (3·R·ln8/M_GGG = 51.24 J/(kg·K), Gd³⁺ S=7/2 orbital singlet —
+  see caveat below). A cheap direct check confirms |ΔS_M| grows >10x between 100 T and B_c, i.e.
+  the search window is genuinely far from the interesting physics, not an arbitrary cutoff.
+  **Nb₃X₈ dimers are quantitatively useless magnetocalorics below megagauss fields.** *Caveat:* a
+  bounding result by construction — stated up front (precedent: `SPEC_senseforge` §3–4). **GGG
+  sourcing:** this session's web-fetch tools returned inconsistent, uncitable numbers for GGG's
+  measured ΔS_M(T,B) on repeated attempts (one fetch even reported a wrong GGG molar mass,
+  644.37 vs the correct 1012.35 g/mol — fabrication, not data) — used GGG's rigorous theoretical
+  entropy ceiling instead (conservative, i.e. generous to GGG, so the negative direction of the
+  verdict is safe), not a measured curve; flagged as unverified rather than asserted. Formula-unit
+  molar masses (Nb₃Cl₈ 562.32 / Nb₃Br₈ 917.95 / Nb₃I₈ 1293.95 g/mol) from
+  `pyscf.data.elements.MASSES`, not hand-copied. Inherits g=2, density-density only, isolated
+  dimer from the parent specs, stated in the writeup.
 
 ### Fault-tolerant stack
 
