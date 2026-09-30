@@ -90,7 +90,10 @@ def fci_energy(h1: np.ndarray, eri: np.ndarray, n_elec, e_core: float = 0.0, *,
                               ecore=float(e_core))
     if not solver.converged:
         raise RuntimeError(f"FCI Davidson did not converge in {max_cycle} iterations "
-                           f"(last E = {float(energy):.10f})")
+                           f"(last E = {float(energy):.10f}); this can be a genuine near-degeneracy "
+                           f"or just a tight cap -- retry with a larger max_cycle (fci_energy's "
+                           f"callers, e.g. fixed_filling_energy/coordination_gap, forward it) before "
+                           f"concluding non-convergence")
     return float(energy)
 
 

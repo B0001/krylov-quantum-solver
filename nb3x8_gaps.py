@@ -88,22 +88,35 @@ def dimer_cluster_integrals(U0: float, t: float, Us: float) -> ModelIntegrals:
     return ModelIntegrals(h1=h1, eri=eri, e_core=0.0, nelec=(1, 1), norb=2)
 
 
-def _cluster_charge_gap(h1: np.ndarray, eri: np.ndarray) -> float:
-    """Charge gap E(L+1)+E(L-1)-2E(L) of an L-site half-filled extended-Hubbard cluster (FCI)."""
+def _cluster_charge_gap(h1: np.ndarray, eri: np.ndarray, *, max_cycle: int = 1000) -> float:
+    """Charge gap E(L+1)+E(L-1)-2E(L) of an L-site half-filled extended-Hubbard cluster (FCI).
+
+    ``max_cycle`` is forwarded to the FCI Davidson solver for each of the three sectors (see
+    ``fixed_filling_energy``); raise it if a sector's odd-N charge state converges slowly (chem-q9g),
+    rather than reimplementing the cluster construction just to pass a looser cap.
+    """
     L = h1.shape[0]
-    E = {n: fixed_filling_energy(ModelIntegrals(h1, eri, 0.0, (n - n // 2, n // 2), L))
+    E = {n: fixed_filling_energy(ModelIntegrals(h1, eri, 0.0, (n - n // 2, n // 2), L),
+                                  max_cycle=max_cycle)
          for n in (L - 1, L, L + 1)}
     return E[L + 1] + E[L - 1] - 2 * E[L]
 
 
-def coordination_gap(U0: float, ts: float, Us: float, tw: float, Uw: float, z: int) -> float:
+def coordination_gap(U0: float, ts: float, Us: float, tw: float, Uw: float, z: int,
+                      *, max_cycle: int = 1000) -> float:
     """Charge gap of a central dimer with ``z`` out-of-plane weak-link neighbour dimers (FCI).
 
     A minimal probe of *coordination*: increasing ``z`` restores the band broadening the isolated
     dimer omits. As ``z`` grows the gap falls toward the Hubbard-I / cluster-DMFT value -- which is
     why the isolated-cluster ``exact_charge_gap`` OVERESTIMATES the solid gap and the isolated
     exact-vs-Hubbard-I discrepancy does not translate to the material (see the module docstring and
-    specs/SPEC_nb3x8_gaps.md)."""
+    specs/SPEC_nb3x8_gaps.md).
+
+    ``max_cycle`` (default 1000, matching ``fci_energy``'s default) caps the FCI Davidson solver for
+    each of the three charge sectors. Larger z / odd-electron sectors can need more than 1000
+    iterations to converge even when not genuinely degenerate (chem-q9g: Nb3Cl8, z=3, N=9 needs
+    ~4x); raise this rather than catching the ``RuntimeError`` and re-deriving the cluster yourself.
+    """
     L = 2 + 2 * z
     h1 = np.zeros((L, L))
     eri = np.zeros((L, L, L, L))
@@ -119,16 +132,20 @@ def coordination_gap(U0: float, ts: float, Us: float, tw: float, Uw: float, z: i
         a, b = 2 + 2 * k, 3 + 2 * k
         bond(a, b, ts, Us)                           # pendant strong dimer
         bond(0 if k % 2 == 0 else 1, a, tw, Uw)      # weak link to an alternating central end
-    return _cluster_charge_gap(h1, eri)
+    return _cluster_charge_gap(h1, eri, max_cycle=max_cycle)
 
 
-def ssh_chain_gap(U0: float, ts: float, Us: float, tw: float, Uw: float, n_dimers: int) -> float:
+def ssh_chain_gap(U0: float, ts: float, Us: float, tw: float, Uw: float, n_dimers: int,
+                   *, max_cycle: int = 1000) -> float:
     """Charge gap of an open 1-D SSH extended-Hubbard chain of ``n_dimers`` dimers (FCI): strong
     bonds (ts, Us) within a dimer, weak bonds (tw, Uw) between dimers. This captures the out-of-plane
     (stacking) inter-dimer coupling; extrapolated to n->inf it gives the quasi-1D gap. For Nb3I8 the
     DMRG (block2) limit is ~708 meV (L=8..20 monotone 730->709), between the isolated 842 and the
     fuller-coordination values -- exact FCI here is limited to small n (the L=12 half-filled FCI
-    even fails to converge, which DMRG corrects)."""
+    even fails to converge, which DMRG corrects).
+
+    ``max_cycle`` (default 1000) is forwarded to the FCI Davidson solver; see ``coordination_gap``.
+    """
     L = 2 * n_dimers
     h1 = np.zeros((L, L))
     eri = np.zeros((L, L, L, L))
@@ -143,7 +160,7 @@ def ssh_chain_gap(U0: float, ts: float, Us: float, tw: float, Uw: float, n_dimer
         bond(2 * k, 2 * k + 1, ts, Us)               # strong (intra-dimer)
     for k in range(n_dimers - 1):
         bond(2 * k + 1, 2 * k + 2, tw, Uw)           # weak (inter-dimer)
-    return _cluster_charge_gap(h1, eri)
+    return _cluster_charge_gap(h1, eri, max_cycle=max_cycle)
 
 
 # LT-bulk parameters extended with the weak inter-bilayer link (t_w_perp) and its Coulomb (U_w_perp),
@@ -156,12 +173,16 @@ NB3X8_LT_BULK_5P = {
 }
 
 
-def four_site_exact_gap(U0: float, ts: float, Us: float, tw: float, Uw: float) -> float:
+def four_site_exact_gap(U0: float, ts: float, Us: float, tw: float, Uw: float,
+                         *, max_cycle: int = 1000) -> float:
     """Exact charge gap of an *enlarged* cluster -- two dimers joined by the weak inter-bilayer link
     (chain 0=1 strong, 1~2 weak, 2=3 strong; on-site U0, inter-site Us on strong bonds, Uw on the weak
     bond). Half-filled (4 electrons). The bath bound: comparing this to the isolated-dimer gap
     quantifies how much the inter-cluster coupling moves the gap -- a rigorous proxy for the DMFT bath
-    that needs no bath fit. See specs/SPEC_nb3x8_gaps.md R1."""
+    that needs no bath fit. See specs/SPEC_nb3x8_gaps.md R1.
+
+    ``max_cycle`` (default 1000) is forwarded to the FCI Davidson solver; see ``coordination_gap``.
+    """
     h1 = np.zeros((4, 4))
     h1[0, 1] = h1[1, 0] = ts
     h1[2, 3] = h1[3, 2] = ts
@@ -173,18 +194,23 @@ def four_site_exact_gap(U0: float, ts: float, Us: float, tw: float, Uw: float) -
         eri[i, i, j, j] = eri[j, j, i, i] = U
 
     def E(n):
-        return fixed_filling_energy(ModelIntegrals(h1, eri, 0.0, (n - n // 2, n // 2), 4))
+        return fixed_filling_energy(ModelIntegrals(h1, eri, 0.0, (n - n // 2, n // 2), 4),
+                                     max_cycle=max_cycle)
 
     return E(5) + E(3) - 2 * E(4)
 
 
-def exact_charge_gap(U0: float, t: float, Us: float) -> float:
-    """Exact charge (Mott) gap ``E(3) + E(1) - 2 E(2)`` of the cluster by full diagonalization."""
+def exact_charge_gap(U0: float, t: float, Us: float, *, max_cycle: int = 1000) -> float:
+    """Exact charge (Mott) gap ``E(3) + E(1) - 2 E(2)`` of the cluster by full diagonalization.
+
+    ``max_cycle`` (default 1000) is forwarded to the FCI Davidson solver; see ``coordination_gap``.
+    """
     cluster = dimer_cluster_integrals(U0, t, Us)
 
     def E(n):
         return fixed_filling_energy(ModelIntegrals(cluster.h1, cluster.eri, 0.0,
-                                                   (n - n // 2, n // 2), 2))
+                                                   (n - n // 2, n // 2), 2),
+                                     max_cycle=max_cycle)
 
     return E(3) + E(1) - 2 * E(2)
 

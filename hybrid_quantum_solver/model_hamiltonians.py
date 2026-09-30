@@ -168,15 +168,20 @@ def hubbard_integrals(
     )
 
 
-def fixed_filling_energy(model: ModelIntegrals) -> float:
+def fixed_filling_energy(model: ModelIntegrals, *, max_cycle: int = 1000) -> float:
     """Exact ground-state energy of ``model`` **in its fixed particle-number sector** (PySCF FCI).
 
     This is the correct reference for a lattice model: unlike the full-Fock-space
     ``MolecularHamiltonian.ground_state_energy()``, it stays at the requested electron number.
+
+    ``max_cycle`` (default 1000) is forwarded to :func:`fci_energy`'s Davidson solver. Some larger
+    fixed-filling sectors (e.g. odd-N cluster sectors used for charge gaps) converge slowly without
+    being near-degenerate; raise this if you hit "FCI Davidson did not converge" rather than
+    reimplementing the model construction (see chem-q9g).
     """
     from hybrid_quantum_solver.dmrg_reference import fci_energy
 
-    return fci_energy(model.h1, model.eri, model.nelec, model.e_core)
+    return fci_energy(model.h1, model.eri, model.nelec, model.e_core, max_cycle=max_cycle)
 
 
 # -- analytic references --------------------------------------------------------------------------
