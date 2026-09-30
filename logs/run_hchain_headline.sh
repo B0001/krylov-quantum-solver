@@ -1,5 +1,5 @@
 #!/bin/bash
-cd /Users/benjaminhess/Downloads/chem
+cd "$(dirname "$0")/.."
 # pure D=400/800/1600 dataset: retire the mixed-schedule CSV (red flag 1)
 if [ -f data/hchain_tdl.csv ] && [ ! -f data/hchain_tdl_preheadline.bak.csv ]; then
   mv data/hchain_tdl.csv data/hchain_tdl_preheadline.bak.csv
