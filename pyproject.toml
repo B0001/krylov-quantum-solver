@@ -107,6 +107,15 @@ extend-exclude = ["hybrid_quantum_solver/orchestrate_hybrid_pipeline.py"]
 required-environments = [
     "sys_platform == 'darwin' and platform_machine == 'x86_64'",
 ]
+# macOS 27: no scipy 1.15.3 wheel loads (dyld rejects PROPACK's __thread_bss), so on darwin scipy
+# is always built from its sdist (source below), against Accelerate: a Homebrew-OpenBLAS build drags
+# in a second libomp that aborts block2 ("OMP: Error #15", chem-dfe). Linux keeps the wheels.
+config-settings-package = { scipy = { setup-args = ["-Dblas=accelerate", "-Dlapack=accelerate"] } }
+
+[tool.uv.sources]
+scipy = [
+    { url = "https://files.pythonhosted.org/packages/0f/37/6964b830433e654ec7485e45a00fc9a27cf868d622838f6b6d9c5ec0d532/scipy-1.15.3.tar.gz", marker = "sys_platform == 'darwin'" },
+]
 
 [tool.sandbox]
 # Worker loop knobs (verified-sandbox). One container per bead, sequentially, so

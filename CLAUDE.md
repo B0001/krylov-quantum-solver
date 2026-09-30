@@ -51,6 +51,11 @@ glob keeps it correct automatically as new spec gates are added.
 `array_api_compat` torch-detection bug). Do not bump it past 1.15.x. DataFrames standardized on
 **polars** (not pandas).
 
+**macOS scipy:** the scipy 1.15.3 wheels don't load on macOS 27 (dyld rejects PROPACK's
+`__thread_bss`), so `pyproject.toml` sources scipy from its sdist on darwin only and builds it
+against Accelerate (first `uv sync` compiles it, ~2 min). Never link it to Homebrew OpenBLAS: that
+loads a second `libomp` and block2 aborts with `OMP: Error #15` (chem-dfe).
+
 ## Spec-driven development (SDD)
 
 New capabilities are added through the loop in `specs/README.md`, not ad hoc:

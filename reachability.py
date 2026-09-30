@@ -34,6 +34,7 @@ from __future__ import annotations
 from typing import Optional, Tuple
 
 import numpy as np
+import scipy.linalg
 
 # Below this the two RHF solutions are the same one; above it the unsymmetrized solve found a
 # genuinely lower, symmetry-broken determinant. 1e-6 Ha is far below the ~0.08 Ha gaps actually
@@ -121,7 +122,14 @@ def symmetry_filter_available(atom: str, basis: str = "sto-3g",
 
 def _dense_hf_projection(mh):
     """(eigenvalues ascending, eigenvectors, HF populations) -- dense, O(2^n)."""
-    w, vecs = np.linalg.eigh(mh.qubit_hamiltonian.to_matrix())
+    h = mh.qubit_hamiltonian.to_matrix()
+    try:
+        w, vecs = np.linalg.eigh(h)
+    except np.linalg.LinAlgError:
+        # ponytail: macOS Accelerate's complex ZHEEVD rejects its own LRWORK for N >~ 2900
+        # (12+ qubits: "parameter number 10 had an illegal value", chem-a0y). ZHEEVR is
+        # unaffected; used only on failure so Linux/OpenBLAS results stay bit-identical.
+        w, vecs = scipy.linalg.eigh(h, driver="evr")
     u = np.asarray(mh.hf_state().data, dtype=complex)
     return w, vecs, np.abs(vecs.conj().T @ u) ** 2
 

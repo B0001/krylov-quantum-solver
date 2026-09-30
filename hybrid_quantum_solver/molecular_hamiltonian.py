@@ -83,6 +83,7 @@ def build_molecular_hamiltonian(
     active_electrons: Optional[int] = None,
     active_orbitals: Optional[int] = None,
     mapper: Optional[JordanWignerMapper] = None,
+    conv_tol: float = 1e-9,
 ) -> MolecularHamiltonian:
     """Build the correct qubit Hamiltonian for a molecule.
 
@@ -94,13 +95,22 @@ def build_molecular_hamiltonian(
             (the frozen-core energy is folded into ``energy_offset``). If omitted, the
             full orbital space is used.
         mapper: Fermion-to-qubit mapper; defaults to Jordan-Wigner.
+        conv_tol: SCF convergence threshold passed to ``PySCFDriver``. Defaults to the
+            driver's own default (1e-9) so existing call sites are unaffected. Tighten
+            this (e.g. 1e-13) to rule out the SCF-residue artifact documented in
+            ``specs/SPEC_reachability_tolerance.md`` -- a near-degenerate,
+            symmetry-forbidden level's apparent HF-overlap amplitude can move ~19 orders
+            of magnitude between conv_tol=1e-9 and 1e-13 while the eigenvalue itself is
+            unchanged to 10 digits. That artifact is specific to exact-symmetry
+            geometries (e.g. square H4); it is not a general reason to tighten the
+            default.
 
     Returns:
         A populated :class:`MolecularHamiltonian`.
     """
     mapper = mapper or JordanWignerMapper()
 
-    problem = PySCFDriver(atom=atom, basis=basis, charge=charge, spin=spin).run()
+    problem = PySCFDriver(atom=atom, basis=basis, charge=charge, spin=spin, conv_tol=conv_tol).run()
 
     if active_electrons is not None and active_orbitals is not None:
         problem = ActiveSpaceTransformer(active_electrons, active_orbitals).transform(problem)

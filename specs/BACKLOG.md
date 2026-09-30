@@ -132,19 +132,33 @@ hypothesis whose death is informative is worth more here than a safe one.
 
 ### Certified-bounds arc
 
-- [ ] **The downstream certified rungs consume an unguarded gap input** — *Claim:* `certified_gaps`'
-  "zero escapes at M ≥ 6" is a property of its three test systems, not of M ≥ 6; on stretched/asym H₄
-  the self-mode lower certificate escapes and stays escaped to M = 12. `gap_selfcheck` catches every
-  one, but `certified_dipole.py:88`, `hf_overlap_certificate.py:58` and `hf_overlap_subspace.py:117`
-  each call `gap_bracket` at a **single M with no corroboration**, so they inherit an escape the arc
-  already knows how to catch. *(scout probe: linear H₄ R=3.0 Å M=6 → Δ_lo ∈ [0.590, 0.599] vs true
-  gap 0.0012, ~500×.)* *Check (killable):* sweep those geometries through `certified_dipole` /
-  `certify_hf_overlap` at M ∈ {6,8,12,16}, reference = exact reachable dipole/overlap; **dies if no
-  downstream escape exists** — which is itself worth recording (the bounds would be robust to their
-  own input being wrong). *Reuse:* `gap_selfcheck.self_checked_gap_from` is the fix if it propagates.
-  *Cost:* cheap (~2 min, all 8-qubit). *Caveat:* two latent crashes found en route (`spectral_width`
-  ArpackError on square H₄ where μ_z ≡ 0; a zero-half-width epsilon floor on HeH⁺) — fix in the same
-  PR but do **not** dress them up as the finding.
+- [x] **CLOSED 2026-09-28 (chem-52i) — the escape is real upstream but does NOT propagate downstream;
+  one of the two latent crashes was real and is fixed.** The premise held: `gap_bracket`'s self-mode
+  lower certificate does escape on stretched/asym H₄ (reproduced the exact scout number — linear H₄
+  R=3.0 Å, `"H 0 0 0; H 0 0 3.0; H 0 0 6.0; H 0 0 9.0"`, M=6 → Δ_lo=0.590147 vs true gap 0.001204 Ha
+  — and a grid search found two geometries, `"H 0 0 0; H 0 0 0.9; H 0 0 2.9; H 0 0 4.9"` and
+  `"H 0 0 0; H 0 0 0.9; H 0 0 3.4; H 0 0 5.4"`, where it stays escaped through **all four** of
+  M∈{6,8,12,16} — closer to the bead's "escapes through M=12" than the single-M scout case). But
+  swept through `certified_dipole` / `certify_hf_overlap` / `certify_hf_subspace_overlap` at
+  M∈{6,8,12,16} on 4 reproducible geometries (48 checks total), **zero downstream escapes**: every
+  call either correctly bounded the exact reachable value or safely returned VACUOUS. So
+  `gap_selfcheck.self_checked_gap_from` was **not** wired in — there was no propagating bug to fix,
+  and doing so anyway would be undemonstrated scope creep. *Confound found while selecting probe
+  geometries (report separately, not the finding):* `reachable_gap` is non-reproducible across
+  separate process runs for H₄ geometries with max atom separation ≳9 Å (SCF converges to different
+  near-degenerate symmetry-broken solutions) — confirmed reproducible-as-a-phenomenon (3 different
+  gap values recurred: 0.6238 / 0.0427 / 0.3330 Ha for the same nominal geometry); all evidence
+  geometries above were independently re-checked stable (≤4e-7 Ha spread across reruns) before use.
+  Of the two latent crashes named in this entry: the `spectral_width` ArpackError on square H₄
+  (μ_z ≡ 0 as an *operator*, not just its expectation value, so ARPACK's Lanczos solve got an
+  all-zero sparse matrix) was real, reproduced, and fixed (`certified_dipole.py`'s `spectral_width`
+  now short-circuits `nnz==0` to width 0.0; regression test
+  `tests/test_certified_dipole_spec.py::test_G5_zero_dipole_operator_does_not_crash`). The HeH⁺
+  "zero-half-width epsilon floor" is a real, reproducible phenomenon (Krylov subspace saturation at
+  small M → σ₀=0.0 exactly → half_width=0.0 exactly; confirmed over 8 bond lengths × 5 M values × 3
+  call sites, 40 checks) but never raised as an actual exception, and turned out to already be
+  documented/expected behavior (see `test_G2_interval_closes_and_is_useful`'s HeH⁺ saturation note)
+  — not a new bug. Full evidence and exact regenerating commands: `sandbox-handoffs/chem-52i.md`.
 
 - [x] **CLOSED 2026-08-01 — the stub is implemented and it works in SELF mode.** `refine_via_lanczos`
   had raised `NotImplementedError` since 2026-07-17; it now returns
@@ -233,18 +247,27 @@ hypothesis whose death is informative is worth more here than a safe one.
   that is the point — it converts "open problem, deferred" into "needs Krylov resolution 1/(MΔt)
   below the floor overshoot, measured at 0.22–0.33 Ha", a falsifiable design target.
 
-- [ ] **The overlap certificate is the one rung with no noise sibling, and its noise is structurally
-  different** — *Claim:* for a determinant guiding state λ_u and r are **classically exact** (zero
-  shots), so *all* noise enters through the single gap input β, and γ_min = √(1 − r²/δ²) has unbounded
-  derivative as r → δ. Prediction: coverage does not degrade smoothly, it **bifurcates** — near-perfect
-  at wide margin, collapsing discontinuously at thin margin, with the guided-LH γ ≥ 1/poly claim
-  surviving only in the wide-margin regime. *Check (killable):* ≥6000 seeded trials, shots ∈
-  {1e4,1e5,1e6}, z ∈ {0,1,2,3}, on four systems spanning the margin (H₂ 0.74 Å γ=0.9936 → square H₄
-  1.2 Å vacuous); **dies if z ≤ 2 restores coverage ≥ 0.9 everywhere** (then it is a fifth repetition
-  of "inflation buys coverage" and nothing new). *Reuse:* `certified_noise.shot_noise_coverage`
-  pattern, `gap_selfcheck_noise._pad` post-hoc convention. *Cost:* cheap. *Caveat:* the shot-free-residual
-  argument is specific to determinant guiding states — a chained-Ritz state (entry above) puts r back
-  on the meter. State that boundary up front rather than discovering it later.
+- [x] **CLOSED (chem-mqu) — the overlap certificate's noise IS structurally different, the kill
+  criterion fails to kill it, and there's a sharper, unpredicted finding: inflation reverses sign.**
+  *Claim confirmed:* for a determinant guiding state (u = HF) λ_u and r are exact/classical every
+  trial — all noise enters through β = θ₁ − σ₁. Measured on 4 systems spanning wide → vacuous margin
+  (H₂ eq +1.419, H₄ moderate +0.151, H₄ thin +0.053, square H₄ a=1.2 −0.255, all self-mode M=8), 6000
+  seeded trials × shots ∈ {1e4,1e5,1e6} × z ∈ {0,1,2,3}: **z ≤ 2 does NOT restore coverage ≥ 0.9
+  everywhere** (H₄ moderate/thin top out at 0.83 across the whole z ≤ 2 sub-grid) — the kill criterion
+  fails, the claim survives. **Bifurcation confirmed:** the z=0→3 coverage swing is 3–4x larger at
+  thin margin (−0.451) than at wide (+0.111) or moderate (−0.138) margin — sensitivity spikes rather
+  than degrading smoothly. **NOT predicted, and the sharper finding:** the swing **changes sign**
+  between regimes — z-inflation *helps* at wide margin (fixes overclaim, the only failure mode there)
+  but *hurts* at moderate/thin margin (worsens vacuousness, since pushing β down is the wrong
+  direction once vacuousness already dominates). Every other noise spec in this repo
+  (`certified_noise`, `gap_selfcheck_noise`, `certified_thermochem_noise`) found z uniformly buys
+  coverage, just at different rates — this is the first case where the same knob has opposite effects
+  depending on regime. An already-vacuous system (square H₄) stays pinned at frac_vacuous=1.0 for
+  every shots/z — inflation cannot manufacture a certificate the noiseless one doesn't have. Shots,
+  unlike z, always help (checked at z=0 across the shot ladder). Determinant-only scope caveat stated
+  explicitly: none of this carries to the chained-Ritz bound, whose v puts λ_v, r_v back on the shot
+  budget. → [`SPEC_hf_overlap_noise.md`](SPEC_hf_overlap_noise.md); `hf_overlap_noise.py`;
+  `tests/test_hf_overlap_noise_spec.py` (10/10 green).
 
 ### Method rungs
 
@@ -262,18 +285,25 @@ hypothesis whose death is informative is worth more here than a safe one.
   quits. μ from dense diagonalization is a validation-scale cheat; gate the sensitivity to a badly
   estimated μ rather than assuming it away.
 
-- [ ] **The higher roots of P_K(E) are excited states — bounded, but ~100× more expensive in K than
-  the ground root** *(verified: `moment_expansion.py:69` returns `real_roots.min()` only)* — *Claim:*
-  `SPEC_moment_pds` §7 names this follow-up and never touched it. The j-th smallest real root is a
-  variational **upper** bound on the j-th reachable eigenvalue, converging ~1000× slower than the
-  ground root at fixed K. *Check (killable):* bound dies if any root_j < E_j − 1e-9 Ha; usefulness
-  dies if PDS(8)'s first excited root is not within 1.6 mHa of E₁ on H₄. *(scout probe: H₄ ground root
-  2.04 → 0.002 mHa over K=3…7 while root₁ crawls 553 → 20.5 mHa.)* *Reuse:* a ~3-line `pds_roots`
-  sibling returning the sorted array; degeneracy handling per `SPEC_qksd_excited` R1 (match as a
-  sorted set, never index-by-index). *Cost:* cheap. *Caveat:* **I expect index-matching to be killed on
-  near-degenerate stretched H₄** (a root slots *between* levels and skips one) — the informative death:
-  PDS roots track spectral *density*, not level *index*. Ordered after the centered-frame entry: at
-  raw K=7 the roots are already conditioning garbage.
+- [x] **CLOSED (chem-pc1) — the higher roots of P_K(E) are bounded excited-state estimates, but the
+  usefulness claim is KILLED, and a second, sharper finding: the bound itself can break in floating
+  point.** `pds_roots` added (`moment_expansion.py`), `pds_energy` now `pds_roots(...)[0]` (no
+  behavior change, `test_moment_pds_spec.py` still green). **Bound claim (G1): survives** — no
+  violation on H₄ equilibrium-ish K=3..8, or stretched/near-degenerate K=3..6 (thread-pinned,
+  reproducible over 8+ fresh-process trials). **Usefulness claim (G2): KILLED** — PDS(8)'s root₁
+  misses reachable E₁ by 12–14 mHa, 8–9x the 1.6 mHa bar (predicted: dies; measured: dies).
+  **Convergence-rate claim (G3): confirmed and sharper** — ratio ≈ 11400x at K=7, not ~1000x.
+  **Index-matching (G4): killed exactly as predicted** — on stretched H₄ at K=6, nearest-neighbor
+  assignment of the first 6 roots is non-injective; reachable level 2 is skipped (a root lands
+  between levels 2 and 3 and locks onto 3). **NEW finding, not predicted:** at K=7 on the *stretched*
+  geometry specifically, even with BLAS pinned to 1 thread, the run is reproducibly **bimodal**
+  between two floating-point code paths — one keeps the bound (+196 μHa margin), the other
+  **violates it by −7.49 mHa** (cond(M) ≈ 1.2e17). This is not roundoff dust: the variational
+  guarantee, which is a hard theorem in exact arithmetic, can fail outright in float64 once
+  near-degenerate orbitals combine with cond(M) > 1e14 — G1 is scoped to exclude that one
+  (K, geometry) cell rather than assert something empirically false; G1b pins the conditioning
+  number itself (>1e14) as the falsifiable reason. → [`SPEC_pds_excited_roots.md`](SPEC_pds_excited_roots.md);
+  `tests/test_pds_excited_roots_spec.py`.
 
 - [ ] **A non-variational estimator cannot supply the Temple premise — ODMD repairs it at shallow M,
   then silently breaks it** — *Claim:* `SPEC_temple_bracket`'s oracle-free ε = θ₁ − σ₁ fails at M ≤ 4
@@ -526,24 +556,36 @@ hypothesis whose death is informative is worth more here than a safe one.
   a memory abort at n≥16. That is fine: "the TDL is reachable on this hardware only for R ≳ 1.6" is a
   real boundary and explains why (b) matters.
 
-- [ ] **Is NbN's flagged "hard multireference benchmark" actually hard?** — *Claim:*
-  `SPEC_nbn_dmrg_reference` §2/§7 flags the low-spin nelec=(7,7) sector (comb(14,7)² ≈ 1.18e7 dets,
-  3.5 mHa above the ground) as needing real bond dimension — never run, never gated. Under test:
-  whether that sector is *genuinely* strongly correlated, i.e. does **not** show the softness the
-  high-spin sector does (which converged to sub-nHa by D=400). *Check (killable):* run the identical
-  A′/B′ schedule pair with `nelec` forced to (7,7); **kills the "hard benchmark" framing if
-  dw(D=300) < 1e-7 and per-D spread < 1e-5 Ha** — the CAS is soft in every sector, the follow-up is
-  vacuous, and NbN CAS(14,14) should be retired as a strong-correlation target. Confirms it if
-  dw > 1e-5 or |E_A′ − E_B′| > 0.1 mHa; then ask whether the 3.5 mHa sector gap **survives at converged
-  D or inverts** — if it inverts, the committed reference energy names the wrong sector. *Reuse:*
-  `load_nbn_cas` (no SCF re-run), all four `SCHEDULES` already defined; ~2 lines for a `nelec=`
-  passthrough. *Cost:* **cheap diagnostic** (~2 min/schedule at D ≤ 300, own process per the block2
-  isolation rule), expensive headline only if it proves hard. *Caveat:* **I half-expect this to be
-  killed** — 14 orbitals over an ECP'd σ/π manifold is small. Either outcome is publishable here: it
-  delivers the flagged benchmark or retires it. Forcing (7,7) reuses orbitals optimized for the (10,4)
-  SCF solution, so cross-check against the sector's own natural orbitals before calling it hard.
-
 ## Done
+
+- [x] **Is NbN's flagged "hard multireference benchmark" actually hard?** *(filed as this
+  open item, then independently re-filed as bead chem-csf on 2026-09-28; both point at the same
+  question)* — **DONE: it was already answered, and answered as "no, soft" — this entry was stale,
+  not unresolved.** This item's own wording ("never run, never gated") described
+  `SPEC_nbn_dmrg_reference.md` §2/§7's *original* framing, but by 2026-09-26/27 the identical check
+  it asks for had already been run and gated three times over, under a differently-worded bead
+  chain that answered a related but distinct question first (chem-dc7/chem-g1i: "is the committed
+  reference in the right spin sector?", chem-czw: "does the answer survive the other UHF minimum?")
+  and picked up this exact hardness question as a byproduct, in `SPEC_nbn_low_spin.md` §0/Table 2/G4
+  — nobody closed *this* backlog line when that happened. **chem-csf (2026-09-29) re-verified rather
+  than re-derived:** re-ran `tests/test_nbn_low_spin_spec.py` fresh, own process, on this session's
+  own container (8-core x86_64, 16 GB, block2 0.5.3 via `uv sync --extra dmrg --extra test`) —
+  2 passed in 492.55s. This reproduces, on new hardware, the pre-registered cheap-D (A′/B′,
+  D ≤ 300) check this item specifies: **dw(D=300) ≈ 1.05e-7 for both schedules (just outside the
+  1e-7 KILL floor), |E_A′ − E_B′| ≈ 4.2e-6 Ha (deep inside the 1e-4 Ha CONFIRM floor) — neither
+  pre-registered condition fires**, a genuine gap in this item's own two-sided design, already
+  recorded (not re-derived) in `SPEC_nbn_low_spin.md` §3 Table 2. The item's own fallback — "ask
+  whether the 3.5 mHa gap survives at converged D" — was also already answered in the same table:
+  headline D ≤ 1200 schedules (chem-g1i, 2026-09-26, `results/nbn_low_spin/runs.jsonl`) converge to
+  dw ≈ 3e-10 with two independent schedules agreeing to 0.3 nHa, confirming this item's own **KILL**
+  condition at converged D — **the sector is soft, like every other sector in this CAS; the "hard
+  multireference benchmark" framing is retired.** Stalled-vs-converged ambiguity (the
+  chem-4e9/chem-mjz risk this item and chem-csf both flagged) was explicitly checked and ruled out:
+  dw *decreases* monotonically with D (8.3e-8 → 6.4e-9 → 8.2e-10 for schedule A, 100/200/300 →
+  400/800/1200), not a stall. *Not done (out of scope for chem-csf, unchanged from before):*
+  CASSCF orbital relaxation to settle the sector ordering rigorously past the informal CASCI
+  cross-check (`SPEC_nbn_low_spin.md` §7). → [`SPEC_nbn_low_spin.md`](SPEC_nbn_low_spin.md) §0/§3
+  Table 2/G4, [`sandbox-handoffs/chem-csf.md`](../sandbox-handoffs/chem-csf.md).
 
 - [x] **Does the chem-czw lower-minimum NbN table (SCF + S=3 FCI) survive rerunning with the
   fixed `_tight_scf` loop, or was it produced by the dedented-`mf.kernel` bug?**

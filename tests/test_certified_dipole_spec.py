@@ -98,3 +98,19 @@ def test_G4_property_inherits_gap_certificate(ladders):
     for cd in lih:
         if cd.finite:
             assert cd.gap_lower > 0.0, cd.m
+
+
+def test_G5_zero_dipole_operator_does_not_crash():
+    """chem-52i regression: on a centrosymmetric geometry (square H4) mu_z vanishes as an OPERATOR,
+    not just as an expectation value, so ``spectral_width``'s Lanczos solve was handed an all-zero
+    sparse matrix and ARPACK raised "Starting vector is zero" (ArpackError). spectral_width now
+    short-circuits nnz==0 to width 0.0, and the resulting certificate is trivially exact (mu=0,
+    half_width=0) rather than crashing."""
+    mh = build_molecular_hamiltonian(atom="H 0 0 0; H 1.4 0 0; H 1.4 1.4 0; H 0 1.4 0")
+    Az = build_dipole_operators(atom="H 0 0 0; H 1.4 0 0; H 1.4 1.4 0; H 0 1.4 0")[2].to_matrix(
+        sparse=True)
+    assert Az.nnz == 0, "test assumes mu_z is identically zero for square H4 (symmetry)"
+    assert spectral_width(Az) == 0.0
+    from certified_dipole import certified_dipole
+    cd = certified_dipole(mh, Az, 6, solver=QuantumKrylovSolver(mh))
+    assert cd.mu == 0.0 and cd.half_width == 0.0

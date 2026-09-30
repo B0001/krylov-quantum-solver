@@ -67,6 +67,20 @@ def thc_from_df(eri, norb, rank=None):
     return chi, zeta
 
 
+def zeta_from_collocation(eri, norb, chi):
+    """Solve the central matrix ``zeta`` by linear least squares for an explicit collocation
+    ``chi`` (shape ``(norb, n_thc)``). Shared by every linear (non-nonlinear-fit) THC collocation
+    scheme below: the reconstruction is exact iff ``chi``'s induced pair-design matrix
+    ``P_{mu,(pq)} = chi_p^mu chi_q^mu`` has rank ``n_thc`` -- i.e. iff the pair space is spanned.
+    """
+    n_thc = chi.shape[1]
+    V = eri.reshape(norb * norb, norb * norb)
+    P = np.einsum("pm,qm->mpq", chi, chi).reshape(n_thc, norb * norb)
+    Pinv = np.linalg.pinv(P.T)                              # (n_thc, norb^2)
+    zeta = Pinv @ V @ Pinv.T
+    return 0.5 * (zeta + zeta.T)
+
+
 def tensor_hypercontraction(eri, norb, n_thc=None, seed=0):
     """Linear-least-squares THC: random full-rank collocation, central matrix by least squares.
 
@@ -80,11 +94,38 @@ def tensor_hypercontraction(eri, norb, n_thc=None, seed=0):
     n_thc = thc_rank(norb) if n_thc is None else int(n_thc)
     rng = np.random.default_rng(seed)
     chi = rng.standard_normal((norb, n_thc)) * 0.5
-    V = eri.reshape(norb * norb, norb * norb)
-    P = np.einsum("pm,qm->mpq", chi, chi).reshape(n_thc, norb * norb)
-    Pinv = np.linalg.pinv(P.T)                              # (n_thc, norb^2)
-    zeta = Pinv @ V @ Pinv.T
-    zeta = 0.5 * (zeta + zeta.T)
+    zeta = zeta_from_collocation(eri, norb, chi)
+    return chi, zeta
+
+
+def pair_indicator_collocation(eri, norb):
+    """Deterministic, non-random, non-optimized THC collocation at ``n_thc = thc_rank(norb)``:
+    one collocation index per symmetric orbital pair, ``chi^{(i,i)} = e_i`` and
+    ``chi^{(i,j)} = e_i + e_j`` (i<j). Central matrix by the same linear least squares as
+    ``tensor_hypercontraction``.
+
+    This is "structured" only in the weak sense of being a fixed combinatorial formula with no RNG
+    seed and no search for small lambda -- it is NOT the ISDF/optimized collocation the spec puts
+    out of scope. It is provably full column rank (each basis direction e_i e_i^T is directly a
+    column; each e_i e_j^T is recovered from the (i,i), (j,j), (i,j) columns by
+    ``((e_i+e_j)(e_i+e_j)^T - e_ie_i^T - e_je_j^T)/2``), so reconstruction is exact by construction,
+    not by numerical luck -- unlike a smooth 1-parameter deterministic curve (Fourier/Chebyshev/
+    Vandermonde collocation), which was tried first and tops out at rank 2*norb-1 (see
+    specs/SPEC_thc_collocation.md).
+    """
+    cols = []
+    for i in range(norb):
+        e = np.zeros(norb)
+        e[i] = 1.0
+        cols.append(e)
+    for i in range(norb):
+        for j in range(i + 1, norb):
+            e = np.zeros(norb)
+            e[i] = 1.0
+            e[j] = 1.0
+            cols.append(e)
+    chi = np.array(cols).T                                  # (norb, norb(norb+1)/2)
+    zeta = zeta_from_collocation(eri, norb, chi)
     return chi, zeta
 
 

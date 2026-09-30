@@ -72,19 +72,24 @@ certified_dipole_noise.dipole_noise_coverage(
 ## 5. Acceptance criteria (validation gates)
 
 - **G1 — raw (z=0) coverage is broken on both systems.** At shots in {1e4, 1e5, 1e6}, M=16: HeH+
-  coverage < 0.6, LiH coverage < 0.05. *Measured: HeH+ 0.294/0.491/0.505; LiH 0.001/0.002/0.009.*
+  coverage < 0.6, LiH coverage < 0.05. *Measured (2026-09-28, chem-hbv, post identity-fix — see
+  §10 revision note): HeH+ 0.420/0.507/0.507; LiH 0.002/0.004/0.015.* *(original measurement:
+  HeH+ 0.294/0.491/0.505; LiH 0.001/0.002/0.009 — superseded, not deleted; see §10.)*
 - **G2 — inflation DOES work on the healthy-margin system, at moderate z.** At shots in {1e5, 1e6},
-  z=1.0 restores coverage >= 0.9 on HeH+. *Measured: 0.981 / 1.000.*
+  z=1.0 restores coverage >= 0.9 on HeH+. *Measured (2026-09-28): 0.999 / 0.999.* *(original:
+  0.981 / 1.000 — see §10.)*
 - **G3 — THE FINDING (definition of done): an inflation ceiling, not seen in either prior noise
   spec.** At shots=1e4 (the tight-budget regime where `Delta_lo`'s margin is itself noisy), HeH+'s
   finite-bracket rate is STRICTLY LOWER at z=3 than at z=1 — more inflation shrinks the fraction of
   trials where a bracket can be constructed at all, the opposite of `certified_thermochem_noise`
-  and `gap_selfcheck_noise`, both monotonically non-decreasing in z. *Measured: finite_frac
-  z=1: 0.728, z=3: 0.554 (and coverage falls in step: 0.728 -> 0.554).*
+  and `gap_selfcheck_noise`, both monotonically non-decreasing in z. *Measured (2026-09-28):
+  finite_frac z=1: 0.884, z=3: 0.819 (and coverage falls in step: 0.884 -> 0.819).* *(original:
+  finite_frac z=1: 0.728, z=3: 0.554 — see §10; the ceiling itself is unchanged, only its size.)*
 - **G4 — LiH boundary, recorded not fixed.** Across every tested z in {0, 1, 2, 3} and every shot
   count, LiH's finite-bracket rate stays < 0.3 — inflation cannot rescue a system whose `Delta_lo`
   margin is already this thin at M=16; a system-dependent boundary, exactly the R1 pattern of the
-  two prior noise specs. *Measured: max finite_frac over the whole (z, shots) grid = 0.260.*
+  two prior noise specs. *Measured (2026-09-28): max finite_frac over the whole (z, shots) grid =
+  0.268.* *(original: 0.260 — see §10.)*
 
 > Definition of done: **G3**. If a system is later found where the dipole certificate stays
 > monotonic in z (no ceiling), that contradicts the generality of the mechanism and must be
@@ -123,3 +128,41 @@ certified_dipole_noise.dipole_noise_coverage(
 - `certified_dipole_noise.py` — `operator_one_norms`, `dipole_noise_coverage`.
 - `tests/test_certified_dipole_noise_spec.py` — gates G1-G4.
 - Results summary (with R1/R2 caveats) in the PR description / BACKLOG entry.
+
+## 10. Revision note (chem-hbv, 2026-09-28) — why the "Measured" numbers in §5 moved
+
+The originally-recorded §5 numbers are **stale for two separate reasons**, both traced down and
+neither of which flips G1-G4's verdict:
+
+1. **A prior, unrelated fix already moved `finite_frac` before this bead touched anything.**
+   `dipole_noise_coverage`'s finite-bracket gate (`s = sigma0_padded / dlo_padded >= 1`) depends
+   only on `hamiltonian_one_norms(mh)` (via `hw_h`), never on `operator_one_norms`. When
+   `SPEC_lambda_h2_bridge` changed `certified_noise.hamiltonian_one_norms`'s default to exclude the
+   identity term, every `finite_frac`/`coverage` number in this spec moved even though nobody had
+   touched `certified_dipole_noise.py` yet — that spec's own text says downstream
+   `certified_dipole_noise` gates "still green" but never re-published this spec's §5 numbers.
+   Confirmed by reproducing the pre-chem-hbv code path (`operator_one_norms` still summing the
+   identity, i.e. `include_identity=True`) against current `hamiltonian_one_norms`: it reproduces
+   the *current* (not the originally-published) numbers exactly, isolating this as the dominant
+   cause of the drift.
+2. **This bead's fix** (`operator_one_norms` now excludes the identity term by default, matching
+   `hamiltonian_one_norms`; `include_identity=True` kept for archaeology) moves `lambda_A` by 3.2-
+   3.8% and `lambda_A2` by 7.9-22.7% (HeH+/LiH; the dipole operator's identity coefficient is the
+   nuclear dipole moment, generically nonzero, so this is not a no-op — the bead's "dies if
+   lambda_A is unchanged" falsifier does NOT fire). Measured effect on the recorded findings: exact
+   zero on every `finite_frac` (bead cause #1 above shows why: `operator_one_norms` never enters
+   that calculation), and at most a **0.0003** absolute change in `coverage` across the full
+   G1-G4 grid (24 `(system, shots, z)` points; largest observed HeH+ z=1.0, shots=1e4:
+   0.8835 -> 0.8837) — noise-floor sized at 6000 Monte Carlo trials, not a qualitative move.
+
+**Net effect on findings:** none of G1-G4 change pass/fail; the §5 numbers above are updated to the
+current re-measured values so the spec stays honest about what the code produces today, with the
+originally-published values kept alongside (not deleted) per the "never a third option" rule — the
+document now says where both numbers came from. THE FINDING (G3, the inflation ceiling) survives
+verbatim in mechanism and direction; only its magnitude shifted (0.728->0.884 at z=1, 0.554->0.819
+at z=3, both from cause #1 above, pre-dating this bead) — still strictly decreasing z=1->z=3, still
+"a ceiling neither prior noise spec showed."
+
+Regenerating command for the full before/after grid (24 points, both `operator_one_norms` variants,
+`lambda_A`/`lambda_A2` deltas): `uv run python scratch_before_after_hbv.py` (untracked scratch
+script, left in the repo root for a reviewer to rerun; see `sandbox-handoffs/chem-hbv.md`).

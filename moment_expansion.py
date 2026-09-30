@@ -49,11 +49,16 @@ def hamiltonian_moments(mh: MolecularHamiltonian, max_order: int):
     return np.array(moments), float(mh.energy_offset)
 
 
-def pds_energy(moments: np.ndarray, order: int, offset: float = 0.0) -> float:
-    """PDS(K) variational ground-state energy: the smallest root of ``P_K(E)``.
+def pds_roots(moments: np.ndarray, order: int, offset: float = 0.0) -> np.ndarray:
+    """All real roots of ``P_K(E)``, ascending, each lifted by ``offset``.
 
-    Needs moments up to ``2*order - 1``. ``offset`` lifts the electronic-frame result to a physical
-    energy. Variational: the returned value is ``>= E_0`` (up to numerical noise).
+    Needs moments up to ``2*order - 1``. The smallest root is the PDS(K) ground-state estimate
+    (``pds_energy``); by the equivalence between the moment problem and Rayleigh-Ritz in the Krylov
+    subspace {phi, Hphi, ..., H^(K-1)phi} (Gauss quadrature nodes = Lanczos/Ritz values), the j-th
+    smallest root is a **variational upper bound** on the j-th smallest reachable eigenvalue --
+    i.e. these are candidate excited-state energies, not just the ground state. That equivalence
+    assumes the moment matrix ``M`` stays well-conditioned; as K grows, ``det M -> 0`` and roots can
+    go complex or drift below their true target (see specs/SPEC_pds_excited_roots.md).
     """
     K = int(order)
     if len(moments) < 2 * K:
@@ -66,7 +71,16 @@ def pds_energy(moments: np.ndarray, order: int, offset: float = 0.0) -> float:
     real_roots = roots[np.abs(roots.imag) < 1e-6].real
     if real_roots.size == 0:
         raise ValueError(f"PDS({K}) produced no real root (ill-conditioned moments?)")
-    return float(real_roots.min()) + offset
+    return np.sort(real_roots) + offset
+
+
+def pds_energy(moments: np.ndarray, order: int, offset: float = 0.0) -> float:
+    """PDS(K) variational ground-state energy: the smallest root of ``P_K(E)``.
+
+    Needs moments up to ``2*order - 1``. ``offset`` lifts the electronic-frame result to a physical
+    energy. Variational: the returned value is ``>= E_0`` (up to numerical noise).
+    """
+    return float(pds_roots(moments, order, offset)[0])
 
 
 def cmx2_energy(moments: np.ndarray, offset: float = 0.0) -> float:

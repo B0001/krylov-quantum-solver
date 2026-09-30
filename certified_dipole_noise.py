@@ -41,17 +41,24 @@ import numpy as np
 from qiskit.quantum_info import SparsePauliOp
 
 from certified_dipole import spectral_width
-from certified_noise import certified_half_width, hamiltonian_one_norms
+from certified_noise import _one_norm, certified_half_width, hamiltonian_one_norms
 from hybrid_quantum_solver.molecular_hamiltonian import MolecularHamiltonian
 from hybrid_quantum_solver.quantum_krylov_solver import QuantumKrylovSolver
 from temple_bounds import mean_and_variance
 
 
-def operator_one_norms(op: SparsePauliOp) -> Tuple[float, float]:
+def operator_one_norms(op: SparsePauliOp, *, include_identity: bool = False) -> Tuple[float, float]:
     """(lambda_A, lambda_{A^2}) -- Pauli 1-norms of a Hermitian operator, mirroring
-    `certified_noise.hamiltonian_one_norms` (same construction, generic to any SparsePauliOp)."""
-    lam = float(np.abs(op.coeffs).sum())
-    lam2 = float(np.abs((op @ op).simplify().coeffs).sum())
+    `certified_noise.hamiltonian_one_norms` (same construction, generic to any SparsePauliOp).
+
+    The identity term is a constant of ZERO variance -- it costs zero shots -- so it must not enter
+    a shot-noise 1-norm (SPEC_lambda_meas_identity; `hamiltonian_one_norms` was corrected there but
+    this call site was missed -- chem-hbv). The dipole operator's identity coefficient is the
+    nuclear dipole moment, which is generically nonzero, so this is not a no-op here.
+    ``include_identity=True`` reproduces the old inflated values for archaeology.
+    """
+    lam = _one_norm(op, include_identity)
+    lam2 = _one_norm((op @ op).simplify(), include_identity)
     return lam, lam2
 
 

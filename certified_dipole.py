@@ -64,7 +64,15 @@ class CertifiedDipole:
 
 
 def spectral_width(a_sparse) -> float:
-    """W_A = lambda_max - lambda_min of a Hermitian operator (two Lanczos extremal solves)."""
+    """W_A = lambda_max - lambda_min of a Hermitian operator (two Lanczos extremal solves).
+
+    ``a_sparse`` identically zero (found on chem-52i: mu_z on a centrosymmetric geometry like
+    square H4, where the OPERATOR vanishes by symmetry, not just its expectation value) has
+    spectrum {0} -- ARPACK cannot start Lanczos from an all-zero vector and raises ArpackError,
+    so that case is short-circuited rather than crashing.
+    """
+    if a_sparse.nnz == 0:
+        return 0.0
     hi = float(eigsh(a_sparse, k=1, which="LA", return_eigenvectors=False)[0])
     lo = float(eigsh(a_sparse, k=1, which="SA", return_eigenvectors=False)[0])
     return hi - lo

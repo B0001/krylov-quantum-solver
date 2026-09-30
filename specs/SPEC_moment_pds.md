@@ -79,7 +79,10 @@ Gates in `tests/test_moment_pds_spec.py` (test-first). Exact statevector; pyscf/
 - The PDS(K)-VQS variational-circuit optimizer and energy gradients (the paper's main contribution);
   here PDS is a static functional on a fixed HF reference.
 - Hardware moment measurement / Pauli grouping cost; shot noise on `⟨H^n⟩`.
-- Excited states from the higher roots of `P_K(E)` (a natural follow-up).
+- Excited states from the higher roots of `P_K(E)` (a natural follow-up) — done in
+  [`SPEC_pds_excited_roots.md`](SPEC_pds_excited_roots.md) (chem-pc1): the bound holds, but the
+  usefulness claim is killed and the bound itself can fail in float64 at high K on near-degenerate
+  systems.
 - High-order PDS (K ≳ 5) where the moment matrix is severely ill-conditioned.
 
 ## 8. Caveats and risks

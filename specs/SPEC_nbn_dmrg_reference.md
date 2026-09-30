@@ -80,8 +80,12 @@ it works one Sz sector at a time.)
   surface:** the low-spin nelec=(7,7) sector lies just **3.5 mHa above** the (10,4) ground
   (E₇,₇ = −110.042500 vs E₁₀,₄ = −110.046028, both schedule-agnostic to µHa) — so the "reference
   energy" is only meaningful once the sector is stated, and a thermally/ligand-field-perturbed
-  NbN could invert them. A hard multireference TM benchmark needs that low-spin sector at real
-  bond dimension or a larger cluster — a follow-up, out of scope here.
+  NbN could invert them. **UPDATE (chem-dc7/chem-g1i, `SPEC_nbn_low_spin.md`; re-verified fresh on
+  new hardware by chem-csf, 2026-09-29):** the (7,7) sector was run at real bond dimension — it is
+  soft too (dw → 3e-10 by D=1200, two independent schedules agree to 0.3 nHa), so this CAS is not
+  a hard multireference benchmark in *any* sector checked so far; see `SPEC_nbn_low_spin.md` §0/§3
+  Table 2/G4 for the numbers. This does not rule out a genuinely hard sector existing in a larger
+  cluster or basis, which remains unexplored.
 
 ## 3. Approach
 
@@ -176,14 +180,18 @@ process isolation applies).
 
 ## 7. Out of scope
 
-- A genuinely multireference TM benchmark (low-spin sector / larger cluster / bigger basis).
+- A genuinely multireference TM benchmark (larger cluster / bigger basis — the low-spin (7,7)
+  sector of *this* CAS was checked, chem-dc7/chem-g1i/chem-csf, and found soft too;
+  `SPEC_nbn_low_spin.md` §0/§3 Table 2/G4).
 - Materials claims (finite cluster, ECP, fixed geometry); periodic NbN.
 - Krylov/ODMD on this system (nothing at 14 orbitals needs a quantum method — no advantage).
 
 ## 8. Caveats and risks
 
-- **R1:** the high-spin sector makes this easy; a future low-spin variant may need real bond
-  dimension and should expect `dweight` extrapolation to matter.
+- **R1 (checked, chem-csf 2026-09-29):** the high-spin sector makes this easy; the low-spin (7,7)
+  variant was expected to possibly need real bond dimension, but converges just as softly
+  (`SPEC_nbn_low_spin.md` §3 Table 2) — `dweight` extrapolation is usable at D≤300 in both sectors,
+  it just sits closer to its regime boundary for (7,7) (dw(300)≈1e-7 vs ≪1e-7 for (10,4)).
 - The 5×10⁶ "FCI-intractable" line is the repo's operational cutoff, not a fundamental wall.
 - **R2 (chem-bbi):** cheap DMRG A′ (dweight-extrapolated, D ≤ 300) can overshoot below the exact
   variational bound by ~1 µHa on the S=1 sector (measured; cf. `SPEC_nbn_low_spin.md` §8's 0.34

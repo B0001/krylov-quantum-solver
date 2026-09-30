@@ -44,8 +44,16 @@ def fci_energy_error(h1, eri, norb, nelec, e_core, casci_energy):
     return abs(e - casci_energy) * 1e3
 
 
-def fit_thc(eri, norb, M, restarts=4, seed=0):
-    """Least-squares THC fit: (pq|rs) ~ sum_uv X_pu X_qu Z_uv X_rv X_sv, symmetric Z."""
+def fit_thc(eri, norb, M, restarts=4, seed=0, max_nfev=4000, return_factors=False):
+    """Least-squares THC fit: (pq|rs) ~ sum_uv X_pu X_qu Z_uv X_rv X_sv, symmetric Z.
+
+    Nonlinear (Levenberg-Marquardt) and stochastic in ``X0``/``Z0`` -- pin ``seed`` for
+    reproducibility and never read a single run as a global optimum (see
+    specs/SPEC_thc_collocation.md). ``return_factors=True`` returns the winning restart's
+    ``(X, Z)`` collocation/central-matrix pair instead of the reconstructed ERI, so the fit can be
+    scored with ``thc_factorization.thc_lambda`` (the native qubitization 1-norm) rather than only
+    the brute-force Pauli lambda this function was originally scored with.
+    """
     rng = np.random.default_rng(seed)
     target = eri.reshape(-1)
     iu = np.triu_indices(M)
@@ -67,11 +75,13 @@ def fit_thc(eri, norb, M, restarts=4, seed=0):
             X, Z = unpack(p)
             return np.einsum("pu,qu,uv,rv,sv->pqrs", X, X, Z, X, X).reshape(-1) - target
 
-        sol = least_squares(resid, p0, method="lm", max_nfev=4000)
+        sol = least_squares(resid, p0, method="lm", max_nfev=max_nfev)
         if best is None or sol.cost < best[0]:
             X, Z = unpack(sol.x)
-            best = (sol.cost, np.einsum("pu,qu,uv,rv,sv->pqrs", X, X, Z, X, X))
-    return best[1]
+            best = (sol.cost, X, Z, np.einsum("pu,qu,uv,rv,sv->pqrs", X, X, Z, X, X))
+    if return_factors:
+        return best[1], best[2]
+    return best[3]
 
 
 def lambda_ladder(h1, eri, norb, nelec, e_core, casci_energy, thc_ranks=range(2, 7)):
