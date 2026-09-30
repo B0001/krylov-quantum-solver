@@ -118,8 +118,10 @@ scipy = [
 ]
 
 [tool.sandbox]
-# Worker loop knobs (verified-sandbox). One container per bead, sequentially, so
-# DMRG/NEVPT2 beads never share the Docker VM's memory. Beads a Linux worker
+# Worker loop knobs (verified-sandbox). One container per bead, two at a time:
+# an 8-core/16 GB MacBook Air with workers emulated as amd64 (~1.5 cores each
+# under load) has room for two. Two DMRG/NEVPT2 beads can now share the Docker
+# VM's memory -- drop max-parallel to 1 if one gets OOM-killed. Beads a Linux worker
 # cannot finish are parked, never dispatched:
 #   chem-dfe  macOS-only libomp abort; a Linux container cannot reproduce it
 #   chem-a0y  macOS-only LAPACK ZHEEVD abort; same reason
@@ -129,3 +131,4 @@ park = ["chem-dfe", "chem-3z8", "chem-80w", "chem-a0y"]
 # block2 0.5.3 has no Linux arm64 wheel, so chem's workers run as linux/amd64
 # (emulated on Apple silicon); see sandbox.Dockerfile. Build it before the first run.
 image = "claude-chem"
+max-parallel = 2
