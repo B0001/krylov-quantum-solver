@@ -1,5 +1,5 @@
 """
-Acceptance gates G1-G7 for specs/SPEC_nb3x8_gaps.md (exact Nb3X8 cluster gaps vs Hubbard-I).
+Acceptance gates G1-G8 for specs/SPEC_nb3x8_gaps.md (exact Nb3X8 cluster gaps vs Hubbard-I).
 
 Test-first origin: the Nb3X8 bilayer cluster (a generalized Hubbard dimer, from the arXiv:2501.10320
 cRPA parameters) is exactly diagonalizable; we compute the exact charge gap and the Hubbard-I gap and
@@ -18,6 +18,9 @@ The gates tell an honest, self-correcting story:
     z=3 Cl/Br clusters (Davidson genuinely needs ~4x more iterations, not a near-degeneracy -- it
     agrees with a much looser cap to high precision); the function must accept a ``max_cycle``
     override rather than forcing callers to reimplement the cluster construction.
+  * G8 (chem-g78): the SAME coordination clusters in the SPIN channel (``coordination_spin_gap``,
+    J_eff = E(Sz=1) - E(Sz=0)) do NOT show the charge channel's softening, so coordination/mean-field
+    reduction cannot be what explains the 5.3x Tc overprediction of the isolated-dimer J.
 
 PySCF FCI / NumPy / SciPy only (no block2); `make gates` runs it in its own process.
 """
@@ -25,12 +28,15 @@ from scipy.stats import spearmanr
 
 from nb3x8_gaps import (
     NB3X8_CLUSTERS,
+    NB3X8_LT_BULK,
     NB3X8_LT_BULK_5P,
     coordination_gap,
+    coordination_spin_gap,
     exact_charge_gap,
     four_site_exact_gap,
     hubbard_i_gap,
 )
+from odmd_spin import dimer_exchange_analytic
 
 
 def test_G1_atomic_limit_validation():
@@ -135,3 +141,52 @@ def test_G7_coordination_gap_max_cycle_override():
     # change their answer.
     p = NB3X8_LT_BULK_5P["Nb3I8"]
     assert abs(coordination_gap(*p, z=3) - coordination_gap(*p, z=3, max_cycle=4000)) < 1e-9
+
+
+def test_G8_spin_channel_coordination_does_not_rescue_Tc_overprediction():
+    """chem-g78: SPEC_nb3x8_magnetometry.md section 7 names coordination/mean-field reduction as the
+    likely explanation for the 5.3x (Nb3Cl8) Tc overprediction. Run the IDENTICAL coordination
+    machinery in the SPIN channel (J_eff = E(Sz=1 lowest) - E(Sz=0 lowest) at half filling) instead
+    of the charge channel, on Nb3Cl8, at L = 4, 6, 8 (z = 1, 2, 3; capped per the module's L=12
+    half-filled FCI convergence warning).
+
+    Machinery anchor: at z=0 (the isolated dimer) coordination_spin_gap must reduce to the exact
+    closed-form dimer exchange (SPEC_odmd_spin) -- if this drifts, the FCI Sz-sector construction
+    itself is wrong and nothing else here can be trusted.
+    """
+    cl = NB3X8_LT_BULK_5P["Nb3Cl8"]
+    j0_analytic = dimer_exchange_analytic(**NB3X8_LT_BULK["Nb3Cl8"])
+    j0, ss0_0, ss1_0 = coordination_spin_gap(*cl, 0)
+    assert abs(j0 - j0_analytic) < 1e-6, (j0, j0_analytic)           # machinery anchor
+
+    results = {z: coordination_spin_gap(*cl, z) for z in (0, 1, 2, 3)}
+    for z, (j_eff, ss0, ss1) in results.items():
+        # <S^2> check (the bead's caveat): Sz=0 lowest is a genuine singlet, Sz=1 lowest a genuine
+        # S=1 triplet, not a higher-S intruder -- required before J_eff means "the" triplet gap.
+        assert abs(ss0) < 1e-3, (z, ss0)
+        assert abs(ss1 - 2.0) < 1e-2, (z, ss1)
+
+    j_values = [results[z][0] for z in (0, 1, 2, 3)]
+
+    # PRIMARY KILL: dies (restoring the published attribution) if coordination eventually delivers
+    # J_eff(largest cluster) <= J0/3.
+    assert j_values[3] > j0 / 3.0, (j_values, j0)
+
+    # No cluster in L<=8 shows anything close to the needed >=3x reduction (open-boundary end
+    # effects at L=4 are a bump, not the start of a trend -- gate the whole range, not just z=3).
+    assert min(j_values) > j0 / 3.0, j_values
+
+    # The spin gap does NOT fall monotonically the way the charge gap does (G6): it rises then
+    # partially returns, and is *larger* at the largest cluster reached than in the isolated dimer.
+    assert j_values[3] >= j0, j_values
+
+    # SECONDARY KILL (control): the identical machinery's charge-channel gap on the SAME Nb3Cl8
+    # clusters must still reproduce a real (>=20%) reduction, or the machinery itself is broken and
+    # neither the spin nor the charge result can be trusted.
+    charge0 = coordination_gap(*cl, 0)
+    charge3 = coordination_gap(*cl, 3, max_cycle=2000)
+    assert (charge0 - charge3) / charge0 >= 0.20, (charge0, charge3)
+
+    # VERDICT (recorded either way): coordination/mean-field reduction does not explain the Tc
+    # overprediction -- both kill criteria failed to trigger the published attribution, and the
+    # control confirms the machinery works. See the module docstring and specs/BACKLOG.md.

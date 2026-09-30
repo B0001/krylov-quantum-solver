@@ -115,6 +115,15 @@ nb3x8_magnetometry (CLI)                                          # family table
 - Any fit to the experimental data (this is a prediction/comparison).
 - A quantitative theory of the isolated→solid renormalization factor (a follow-up: coordination /
   mean-field reduction of T_max, cf. the `nb3x8_gaps` coordination-scan treatment of the charge gap).
+  **Checked and FALSIFIED (chem-g78, `tests/test_nb3x8_gaps_spec.py::test_G8_*`):** running the
+  identical coordination machinery in the spin channel (`nb3x8_gaps.coordination_spin_gap`) on
+  Nb₃Cl₈ gives J_eff = 66.20 (z=0) → 71.08 (z=1) → 66.55 (z=2) → 71.12 meV (z=3), i.e. it oscillates
+  and is *larger*, not smaller, at the largest cluster reached — nowhere near the J₀/3 ≈ 22 meV a
+  rescuing reduction would need — while the SAME machinery's charge-channel control on the SAME
+  clusters gives the expected monotonic 33.5% softening. So coordination/mean-field reduction is
+  **not** the mechanism behind the 5.3×/2.3× Tc overprediction; that overprediction has to be
+  reassigned to the cooperative structural transition, in-plane kagome exchange, or a direct lattice
+  renormalization of t_s⊥ — this follow-up is closed as a negative result, not merely deferred.
 
 ## 8. Caveats and risks
 

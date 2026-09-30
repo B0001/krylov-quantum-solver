@@ -45,6 +45,31 @@ gaps are wrong. If anything this VINDICATES the cluster-DMFT/Hubbard-I approach 
 gaps. (Density-density interactions only; the paper reports non-density-density terms of a few meV.)
 Gaps are in meV. The ``four_site_exact_gap`` "bath bound" (~5% at z=1) was too optimistic -- it
 sampled only the nearest neighbour; coordination and the full chain (above) move the gap much more.
+
+*** THE SAME COORDINATION MACHINERY IN THE SPIN CHANNEL DOES NOT RESCUE THE Tc OVERPREDICTION
+(chem-g78). *** ``SPEC_nb3x8_magnetometry.md`` section 7 names "coordination / mean-field reduction"
+as the likely explanation for the 5.3x (Nb3Cl8) / 2.3x (Nb3Br8) overprediction of the singlet-formation
+Tc by the isolated-dimer J. Running ``coordination_spin_gap`` -- the IDENTICAL cluster topology as
+``coordination_gap``, just measuring E(Sz=1 lowest) - E(Sz=0 lowest) at half-filling instead of the
+charge gap -- on Nb3Cl8 shows J_eff does NOT fall monotonically:
+
+  z=0 (isolated) 66.20 -> z=1 71.08 -> z=2 66.55 -> z=3 71.12 meV   (<S^2> = 0.000/2.000 every z; clean
+  singlet reference, no higher-S intruder in the Sz=1 state)
+
+J_eff oscillates around the isolated value and is *larger*, not smaller, at the largest cluster reached
+(L=8) -- nowhere near the J0/3 = 22.1 meV the "coordination rescues Tc" attribution would need. The
+SAME machinery's charge-channel control on the SAME Nb3Cl8 clusters (z=0..3) gives the expected
+monotonic softening (1311.8 -> 1167.5 -> 1092.1 -> 872.9 meV, a 33.5% drop at z=3, confirming the
+machinery itself works and the charge/spin contrast is not an artifact).
+
+**Verdict: the coordination/mean-field attribution for the 5.3x/2.3x Tc miss is FALSE.** Coordination
+(open-boundary band broadening of the interlayer bond) softens the CHARGE gap but does not deliver a
+comparable softening of the SPIN gap -- if anything the finite clusters modestly stiffen J_eff. The
+5.3x/2.3x miss must be reassigned to physics ``nb3x8_magnetometry``'s isolated-dimer J cannot see: the
+cooperative/first-order structural transition itself, in-plane kagome exchange, or a lattice
+renormalization of t_s directly (not simple coordination broadening). See ``coordination_spin_gap`` /
+``tests/test_nb3x8_gaps_spec.py::test_G8_*`` and specs/BACKLOG.md ("Coordination cannot rescue the
+5.3x Tc overprediction").
 """
 from __future__ import annotations
 
@@ -110,21 +135,10 @@ def _cluster_charge_gap(h1: np.ndarray, eri: np.ndarray, *, max_cycle: int = 100
     return E[L + 1] + E[L - 1] - 2 * E[L]
 
 
-def coordination_gap(U0: float, ts: float, Us: float, tw: float, Uw: float, z: int,
-                      *, max_cycle: int = 1000) -> float:
-    """Charge gap of a central dimer with ``z`` out-of-plane weak-link neighbour dimers (FCI).
-
-    A minimal probe of *coordination*: increasing ``z`` restores the band broadening the isolated
-    dimer omits. As ``z`` grows the gap falls toward the Hubbard-I / cluster-DMFT value -- which is
-    why the isolated-cluster ``exact_charge_gap`` OVERESTIMATES the solid gap and the isolated
-    exact-vs-Hubbard-I discrepancy does not translate to the material (see the module docstring and
-    specs/SPEC_nb3x8_gaps.md).
-
-    ``max_cycle`` (default 1000, matching ``fci_energy``'s default) caps the FCI Davidson solver for
-    each of the three charge sectors. Larger z / odd-electron sectors can need more than 1000
-    iterations to converge even when not genuinely degenerate (chem-q9g: Nb3Cl8, z=3, N=9 needs
-    ~4x); raise this rather than catching the ``RuntimeError`` and re-deriving the cluster yourself.
-    """
+def _coordination_cluster(U0: float, ts: float, Us: float, tw: float, Uw: float, z: int):
+    """Central strong dimer + ``z`` out-of-plane weak-link pendant dimers -- the cluster topology
+    shared by :func:`coordination_gap` (charge channel) and :func:`coordination_spin_gap` (spin
+    channel). Returns ``(h1, eri, L)``."""
     L = 2 + 2 * z
     h1 = np.zeros((L, L))
     eri = np.zeros((L, L, L, L))
@@ -140,7 +154,60 @@ def coordination_gap(U0: float, ts: float, Us: float, tw: float, Uw: float, z: i
         a, b = 2 + 2 * k, 3 + 2 * k
         bond(a, b, ts, Us)                           # pendant strong dimer
         bond(0 if k % 2 == 0 else 1, a, tw, Uw)      # weak link to an alternating central end
+    return h1, eri, L
+
+
+def coordination_gap(U0: float, ts: float, Us: float, tw: float, Uw: float, z: int,
+                      *, max_cycle: int = 1000) -> float:
+    """Charge gap of a central dimer with ``z`` out-of-plane weak-link neighbour dimers (FCI).
+
+    A minimal probe of *coordination*: increasing ``z`` restores the band broadening the isolated
+    dimer omits. As ``z`` grows the gap falls toward the Hubbard-I / cluster-DMFT value -- which is
+    why the isolated-cluster ``exact_charge_gap`` OVERESTIMATES the solid gap and the isolated
+    exact-vs-Hubbard-I discrepancy does not translate to the material (see the module docstring and
+    specs/SPEC_nb3x8_gaps.md).
+
+    ``max_cycle`` (default 1000, matching ``fci_energy``'s default) caps the FCI Davidson solver for
+    each of the three charge sectors. Larger z / odd-electron sectors can need more than 1000
+    iterations to converge even when not genuinely degenerate (chem-q9g: Nb3Cl8, z=3, N=9 needs
+    ~4x); raise this rather than catching the ``RuntimeError`` and re-deriving the cluster yourself.
+    """
+    h1, eri, _ = _coordination_cluster(U0, ts, Us, tw, Uw, z)
     return _cluster_charge_gap(h1, eri, max_cycle=max_cycle)
+
+
+def _fci_sector(h1: np.ndarray, eri: np.ndarray, na: int, nb: int, *, max_cycle: int = 2000):
+    """Lowest FCI energy and total spin ``S(S+1)`` in the fixed ``(na, nb)`` sector."""
+    from pyscf import fci
+
+    L = h1.shape[0]
+    solver = fci.direct_spin1.FCI()
+    solver.max_cycle = int(max_cycle)
+    energy, civec = solver.kernel(h1, eri, L, (na, nb))
+    if not solver.converged:
+        raise RuntimeError(f"FCI Davidson did not converge for nelec=({na},{nb}), L={L}")
+    ss, _ = solver.spin_square(civec, L, (na, nb))
+    return float(energy), float(ss)
+
+
+def coordination_spin_gap(U0: float, ts: float, Us: float, tw: float, Uw: float, z: int,
+                           *, max_cycle: int = 2000):
+    """Effective spin gap of the SAME coordination cluster as :func:`coordination_gap`, in the SPIN
+    channel: ``J_eff = E(Sz=1, lowest) - E(Sz=0, lowest)`` at fixed half-filling (FCI).
+
+    This is the identical SSH/coordination machinery run against the spin sector instead of the
+    charge sector, to test whether "coordination/mean-field reduction" (the reduction ``z`` delivers
+    for the charge gap) also reduces the interlayer exchange -- the attribution
+    ``specs/SPEC_nb3x8_magnetometry.md`` section 7 names for the 5.3x/2.3x Tc overprediction.
+
+    Returns ``(J_eff, ss0, ss1)``: ``ss0``/``ss1`` are the Sz=0/Sz=1 lowest states' ``S(S+1)`` --
+    verify ``ss0 ~= 0`` (singlet reference) and ``ss1 ~= 2`` (genuine S=1 triplet, not a higher-S
+    intruder) before trusting ``J_eff`` as "the" triplet gap; see specs/BACKLOG.md."""
+    h1, eri, L = _coordination_cluster(U0, ts, Us, tw, Uw, z)
+    n = L  # half filling
+    e0, ss0 = _fci_sector(h1, eri, n // 2, n // 2, max_cycle=max_cycle)
+    e1, ss1 = _fci_sector(h1, eri, n // 2 + 1, n // 2 - 1, max_cycle=max_cycle)
+    return e1 - e0, ss0, ss1
 
 
 def ssh_chain_gap(U0: float, ts: float, Us: float, tw: float, Uw: float, n_dimers: int,
@@ -270,3 +337,21 @@ if __name__ == "__main__":
           "isolated\n'~29% error' is an artifact of neglecting broadening -- it does NOT imply the "
           "paper's gaps are wrong;\nif anything it vindicates the cluster-DMFT/Hubbard-I approach. "
           "(The 4-site 'bath bound' was too\noptimistic: it sampled only the nearest neighbour.)")
+
+    print("\n*** chem-g78: does coordination rescue the Nb3X8 Tc overprediction? (spin channel) ***")
+    print("Nb3Cl8: the IDENTICAL coordination machinery, spin channel (J_eff) vs charge channel (gap):")
+    cl = NB3X8_LT_BULK_5P["Nb3Cl8"]
+    print(f"{'z':>3} {'J_eff (meV)':>12} {'<S^2> Sz=0/1':>14} {'charge gap (meV)':>17}")
+    j_by_z = {}
+    for z in (0, 1, 2, 3):
+        j_eff, ss0, ss1 = coordination_spin_gap(*cl, z)
+        j_by_z[z] = j_eff
+        cgap = coordination_gap(*cl, z, max_cycle=2000)
+        print(f"{z:>3} {j_eff:12.2f} {f'{ss0:.3f}/{ss1:.3f}':>14} {cgap:17.1f}")
+    j0, j3 = j_by_z[0], j_by_z[3]
+    print(f"J_eff at z=3 ({j3:.1f} meV) vs the J0/3 = {j0 / 3:.1f} meV rescue threshold: "
+          f"{'RESCUED' if j3 <= j0 / 3 else 'NOT rescued -- attribution FALSE'}.")
+    print("Charge-channel control on the same clusters drops monotonically (coordination softens the "
+          "charge\ngap as designed); the spin channel does not -- it oscillates and is largest, not "
+          "smallest, at z=3.\nVerdict: coordination/mean-field reduction does NOT explain the "
+          "5.3x/2.3x Tc overprediction;\nsee the module docstring and specs/BACKLOG.md.")

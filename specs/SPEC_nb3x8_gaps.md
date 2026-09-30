@@ -91,6 +91,18 @@ all 10 dimer-cluster parameter sets (`NB3X8_CLUSTERS`).
 > broke on the extended dataset — G4 — which is why the robust claim is material-level, not a scaling
 > law.)
 
+- **G8 — the SAME coordination machinery, spin channel (chem-g78, added after close).**
+  `SPEC_nb3x8_magnetometry.md` §7 names coordination/mean-field reduction as the likely explanation
+  for the 5.3×/2.3× Tc overprediction of `nb3x8_magnetometry`'s isolated-dimer J. `coordination_gap`'s
+  cluster topology, run in the spin channel (`coordination_spin_gap`: J_eff = E(Sz=1 lowest) −
+  E(Sz=0 lowest) at half-filling) instead of the charge channel, on Nb₃Cl₈ at L=4,6,8 (z=1,2,3):
+  machinery anchor (z=0 reduces to the exact closed-form dimer J to `<1e-6` meV); every Sz=0/Sz=1
+  lowest state is a clean singlet/triplet (`⟨S²⟩ = 0.000/2.000`, no higher-S intruder); J_eff never
+  drops below `J₀/3` anywhere in `L≤8` (66.20→71.08→66.55→71.12 meV — it rises, it does not fall);
+  the charge-channel control on the identical clusters *does* drop monotonically by 33.5% at z=3,
+  confirming the machinery itself is not broken. **Verdict: the coordination/mean-field attribution
+  is FALSE** — recorded in the module docstring and `specs/BACKLOG.md`, not merely deferred.
+
 ## 6. Implementation plan (test-first)
 
 1. Write `tests/test_nb3x8_gaps_spec.py` encoding G1–G4 (initially failing — module absent).
@@ -122,8 +134,12 @@ all 10 dimer-cluster parameter sets (`NB3X8_CLUSTERS`).
 ## 9. Deliverables
 
 - `nb3x8_gaps.py` — `dimer_cluster_integrals`, `exact_charge_gap`, `hubbard_i_gap`,
-  `four_site_exact_gap` (bath bound), `NB3X8_CLUSTERS`, `NB3X8_LT_BULK`, `NB3X8_LT_BULK_5P`.
-- `tests/test_nb3x8_gaps_spec.py` — gates G1–G5 (G5 = the bath bound).
+  `four_site_exact_gap` (bath bound), `coordination_gap`/`coordination_spin_gap` (charge/spin
+  coordination scans, sharing the `_coordination_cluster` topology), `NB3X8_CLUSTERS`,
+  `NB3X8_LT_BULK`, `NB3X8_LT_BULK_5P`.
+- `tests/test_nb3x8_gaps_spec.py` — gates G1–G8 (G5 = the bath bound; G6 = the charge-channel
+  coordination correction; G7 = the `max_cycle` override regression, chem-q9g; G8 = the spin-channel
+  negative result, chem-g78).
 - Results summary (the 10-cluster exact-gap table, the robust iodides-worst finding, the falsified
   single-ratio law, and the bath bound, with the §2/§7 caveats front and centre) in the PR
   description — packaged to be sendable to the corresponding author.
