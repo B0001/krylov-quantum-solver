@@ -392,18 +392,36 @@ hypothesis whose death is informative is worth more here than a safe one.
   a stated convention — the S_z=1 lowest state is the lowest *triplet* only absent a higher-S intruder.
   Open-boundary end effects likely explain the L=4 bump, so gate "no reduction ≥3×", not an extrapolant.
 
-- [ ] **The parameter-free cluster optical gap hits Nb₃Cl₈'s measured absorption edge — and provably
-  cannot explain its thermal collapse** — *Claim:* `odmd_optical.dimer_optical_gap` on LT cRPA
-  parameters gives 1117.5 meV vs a measured ≈1.10 eV at 100 K, a 1.6% parameter-free agreement. Two
-  falsifiable consequences: the family trend (model spread Cl→I 44% vs measured ~12%) and the phase
-  test — measurement collapses to ≈0.63 eV at 300 K while the model's HT parameters give 1065 meV
-  (−5%), and `coordination_gap` bottoms out ~240 meV short. *Check (killable):* dies if the LT Cl
-  prediction misses 1.10 eV by >30% (the selection-rule picture fails on a real solid), or if
-  `coordination_gap` at z=3 reaches ≤700 meV (broadening explains the collapse and no thermal-melting
-  mechanism is needed). *Cost:* cheap. *Caveat:* the 1.6% hit is **partly fortuitous** — ω_opt is a
-  cluster excitation with P as a dipole stand-in, and a measured onset folds in dispersion and
-  excitonic binding; quote it as scale agreement and let the family/phase tests carry the
-  falsifiability. Partially blocked: no measured Nb₃Br₈ optical gap located — that leg may have to drop.
+- [x] **CLOSED 2026-09-30 (chem-a04) — re-verified, both kill conditions survive; the scale-agreement
+  caveat still applies up front.** *Original claim:* `odmd_optical.dimer_optical_gap` on LT cRPA
+  parameters gives 1117.5 meV vs a measured ≈1.10 eV at 100 K, a 1.6% parameter-free agreement, with
+  two falsifiable consequences — the family trend (model spread Cl→I 44% vs measured ~12%) and the
+  phase test (measurement collapses to ≈0.63 eV at 300 K while the model's HT parameters give
+  1065 meV (−5%), and `coordination_gap` bottoms out ~240 meV short). *Result:* all three legs
+  reproduced from the checked-in code (`nb3x8_optical_phase_collapse_check.py`, runnable
+  standalone): **(1) LT Cl base** —
+  `dimer_optical_gap(**NB3X8_LT_BULK["Nb3Cl8"])` = 1117.5 meV vs quoted measured 1100 meV (1.10 eV),
+  rel. err +1.59% — well inside the 30% kill threshold, survives. **(2) Family trend** — model
+  Cl→I spread (Cl−I)/I = 44.3% (Nb3Cl8 1117.5 meV, Nb3Br8 963.7 meV, Nb3I8 774.4 meV, LT bulk),
+  matching the quoted 44% to within rounding; Nb3Br8 leg stays DROPPED from any measured comparison —
+  still no measured Nb3Br8 optical gap located. **(3) Phase collapse** — the model's own HT
+  parameters (`NB3X8_CLUSTERS["Cl HT-bulk"]`) give 1065.3 meV, a 4.67% drop from LT, vs a quoted
+  measured 42.7% drop (1100→630 meV) — confirms the optical-gap formula alone cannot explain the
+  300 K collapse. `coordination_gap` at z=3 (Nb3Cl8, robust FCI settings) = **872.9 meV**, short of
+  630 meV by 242.9 meV (matches the quoted "~240 meV short") and stays well above the 700 meV kill
+  threshold — coordination/broadening alone does **not** explain the collapse either, so both kill
+  checks survive and the thermal-melting-mechanism claim is not falsified by these two probes.
+  *Caveat carried forward unchanged:* the LT-Cl 1.6%-scale hit is partly fortuitous (P is a dipole
+  stand-in; a measured onset folds in dispersion/exciton binding the cluster model omits) — quote it
+  as scale agreement, not prediction; legs 2–3 carry the actual falsifiability.
+  *What was NOT re-verified:* the measured reference numbers themselves (1.10 eV, ≈0.63 eV, ~12%
+  family spread) — this sandbox has no working internet access this session, so they are taken as
+  given from this entry's own prior citation, not re-sourced. *Convergence note (filed separately,
+  chem-q9g):* the public `coordination_gap(z=3)` call raises `RuntimeError` for Nb3Cl8 under the
+  module's default `max_cycle=1000` (an iteration-cap artifact, not near-degeneracy — the
+  non-converged energy already agreed with the converged one to 6 decimals); this check reproduces
+  the number with `max_cycle=4000, conv_tol=1e-10` instead. Full reproduction commands and output:
+  `sandbox-handoffs/chem-a04.md`.
 
 - [x] **CLOSED 2026-09-30 (chem-1gr) — Magnetocaloric S(T,B): the named follow-up, closed as a
   quantified negative, on both counts.** `SPEC_nb3x8_thermo` §7 and `SPEC_nb3x8_metamagnetism` §7
