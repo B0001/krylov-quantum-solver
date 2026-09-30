@@ -423,20 +423,23 @@ hypothesis whose death is informative is worth more here than a safe one.
   *Cost:* cheap; ≤6 qubits (`pauli_decompose` is exponential). *Caveat:* an upper envelope, so a short
   t-sweep can sit well under it and look like a miss — sweep enough t to hit near-worst-case alignment.
 
-- [ ] **The identity term inflates the FT λ too — the third strike in an arc that has self-corrected
-  twice** — *Claim:* `SPEC_shift_both_sides` and `SPEC_lambda_meas_identity` caught the identity term
-  corrupting the *near-term* 1-norm; it is untouched on the **FT side** — `build_walk_operator` loads
-  every `pauli_decompose` term into PREPARE, identity included, so λ_1norm carries 30–49% dead constant
-  mass *(scout probe: |c_I|/λ = 30.1% H₂, 44.2% LiH, 49.3% N₂(3,4), 45.6% H₂O(3,4))*. A constant is
-  free — subtract it, add it back classically. Combined with the entry above, the honest driver is
-  λ_eff = √(λ² − E₀²), with an optimal shift c*. *Check (killable):* the real falsifier is (c) — feed
-  the re-centered Hamiltonian through `run_qpe` and confirm the realized error at fixed t drops by the
-  predicted factor; dies if it does not. *Cost:* cheap. *Caveat:* spectral centering is **standard
-  practice** in the qubitization literature — this is a reproduction applied as an audit of this repo's
-  own path, label it as such. The scout also found `df_lambda` losing to identity-excluded naive λ on
-  all four systems, apparently flipping `SPEC_scdf_lambda` G1(b) — but DF's rotated-number-operator LCU
-  absorbs constant mass implicitly, so the two λ's may simply **not be comparable**, and "G1(b) is a
-  vacuous check" is the likelier (and still valuable) finding.
+- [x] **The identity term inflates the FT λ too — the third strike in an arc that has self-corrected
+  twice** — DONE, see `specs/SPEC_ft_identity_shift.md` + `tests/test_ft_identity_shift_spec.py`
+  (gates G1–G5, 17/17 green). Findings: (1) identity fraction reconfirmed material — |c_I|/λ = 30.1%
+  H₂, 44.2% LiH, 48.5% N₂(3,4), 45.6% H₂O(3,4) (G1); (2) the drop is free and exact — a fresh walk
+  operator built from the identity-free terms plus a classical `+c_I` correction reproduces the full
+  original spectrum to <1e-8 Ha on H₂/LiH (G2); (3) the real falsifier survives **at the envelope
+  level, not the point-estimate level** — the bead's proposed `λ_eff = √(λ²−E₀²)` closed form for a
+  literal *fixed-t* point-estimate ratio is **killed** (measured ratio swings >5× across a t-sweep on
+  every system — a dyadic-grid staircase artifact, same phenomenon the π·sin θ₀ entry above names),
+  but the honest restatement — recentering needs no more (and on several systems strictly fewer)
+  phase bits to *guarantee* a fixed target ε via the already-validated bound
+  `err(t) ≤ 3λ/2^t` (`SPEC_qpe_readout_laws` G2) — is real, non-noisy, and confirmed by actually
+  running `run_qpe` end to end at each variant's own computed budget (G3); (4) `df_lambda` vs
+  identity-excluded naive λ resolved as **NOT-COMPARABLE-AND-VACUOUS, not a flip**: `SPEC_scdf_lambda`
+  G1(b) (identity-*included* comparison) still holds on every system, and `df_lambda` is a provably
+  pure function of `(h1, eri)` with no lever for identity-exclusion at all, so the identity-excluded
+  comparison it loses to is a category error, not a corrected bound (G5).
 
 - [ ] **The 62× THC λ penalty may be a collocation artifact — and the fix already lives in the repo**
   — *Claim:* `SPEC_thc_lambda` locks λ_THC ≈ 62× λ_DF as a deliberate finding and puts optimized
