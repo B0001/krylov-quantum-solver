@@ -19,9 +19,11 @@ from nb3x8_magnetometry import (
     EXPERIMENT,
     MEV_PER_K,
     chi_max_temperature,
+    chi_ht_curie_ratio,
     overprediction_factor,
     predicted_transition_K,
     theta_over_measured,
+    z_eff_ht,
 )
 from nb3x8_susceptibility import curie_weiss_theta, ionic_singlet_energy, susceptibility
 from odmd_spin import dimer_exchange_analytic
@@ -68,14 +70,22 @@ def test_G3_the_finding_overprediction_and_two_couplings():
     """DEFINITION OF DONE (the finding). (a) The isolated dimer OVERPREDICTS Tc for both halides
     (factor > 2), and the overprediction WEAKENS monotonically Cl -> Br (the cluster -> lattice
     renormalization). (b) The interlayer J does NOT set theta_W: -J/4 overshoots the measured
-    theta_W of Nb3Cl8 by > 5x -- interlayer J sets Tc, a separate weak in-plane exchange sets
-    theta_W."""
+    theta_W of Nb3Cl8 by > 3x -- interlayer J sets Tc, a separate weak in-plane exchange sets
+    theta_W.
+
+    Threshold note (bd chem-jiy, 2026-09-30): this gate originally asserted > 5x against a
+    theta_W = -13.1 K that does not appear anywhere in the cited primary source (Sheckelton et al.,
+    arXiv:1701.05528) -- it reached this repo via an unverified search-engine summary. The
+    primary-source-verified value is theta_W = -51.2 K (p.4, "T > 140 K" fit), which gives a real
+    but smaller ratio of 3.75x (see EXPERIMENT and test_G5 below). The bound is corrected here to
+    match the verified number, not loosened to fit a convenient result -- see
+    specs/SPEC_nb3x8_magnetometry.md and specs/BACKLOG.md."""
     over_cl = overprediction_factor("Nb3Cl8")
     over_br = overprediction_factor("Nb3Br8")
     assert over_cl > 2.0 and over_br > 2.0, (over_cl, over_br)
     assert over_cl > over_br, (over_cl, over_br)                     # weakens down the series
     # the two-coupling separation: -J/4 is far from the measured theta_W
-    assert abs(theta_over_measured("Nb3Cl8")) > 5.0, theta_over_measured("Nb3Cl8")
+    assert abs(theta_over_measured("Nb3Cl8")) > 3.0, theta_over_measured("Nb3Cl8")
 
 
 def test_G4_honest_boundary_iodide_excluded_and_scale_only():
@@ -91,3 +101,36 @@ def test_G4_honest_boundary_iodide_excluded_and_scale_only():
         assert predK > prevK, (name, predK, prevK)                  # monotone in J
         prevK = predK
     assert MEV_PER_K == 0.0861733
+
+
+def test_G5_phase_correction_does_not_survive_primary_source_verification():
+    """bd chem-jiy -- REFINEMENT of G3(b). specs/BACKLOG.md's Nb3X8 entry conjectured that the
+    Curie-Weiss miss (interlayer J vs measured theta_W) is a phase-assignment artifact: theta_W is
+    fitted in the HT (undimerized) phase, but this module compared it to a LT-phase J; swapping in
+    the HT-phase J (nb3x8_gaps.NB3X8_HT_BULK, already unused) was claimed to invert the miss to a
+    clean mean-field z_eff = 4.1 (theta = -z*J/4), using theta_W = -13.1 K.
+
+    Primary-source check (arXiv:1701.05528 p.4): "an analysis of the inverse susceptibility data
+    for T > 140 K yields a Curie constant C = 0.484 emu K mol^-1 Oe^-1 (p_eff = 1.97, consistent
+    with S_eff = 1/2) and a Weiss temperature of theta = -51.2 K." C and mu_eff were correctly
+    quoted; theta_W = -13.1 K does NOT appear anywhere in the paper.
+
+    Killable checks (bd chem-jiy, pre-registered): dies if z_eff is unphysical (<1 or >12 for a
+    layered stack) or if chi_HT(200K) misses the measured Curie constant by >2x -- either restores
+    the original (now-corrected) miss as real, not a phase artifact.
+
+    RESULT: z_eff_ht (recomputed with the VERIFIED theta_W = -51.2 K) is 16.1 -- OUTSIDE the [1,12]
+    bound. The phase-correction hypothesis is KILLED: it was an artifact of the wrong, unverified
+    -13.1 K datum, not a real phase-assignment fix. chi_HT(200K) alone is within the 2x sanity
+    bound (does not independently kill), but the z_eff bound is sufficient and z_eff is reported as
+    an extracted diagnostic, never a free-standing prediction."""
+    z = z_eff_ht("Nb3Cl8")
+    assert EXPERIMENT["Nb3Cl8"]["theta_K"] == -51.2, "theta_W must be the verified primary-source value"
+    assert EXPERIMENT["Nb3Cl8"]["C_emu"] == 0.484 and EXPERIMENT["Nb3Cl8"]["mu_eff"] == 1.97
+    assert not (1.0 <= z <= 12.0), z                       # UNPHYSICAL: kills the phase-artifact claim
+    assert 10.0 < z < 20.0, z                               # pins the actual (unphysical) value found
+    chi_ratio = chi_ht_curie_ratio("Nb3Cl8")
+    assert 0.5 < chi_ratio < 2.0, chi_ratio                 # this check alone does not kill
+    # the verified, corrected miss (LT J vs the verified theta_W) is real but smaller than the
+    # originally-published, uncited 15x
+    assert 3.0 < abs(theta_over_measured("Nb3Cl8")) < 5.0, theta_over_measured("Nb3Cl8")

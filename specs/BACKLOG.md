@@ -355,18 +355,28 @@ hypothesis whose death is informative is worth more here than a safe one.
 
 ### Nb₃X₈ materials line
 
-- [ ] **The 15× Curie–Weiss miss is a phase-assignment artifact, not missing in-plane exchange** —
-  *Claim:* Sheckelton's θ_W = −13.1 K is fitted above 90 K, in the **undimerized high-temperature**
-  phase, but `nb3x8_magnetometry.py:42` imports only `NB3X8_LT_BULK` — so this repo's own published
-  G3(b) finding compares a low-temperature J to a high-temperature measurement. Using the HT
-  parameters already sitting unused in `NB3X8_CLUSTERS`, the miss inverts to a 4.1× *under*prediction,
-  leaving a clean mean-field statement θ = −z·J/4 ⟹ z_eff = 4.1. *Check (killable):* dies if |−J_HT/4|
-  is not within 10× of −13.1 K, if z_eff is unphysical (<1 or >12 for a layered stack), or if absolute
-  χ_HT(200 K) misses the measured Curie constant by >2× — any of which restores the published
-  conclusion. *Cost:* cheap. *Caveat:* z_eff is **extracted, not predicted** — gate on bounds or it is
-  a one-parameter fit. The experimental C = 0.484 / μ_eff = 1.97 μ_B reached the scout via a search
-  summary; **verify against the primary source before gating.** This corrects a conclusion this repo
-  already shipped — frame it as a refinement of G3(b), not a new result.
+- [x] **CLOSED 2026-09-28→2026-09-30 (chem-jiy) — the phase-correction hypothesis is KILLED, but
+  for a different reason than expected: the θ_W it was built on was never in the primary source.**
+  *Original claim:* Sheckelton's θ_W = −13.1 K is fitted above 90 K, in the **undimerized
+  high-temperature** phase, but `nb3x8_magnetometry.py:42` imported only `NB3X8_LT_BULK` — so this
+  repo's own published G3(b) finding compared a low-temperature J to a high-temperature measurement.
+  Using the HT parameters already sitting unused in `NB3X8_CLUSTERS`, the miss was conjectured to
+  invert to a 4.1× *under*prediction, leaving a clean mean-field statement θ = −z·J/4 ⟹ z_eff = 4.1.
+  **Primary-source read** (`arXiv:1701.05528` p.4, done this session — not a search summary): *"an
+  analysis of the inverse susceptibility data for T > 140 K yields a Curie constant C = 0.484
+  emu·K·mol⁻¹·Oe⁻¹ (p_eff = 1.97, consistent with S_eff = 1/2) and a Weiss temperature of
+  θ = −51.2 K."* C and μ_eff were correctly quoted; **θ_W = −13.1 K does not appear anywhere in the
+  paper** — it reached this repo via an unverified search-engine summary, exactly the risk the
+  original entry's caveat flagged. Recomputing z_eff with the *verified* θ_W = −51.2 K:
+  `z_eff_ht("Nb3Cl8")` = 16.1, **outside** the pre-registered [1, 12] physical bound for a layered
+  stack — the phase-correction hypothesis is killed by its own pre-registered check. χ_HT(200 K) is
+  within the 2× sanity bound (1.53×) and would not, alone, have killed it. **Net result:** the
+  original G3(b) 15×/−13.1 K headline was itself wrong (not a phase artifact) — the verified miss is
+  a real but smaller 3.75× (−192 K vs −51.2 K, LT J). Implemented as G5 in
+  `tests/test_nb3x8_magnetometry_spec.py`; `nb3x8_gaps.NB3X8_HT_BULK` factors out the HT parameters;
+  G3(b)'s threshold corrected from >5× to >3× to match the verified number (not loosened after the
+  fact — it now encodes the *verified* miss, which was always the target, not a threshold picked to
+  pass). → [`SPEC_nb3x8_magnetometry.md`](SPEC_nb3x8_magnetometry.md) §5 G5.
 
 - [ ] **Coordination cannot rescue the 5.3× Tc overprediction: the spin gap goes the wrong way** —
   *Claim:* `SPEC_nb3x8_magnetometry` §7 names coordination/mean-field reduction as the follow-up and
@@ -821,15 +831,20 @@ hypothesis whose death is informative is worth more here than a safe one.
   observed Cl<Br ordering within an order of magnitude (G2). **THE FINDING (G3, DoD):** the isolated
   dimer **overpredicts Tc by 5.3× (Cl) / 2.3× (Br)** — an overcoupling that *weakens monotonically
   down the series*, the isolated-cluster→cooperative-lattice renormalization; and it exposes **two
-  distinct couplings** — −J/4 = −192 K overshoots the measured Curie–Weiss θ_W = −13.1 K by 15×, so
+  distinct couplings** — −J/4 = −192 K overshoots the measured Curie–Weiss θ_W by 3.75×, so
   the interlayer J sets Tc while a separate weak *in-plane* exchange (absent from the bilayer dimer)
   sets θ_W. Numbers the cluster papers never reported. **Boundary (G4):** Nb₃I₈ has no
   interlayer-singlet transition (moment-retaining ground state) — excluded; the predictor sets
   *scales*, not a first-order cooperative transition. 100% primitive reuse (`susceptibility`,
-  `dimer_exchange_analytic`) + a cited experimental table. Gates G1–G4 in
+  `dimer_exchange_analytic`) + a cited experimental table. Gates G1–G5 in
   `tests/test_nb3x8_magnetometry_spec.py`; `nb3x8_magnetometry.py`.
   → [`SPEC_nb3x8_magnetometry.md`](SPEC_nb3x8_magnetometry.md) (comparison vs measured references,
-  not a fit; isolated bilayer dimer, density-density only).
+  not a fit; isolated bilayer dimer, density-density only). **Correction (chem-jiy, 2026-09-30):**
+  θ_W was originally quoted as −13.1 K (15× miss); that number is not in the cited primary source
+  (verified via direct primary-source read) — the verified θ_W is −51.2 K (`arXiv:1701.05528` p.4,
+  T > 140 K fit), giving the 3.75× above. A follow-on hypothesis that this was a phase-assignment
+  artifact was tested and killed (G5) using the verified number — see the Nb₃X₈ materials line entry
+  below.
 - [x] **Be₂ toward experiment** — *Claim:* core-valence correlation + a cc-pVXZ→CBS extrapolation
   moves the well depth from ~305 cm⁻¹ toward the experimental 929.7. **THE FINDING: the original
   gate does not hold.** CASSCF orbital optimization tried first and rejected — numerically unstable

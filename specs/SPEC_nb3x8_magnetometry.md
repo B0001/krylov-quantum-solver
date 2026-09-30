@@ -1,6 +1,8 @@
 # SPEC: Nb3X8 interlayer exchange vs measured magnetometry — a parameter-free prediction
 
-**Status:** IMPLEMENTED — gates G1–G4 green. The definition-of-done gate (G3) records the finding.
+**Status:** IMPLEMENTED — gates G1–G5 green. The definition-of-done gate (G3) records the finding;
+G5 (bd chem-jiy) records a primary-source correction to the θ_W input and kills a proposed
+phase-assignment correction to it.
 
 ---
 
@@ -44,9 +46,17 @@ compare to the measured Tc; compare θ_CW = −J/4 to the measured Curie–Weiss
 
 | system | J (meV) | pred. χ-max (K) | obs. Tc (K) | overpred. | −J/4 (K) vs obs. θ_W |
 |--------|--------:|----------------:|------------:|----------:|---------------------:|
-| Nb₃Cl₈ | 66.2 | 479 | 90 | 5.3× | −192 vs −13.1 (15×) |
+| Nb₃Cl₈ | 66.2 | 479 | 90 | 5.3× | −192 vs −51.2 (3.75×) |
 | Nb₃Br₈ | 119.1 | 862 | 382 | 2.3× | — |
 | Nb₃I₈ | 245.9 | 1756 | (no transition) | — | — |
+
+**Correction (bd chem-jiy, 2026-09-30):** θ_W was originally quoted as −13.1 K (15× miss). That
+number does not appear anywhere in the cited primary source and reached this repo via an unverified
+search-engine summary. A primary-source read of `arXiv:1701.05528` p.4 gives: *"an analysis of the
+inverse susceptibility data for T > 140 K yields a Curie constant C = 0.484 emu·K·mol⁻¹·Oe⁻¹
+(p_eff = 1.97, consistent with S_eff = 1/2) and a Weiss temperature of θ = −51.2 K."* C and μ_eff
+were already correctly quoted; only θ_W was wrong. The verified miss is 3.75×, not 15× — real, but
+smaller than originally published. See G5 below.
 
 ## 4. Public interface
 
@@ -80,6 +90,17 @@ nb3x8_magnetometry (CLI)                                          # family table
 - **G4 — honest boundary.** Nb₃I₈ (no interlayer-singlet transition) is excluded from the
   experimental set; the predictor is a positive, monotone-in-J *scale* estimator, never a claim to
   reproduce a first-order cooperative transition.
+- **G5 — the phase-correction hypothesis, tested and killed (bd chem-jiy).**
+  `specs/BACKLOG.md`'s Nb₃X₈ entry conjectured that the G3(b) miss is a phase-assignment artifact:
+  θ_W is fitted in the HT (undimerized) phase, but G3(b) compared it to a LT-phase J; swapping in
+  the HT-phase J (`nb3x8_gaps.NB3X8_HT_BULK`, Table IV, already unused) was claimed to invert the
+  miss to a clean mean-field z_eff = 4.1 (θ = −z·J/4), using the (wrong) θ_W = −13.1 K.
+  Pre-registered kill conditions: z_eff unphysical (<1 or >12 for a layered stack), or χ_HT(200 K)
+  misses the verified Curie constant by >2×. Recomputed with the **verified** θ_W = −51.2 K:
+  `z_eff_ht("Nb3Cl8")` = 16.1 — **outside** the [1, 12] bound. The hypothesis is **killed**: it was
+  an artifact of the wrong, unverified −13.1 K datum, not a real phase-assignment fix. (χ_HT(200 K)
+  alone is within the 2× sanity bound — 1.53× — so it alone would not have killed the hypothesis;
+  the z_eff bound is what kills it.)
 
 ## 6. Implementation plan (test-first)
 
@@ -100,14 +121,23 @@ nb3x8_magnetometry (CLI)                                          # family table
 - **R1 — experimental provenance.** The measured Tc/θ_W are quoted from the cited primary sources
   (Sheckelton 2017, Haraguchi 2017); Nb₃Br₈'s ~382 K is the bulk value. The gates use bounded
   ranges (order-of-magnitude scale, factor > 2 overprediction), not exact hits, so they are robust
-  to modest revision of the experimental numbers while still being falsifiable.
+  to modest revision of the experimental numbers while still being falsifiable. **This risk was
+  realized**: θ_W = −13.1 K (an earlier version of this spec/module) was not actually in the primary
+  source — see G5. Fixed 2026-09-30 by reading `arXiv:1701.05528` p.4 directly; C and μ_eff were
+  already correct.
+- **R2 — z_eff is extracted, not predicted (G5).** `z_eff_ht` solves θ = −z·J/4 for z given a
+  measured θ_W — it is a diagnostic, gated only against a physical bound (1–12), never reported as
+  an independent prediction. A z_eff that happens to land inside the bound would not, by itself,
+  validate the phase-assignment hypothesis; it would only fail to falsify it.
 - The overprediction is expected physics (a single dimer over-counts the coupling relative to the
   cooperative lattice transition), reported honestly — the value is the *quantification* and the
   two-coupling separation, not a claim of quantitative agreement.
 
 ## 9. Deliverables
 
-- `nb3x8_magnetometry.py` — predictor + cited experimental table + CLI.
-- `tests/test_nb3x8_magnetometry_spec.py` — gates G1–G4.
+- `nb3x8_magnetometry.py` — predictor + cited experimental table + CLI + `z_eff_ht`/`chi_ht_curie_ratio`.
+- `tests/test_nb3x8_magnetometry_spec.py` — gates G1–G5.
 - `specs/SPEC_nb3x8_magnetometry.md` — this spec.
-- `specs/BACKLOG.md` — entry moved to done with the finding recorded.
+- `specs/BACKLOG.md` — entry moved to done with the finding recorded (chem-jiy: hypothesis killed).
+- `nb3x8_gaps.py` — `NB3X8_HT_BULK` (Cl/Br HT-phase cRPA parameters, Table IV), factored out for
+  reuse (previously only embedded inside `NB3X8_CLUSTERS`).

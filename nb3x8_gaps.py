@@ -62,6 +62,14 @@ NB3X8_LT_BULK = {
     "Nb3I8":  dict(U0=787.0,  t=-218.2, Us=258.5),
 }
 
+# HT (undimerized) bulk parameters, Table IV of arXiv:2501.10320 -- only Cl/Br are tabulated there
+# (F and I are not reported in the HT phase). Used by nb3x8_magnetometry to compare against the
+# Curie-Weiss theta_W, which Sheckelton/Haraguchi fit in this HT phase, not the LT one.
+NB3X8_HT_BULK = {
+    "Nb3Cl8": dict(U0=1401.0, t=-17.11, Us=336.8),
+    "Nb3Br8": dict(U0=1129.1, t=-20.56, Us=276.5),
+}
+
 # All dimer-cluster parameter sets that carry an inter-layer dimer (Tables I & IV; monolayers have no
 # dimer, so are excluded). Keys: <halide> <phase/thickness>. Spans U0/|t| ~ 3.6 (I bulk) to ~800 (F BL).
 NB3X8_CLUSTERS = {
