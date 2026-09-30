@@ -132,3 +132,7 @@ park = ["chem-dfe", "chem-3z8", "chem-80w", "chem-a0y"]
 # (emulated on Apple silicon); see sandbox.Dockerfile. Build it before the first run.
 image = "claude-chem"
 max-parallel = 2
+# Several machines (this laptop, a cloud/phone session) share one queue: claims
+# on origin (refs/claims/<id>) decide who works which bead; bead state syncs via
+# the Dolt remote. The loop pulls before choosing and pushes after each worker.
+shared-queue = "origin"
