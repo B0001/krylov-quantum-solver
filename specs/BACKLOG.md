@@ -410,18 +410,27 @@ hypothesis whose death is informative is worth more here than a safe one.
 
 ### Fault-tolerant stack
 
-- [ ] **QPE's precision constant is not a measurement — it is π·sin θ₀, and it is portable** —
+- [x] **QPE's precision constant is not a measurement — it is π·sin θ₀, and it is portable** —
+  `SPEC_qpe_precision_bound` (chem-0ke), gated by `tests/test_qpe_precision_bound_spec.py`.
   *Claim:* `SPEC_qpe_readout_laws` recorded max ratio 2.175 on H₂ CAS(2,2) and explicitly disclaimed
   derivation. It is derivable: `run_qpe` decodes E = λ·cos(2πφ), so the arccos Jacobian plus a
   half-bin dyadic error gives a **bound π·sin θ₀ with θ₀ = arccos(E₀/λ)** — per-system predictable,
   and it explains the staircase (the ratio oscillates as t slides the phase across bin boundaries; the
   envelope is π·sin θ₀). Closes the spec's "beyond H₂ CAS(2,2)" gap and its "constants are
-  measurements, not derived" caveat at once. *Check (killable):* **predict π·sin θ₀ before running**,
-  then sweep t = 4…14 on H₂/LiH CAS(2,2) + N₂ CAS(3,4); dies if measured max ratio *exceeds* the bound
-  anywhere, or if it is loose by >20% on every system (real bound, wrong mechanism). *(scout probe:
-  2.285 vs 2.175, 2.351 vs 2.285, 2.391 vs 2.364 — never exceeded, tightening with sweep length.)*
-  *Cost:* cheap; ≤6 qubits (`pauli_decompose` is exponential). *Caveat:* an upper envelope, so a short
-  t-sweep can sit well under it and look like a miss — sweep enough t to hit near-worst-case alignment.
+  measurements, not derived" caveat at once. *Check (killable):* **predict π·sin θ₀ before running**
+  (`scripts/spec_qpe_precision_bound.py`), then sweep t = 4…14 on H₂/LiH CAS(2,2) + N₂ CAS(3,4); dies
+  if measured max ratio *exceeds* the bound anywhere, or if it is loose by >20% on every system (real
+  bound, wrong mechanism). **CONFIRMED, pre-registered (not fitted after):** predicted bounds
+  2.285077 (H₂), 2.351497 (LiH), 2.396444 (N₂); measured max ratios over t=4..14 came in at 2.175167
+  (H₂, 95.2% of bound), 2.284570 (LiH, 97.2%), 2.303179 (N₂, 96.1%) — never exceeded on any system,
+  and tight to within 5% on all three (comfortably past the ≤20%-on-at-least-one-system bar). Note the
+  earlier scout-probe numbers logged in this entry's history ("2.285 vs 2.175, 2.351 vs 2.285, 2.391
+  vs 2.364") are close to but not identical with this closure's pre-registered `π·sin θ₀` values —
+  they predate the pre-registration discipline applied here and were not reproduced as part of this
+  closure; treat this entry's own numbers above as the checked ones.
+  *Cost:* cheap; ≤6 qubits (`pauli_decompose` is exponential). *Caveat:* an upper envelope (first-order
+  geometric argument, not a worst-case proof), tested on 3 systems, all STO-3G, all ≤6 qubits, all near
+  equilibrium geometry — generalization beyond that is not tested (`SPEC_qpe_precision_bound` R1-R3).
 
 - [x] **The identity term inflates the FT λ too — the third strike in an arc that has self-corrected
   twice** — DONE, see `specs/SPEC_ft_identity_shift.md` + `tests/test_ft_identity_shift_spec.py`
