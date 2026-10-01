@@ -450,20 +450,25 @@ hypothesis whose death is informative is worth more here than a safe one.
   pure function of `(h1, eri)` with no lever for identity-exclusion at all, so the identity-excluded
   comparison it loses to is a category error, not a corrected bound (G5).
 
-- [ ] **The 62× THC λ penalty may be a collocation artifact — and the fix already lives in the repo**
-  — *Claim:* `SPEC_thc_lambda` locks λ_THC ≈ 62× λ_DF as a deliberate finding and puts optimized
-  collocation out of scope as "research-grade". But `lambda_ladder.fit_thc` **is** a nonlinear
-  Levenberg–Marquardt THC fit that predates that spec — it has simply never been scored with the native
-  `thc_lambda`, only with brute-force Pauli λ, which caps it at ≲4 orbitals and conflates two 1-norm
-  conventions. *Check (killable):* at matched rank and matched reconstruction error (<1e-6), compare
-  random vs structured vs nonlinear collocation against `df_lambda`; dies if nonlinear is not ≥5× below
-  random (the penalty is deeper than "unoptimized points"). Opposite kill: if it *beats* `df_lambda`,
-  G4 must be revised — which that spec explicitly invites. *Cost:* medium (~600 LM parameters at
-  norb=7; cap the CI gate at norb ≤ 6). *Caveat:* **I half-expect the ≥5× half to be killed** —
-  `fit_thc` minimizes *reconstruction error*, not λ, so it is λ-blind and may land anywhere. That is
-  arguably the sharper finding either way: an error-optimal THC is not a λ-optimal THC, and the
-  literature's ISDF advantage comes from choosing points for physical locality. `fit_thc` is stochastic
-  — pin the seed, never claim global optimality.
+- [x] **The 62× THC λ penalty may be a collocation artifact — and the fix already lives in the
+  repo** (chem-5oj) — **DONE: it is NOT a clean fix.** `lambda_ladder.fit_thc`'s nonlinear
+  Levenberg–Marquardt THC was scored with the native `thc_lambda` for the first time (previously
+  only brute-force Pauli λ, ≲4 orbitals). **Neither kill fires cleanly.** Kill A ("penalty runs
+  deeper than unoptimized points") does NOT fire — nonlinear collocation lands ≈65–69× below random
+  collocation at every seed and both system sizes checked (LiH norb=6: seeds 0–4, ratios
+  0.0146–0.0166; H₂O norb=7: ratio 0.0158). Kill B ("beats `df_lambda`, G4 must be revised") DOES
+  fire, but only at 4/5 pinned seeds (norb=6) — seed=1 does not beat it (λ=16.63 > df_lambda=15.48)
+  — and every "beats `df_lambda`" instance pairs with a reconstruction error 4–5 orders of magnitude
+  above the `<1e-6` precondition the comparison needs (recon err ≈1.1e-2–2.0e-2 across a 12-seed ×
+  8000-eval sweep, never below 3.8e-3; norb=7 point: 8.95e-2). **Reading:** `fit_thc` is λ-small
+  relative to random but not λ-controlled — its apparent wins over `df_lambda` come from fitting a
+  *different, wrong* Hamiltonian (poor reconstruction), not a validated small-λ reconstruction of
+  the real one, exactly the "error-optimal ≠ λ-optimal" caveat this entry's own text anticipated.
+  `SPEC_thc_lambda` G4 is **not** revised (it is about the *exact* random-collocation THC, which is
+  unchanged and re-confirmed ≈65–68× above `df_lambda` here). The genuine λ advantage still needs
+  ISDF/optimized collocation that preserves reconstruction fidelity — still out of scope. Gates
+  G1–G4 in `tests/test_thc_collocation_spec.py` (4 passed, 66.5s); corroboration sweep in
+  `scripts/thc_collocation_sweep.py`. → [`SPEC_thc_collocation.md`](SPEC_thc_collocation.md).
 
 - [x] **The bridge prices only ⟨H⟩, but the method it represents needs ⟨H²⟩ — and one call site never
   got the identity fix** — **DONE, and the size law was KILLED.** The defect is real: identity

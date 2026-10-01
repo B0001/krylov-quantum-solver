@@ -1,6 +1,13 @@
 # SPEC: Scoring THC collocation strategies with the native qubitization λ (revisits SPEC_thc_lambda G4)
 
-**Status:** DRAFT — awaiting gate numbers from this session's run (chem-5oj).
+**Status:** CLOSED — gates G1–G4 PASS (`tests/test_thc_collocation_spec.py`, 2026-10-01, 4 passed in
+66.5s). **Finding:** Kill A does not fire — `fit_thc`'s nonlinear collocation lands ≈65–69× below
+random collocation in λ, comfortably past the ≥5× bar. Kill B fires at most (not all) seeds —
+nonlinear collocation beats `df_lambda` at 4/5 pinned seeds (norb=6) and at the one norb=7 point
+checked — but §8 R1's caveat holds exactly as anticipated: every "beats `df_lambda`" run also fails
+G2's `<1e-6` reconstruction precondition by 4–5 orders of magnitude, so this is read as "an
+error-optimal THC fit can land anywhere in λ-space, including below `df_lambda`, while reproducing
+the wrong Hamiltonian" — not as "the ISDF/optimized-collocation route is unnecessary." See §9.
 
 > A spec is a *falsifiable hypothesis*, not a contract: if implementation shows a gate is wrong,
 > change the gate and record why (that mismatch is the finding).
@@ -142,10 +149,58 @@ existing defaults).
 - Honest limitation: one small molecule (LiH/STO-3G, norb=6), matching this bead's CI-cost cap; not
   a claim about scaling behavior at dozens of orbitals (where THC's asymptotic case for existing).
 
-## 9. Deliverables
+## 9. Results (chem-5oj, 2026-10-01)
+
+Gate run: `uv run pytest -q tests/test_thc_collocation_spec.py -v` → **4 passed in 66.53s**
+(LiH/STO-3G, norb=6, M=21). `tests/test_thc_lambda_spec.py` (the parent spec's own gates) re-run
+alongside and still **4 passed in 28.07s** — this spec's new code does not regress the anchor.
+
+**CI-gate point (seed=0, restarts=4, max_nfev=4000):** `df_lambda=15.4846`,
+`random_lambda=1001.6941` (recon err 1.4e-13), `fit_thc`: recon err ≈1.6–1.8e-2 (two runs of the
+identical seeded call differed at the 2nd significant figure — BLAS-threaded floating-point
+summation order is not bit-reproducible across runs; the qualitative finding is unaffected),
+`lambda≈14.62–14.65` → `ratio_to_random≈0.0146` (**≈68× below random ⇒ Kill A does not fire**),
+`beats_df=True` (**Kill B fires at this seed**).
+
+**Corroboration sweep, `scripts/thc_collocation_sweep.py`** (not CI-gated; run once this session,
+reported here per §8 R2):
+
+1. *12-seed × 8000-LM-eval (restarts=1) reconstruction-error sweep*, LiH norb=6 M=21, 259.0s total:
+   errors ranged **3.82e-3 to 2.02e-2** (mean 1.27e-2) across all 12 seeds — **every seed stays
+   > 1e-6**, i.e. G2's precondition failure is not a seed=0 fluke.
+2. *5-seed beats_df/ratio_to_random spot check* at CI-gate defaults (restarts=4, max_nfev=4000):
+   `beats_df=True` at seeds 0, 2, 3, 4 and **False at seed 1** (λ=16.63 > df_lambda=15.48) —
+   **4/5, not 5/5**: Kill B is a seed-dependent, reproducible-but-not-universal finding, not a law.
+   `ratio_to_random` stayed in **[0.0146, 0.0166]** (≥5× below random) at all 5 seeds — Kill A never
+   fires in this spot check either.
+3. *Single, not-gated norb=7 (H₂O/STO-3G full space) point*, this bead's cited "~600 LM parameters"
+   case (`n_params=602`, confirmed): `df_lambda=86.96`, `random_lambda=5377.30`, `fit_thc`
+   (175.2s): recon err **8.95e-2** (even further from `<1e-6` than norb=6), `lambda=85.11` →
+   `ratio_to_random=0.0158` (≈63× below random, Kill A does not fire) and `beats_df=True` (Kill B
+   fires) — the pattern holds qualitatively one orbital larger, still with the same reconstruction
+   caveat.
+
+**Reading (per §8 R1):** `fit_thc` is reliably λ-small relative to random collocation (Kill A never
+fires, at any seed or system size checked) but is *not* reliably below `df_lambda` (Kill B fires at
+most but not all seeds), and every instance of "beats `df_lambda`" is paired with a reconstruction
+error 4–5 orders of magnitude above the `<1e-6` bar the comparison was supposed to be matched at.
+The honest finding is not "nonlinear collocation solves the 62× penalty" — it is "an
+error-optimal THC fit is λ-small but not λ-controlled, and its apparent wins over `df_lambda` come
+from fitting a different (wrong) Hamiltonian, not from a validated small-λ reconstruction of the
+real one." This does not revise `SPEC_thc_lambda` G4 (which is about the *exact* random-collocation
+THC, re-confirmed unchanged here at ≈65–68× above `df_lambda`) and does not shorten the path to a
+genuine λ advantage, which still needs ISDF/optimized collocation that preserves reconstruction
+fidelity (out of scope, §7, unchanged).
+
+**Hardware:** `Linux 7843f162c504 7.0.14-linuxkit x86_64`, 8 vCPU, container (no GPU). All of the
+above (gate run + 3-part sweep) took ≈13 CPU-minutes wall time.
+
+## 10. Deliverables
 
 - `thc_factorization.py` — `zeta_from_collocation`, `pair_indicator_collocation`.
 - `lambda_ladder.py` — `fit_thc(..., max_nfev=, return_factors=)`.
 - `tests/test_thc_collocation_spec.py` — gates G1–G4.
+- `scripts/thc_collocation_sweep.py` — the §9 corroboration sweep (12-seed reconstruction-error
+  sweep, 5-seed beats-df spot check, norb=7 report point).
 - Results summary (λ values, ratios, reconstruction errors, the diligent-sweep corroboration) in
-  the PR description / handoff.
+  §9 above and in the PR description / handoff.
