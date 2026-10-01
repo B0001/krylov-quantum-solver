@@ -121,10 +121,10 @@ scipy = [
 ]
 
 [tool.sandbox]
-# Worker loop knobs (verified-sandbox). One container per bead, two at a time:
-# an 8-core/16 GB MacBook Air with workers emulated as amd64 (~1.5 cores each
-# under load) has room for two. Two DMRG/NEVPT2 beads can now share the Docker
-# VM's memory -- drop max-parallel to 1 if one gets OOM-killed. Beads a Linux worker
+# Worker loop knobs (verified-sandbox). One container per bead, one at a time:
+# two in parallel hit server-side rate limiting on 2026-09-30 (every dispatch
+# died in seconds), and one keeps DMRG/NEVPT2 beads from sharing the Docker
+# VM's memory. The laptop has room for 2 if the limits allow. Beads a Linux worker
 # cannot finish are parked, never dispatched:
 #   chem-dfe  macOS-only libomp abort; a Linux container cannot reproduce it
 #   chem-a0y  macOS-only LAPACK ZHEEVD abort; same reason
@@ -134,7 +134,7 @@ park = ["chem-dfe", "chem-3z8", "chem-80w", "chem-a0y"]
 # block2 0.5.3 has no Linux arm64 wheel, so chem's workers run as linux/amd64
 # (emulated on Apple silicon); see sandbox.Dockerfile. Build it before the first run.
 image = "claude-chem"
-max-parallel = 2
+max-parallel = 1
 # Several machines (this laptop, a cloud/phone session) share one queue: claims
 # on origin (refs/claims/<id>) decide who works which bead; bead state syncs via
 # the Dolt remote. The loop pulls before choosing and pushes after each worker.
