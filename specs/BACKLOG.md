@@ -271,19 +271,19 @@ hypothesis whose death is informative is worth more here than a safe one.
 
 ### Method rungs
 
-- [ ] **PDS's accuracy floor is a removable artifact of the uncentered moment frame** — *Claim:*
-  `SPEC_moment_pds` R1 calls "det M → 0 at large K" fundamental and caps gates at K ≤ 4. It is not:
-  the moment matrix inherits the dynamic range of raw electronic-frame moments (∼‖H‖ⁿ). Rebuilding
-  the identical moments in the repo's own centered frame drops cond(M) by 12–18 orders at identical
-  PDS values, unlocking K = 7–8. *Check (killable):* dies if centered ≠ raw by >1e-6 Ha wherever raw
-  cond(M) < 1e10 (not the same functional), or if centering fails to give ≥8 orders of cond reduction
-  at K=8. Sharper second gate: **raw PDS is non-monotone past the K=4 cap** *(scout probe: N₂ CAS(6,6)
-  0.044 mHa at K=6 → 0.049 at K=7, violating G3's monotone-tightening claim; centered stays monotone
-  0.054 → 0.006 → 0.001)*. *Reuse:* `hamiltonian_moments`, `pds_energy`, `device_odmd.centered_frame`
-  — 100% composition, zero new primitives. *Cost:* cheap. *Caveat:* this is numerical hygiene, not
-  physics — it does not change PDS's convergence *rate*, only how far you can ride it before float64
-  quits. μ from dense diagonalization is a validation-scale cheat; gate the sensitivity to a badly
-  estimated μ rather than assuming it away.
+- [x] **CLOSED (chem-70c) — PDS's accuracy floor is mostly an artifact of the uncentered moment
+  frame: SURVIVES, with an amended boundary.** [`SPEC_centered_pds.md`](SPEC_centered_pds.md),
+  `tests/test_centered_pds_spec.py` (6/6 green). At K=8 centering cuts cond(M) by **13.0 / 11.3 /
+  17.4 orders** (H₄ / LiH / N₂ CAS(6,6)), past the 8-order kill line. Centered and raw agree to ≤ 8e-12 Ha
+  wherever raw cond(M) < 1e10. **K=7–8 gates added:** centered PDS is variational and monotone for
+  K=1..8 (N₂ 1.06 µHa, H₄ 0.06 µHa, LiH 0.091 mHa at K=8). **N₂ non-monotonicity reproduced and
+  BLAS-path dependent:** at 1–2 threads, 0.034→0.046 mHa (K=6→7), matching the scout's
+  0.044→0.049; at 4 threads or the default, PDS(7) or PDS(8) falls 1–337 Ha *below* FCI. All
+  six raw runs violated G2 or G3; centered results were identical to 5 decimals. **Amendment:** when K exceeds
+  the number of HF-reachable eigenstates (H₂: 2), M is exactly singular in every frame (2.3-order
+  cut). That half of R1 is fundamental. **μ need not be known:** μ = ⟨H⟩ (free) reproduces centered
+  PDS to < 1e-6 Ha with a 9.5–14-order cut, and δμ ∈ [−5, +2] Ha is harmless on N₂ (δ = +10 Ha
+  breaks it).
 
 - [x] **CLOSED (chem-pc1) — the higher roots of P_K(E) are bounded excited-state estimates, but the
   usefulness claim is KILLED, and a second, sharper finding: the bound itself can break in floating
