@@ -22,10 +22,11 @@ sums colliding Pauli terms in that order, which sets the low coefficient bits, a
 inherits it as its term order, which sets the order the moments accumulate in. The child now builds
 the paths explicitly: the canonical build, the same fermionic terms mapped in 16 **seeded shuffled
 orders**, and the canonical operator with only its **term order** permuted (16 seeds). The claim
-survives on both platforms. Some paths violate raw: shuffles 4 and 15 on Linux/OpenBLAS (−1.33 and
-−5.91 mHa at K=7); on macOS/Accelerate 10 of 16 shuffles and 10 of 16 term orders, by > 1 mHa (worst:
-shuffle 7, −12.00 mHa). The centered margins are the same on every path, to < 1e-8 Ha, and none falls
-below its target.
+survives on both platforms: on Linux over the authoring run's 17 paths, and on macOS over all 33.
+Some paths violate raw: shuffles 4 and 15 on Linux/OpenBLAS (−1.33 and −5.91 mHa at K=7); on
+macOS/Accelerate 10 of 16 shuffles and 10 of 16 term orders, by > 1 mHa (worst: shuffle 7,
+−12.00 mHa). On each platform the centered margins are the same on every path, to < 1e-8 Ha, and none
+falls below its target.
 
 Two findings came out of re-running it on macOS. (1) **The pinned shuffle did not transfer.**
 Shuffle 15 was chosen because it was the worst path on Linux; on macOS it gives **+0.0549 mHa**, so
