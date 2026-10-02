@@ -2,6 +2,8 @@
 
 **Status:** DONE (chem-3z8). PQG bracket **killed** at n=12 (2.49 mHa/atom > 1). PQG+T2 passes where it
 fits on this machine (n ≤ 8, ≤ 0.05 mHa/atom) but cannot be evaluated at n=12 here — see §8.
+chem-7ko evaluated it with SU(2) × reflection adapted T2: **0.126 mHa/atom at n = 12**, so the claim
+survives, given the singlet premise ([SPEC_hchain_t2sym](SPEC_hchain_t2sym.md)).
 
 ---
 
@@ -83,6 +85,11 @@ PQG+T2, certified:
 | 4 | 0.0006 | 88 |
 | 6 | 0.022 | 306 |
 | 8 | 0.050 | 736 |
+| 10 | 0.088 | 500 (SU(2) × reflection adapted; Sz-only 1450) |
+| 12 | **0.126** | 864 (adapted; Sz-only 2520) |
+
+The n = 10 and 12 rows are chem-7ko's ([SPEC_hchain_t2sym](SPEC_hchain_t2sym.md) §6). They are valid
+for a nondegenerate singlet ground state, which converged FCI verifies at both n.
 
 n = 8 took 91 min / 2.4 GB with SCS; its certified bound sits 0.026 mHa below the solver value
 (the T2 dual is less accurate than PQG's). Only the two small T2 Sz-blocks (a†_s a_q a_p with p, q
@@ -93,6 +100,12 @@ two-thirds of the PQG→T2 tightening, not enough to argue n = 12 from.
 monotonically with n (no sign of saturating below 1). T2 is what makes the bracket tight. At n = 12 its
 two large Sz blocks are 2520 × 2520 each, out of reach for SCS on a 16 GB laptop with Sz-only
 blocking. So the pre-registered PQG+T2 claim is **not killed and not confirmed** at n = 12.
+
+**Update (chem-7ko).** Adapting T2 to SU(2) and chain reflection makes n = 12 fit. The certified
+PQG+T2 widths are 0.088 mHa/atom at n = 10 and **0.126 mHa/atom at n = 12**, well under the 1
+mHa/atom kill, so the claim **survives at n = 12**. This relies on the ground state being a
+nondegenerate singlet, which converged FCI verifies (⟨S²⟩ ≈ 1e-14, gap 0.109 Ha at n = 12). Beyond
+n = 12 the premise is unverified.
 
 ## 7. Out of scope
 
@@ -108,7 +121,9 @@ blocking. So the pre-registered PQG+T2 claim is **not killed and not confirmed**
 - **R2 — Upper bounds at n = 14, 16** are variational DMRG energies, i.e. upper bounds only up to
   Davidson tolerance (1e-9 Ha), negligible at mHa resolution. At n = 10 the same path gives FCI + 3e-10.
 - **R3 — T2 at n = 12** needs ≈ 4× smaller blocks (spin + reflection adaptation) or a custom
-  boundary-point solver (as in Mazziotti's and DePrince's v2RDM codes). Follow-up bead filed.
+  boundary-point solver (as in Mazziotti's and DePrince's v2RDM codes). **Resolved by chem-7ko.**
+  Adaptation cut the largest block 2520 → 864, which is 2.9×, not 4×. That was enough: SCS solved
+  n = 12 in 1.37e4 s and 3.24 GB ([SPEC_hchain_t2sym](SPEC_hchain_t2sym.md) §6.3).
 
 ## 9. Deliverables
 

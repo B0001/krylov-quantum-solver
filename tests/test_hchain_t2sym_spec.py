@@ -105,3 +105,22 @@ def test_g3_same_bound_as_full_t2_and_valid():
     assert out["sym"][1] <= e0 and out[True][1] <= e0
     assert abs(out["sym"][0] - out[True][0]) < 2e-6
     assert e0 - out["sym"][1] < 1e-5
+
+
+def test_g4_premise_is_a_converged_singlet():
+    """The recorded gap / <S^2> must come from a converged eigenvector. The unchecked 50-iteration
+    Davidson this replaced gave <S^2> = 4.4e-5 and an E0 29 uHa high at n = 10 (0.398, 27 mHa at n = 12)."""
+    from hybrid_quantum_solver.dmrg_reference import fci_energy
+
+    e0, gap, s2 = V.singlet_premise(10)
+    h1, eri, ne, e_nuc = V.sym_integrals(10)
+    assert abs(e0 - fci_energy(h1, eri, ne, e_nuc)) < 1e-8
+    assert s2 < 1e-6 and gap > 1e-3
+
+
+def test_sym_cli_keeps_pqg_rows(tmp_path, monkeypatch):
+    """Rows are keyed by n only, so a --sym run must default to its own file, not chem-3z8's PQG one."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["vsdp_hchain.py", "--ns", "2", "--sym"])
+    V.main()
+    assert sorted(p.name for p in (tmp_path / "data").iterdir()) == ["hchain_vsdp_t2sym.json"]

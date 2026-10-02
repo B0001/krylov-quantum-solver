@@ -1,6 +1,11 @@
 # SPEC: Symmetry-adapted T2 for the certified Hₙ bracket — the chem-3z8 PQG+T2 kill test at n = 10–12
 
-**Status:** RESULTS_PENDING (chem-7ko). Amends [`SPEC_hchain_vsdp_bracket.md`](SPEC_hchain_vsdp_bracket.md) §7/§8 (R3).
+**Status:** DONE (chem-7ko). The certified PQG+T2 bracket **survives** the pre-registered kill at
+n = 12: **0.126 mHa/atom** (0.088 at n = 10), well under 1 mHa/atom. This holds only if the ground
+state is a nondegenerate singlet. Converged FCI shows it is at both n: ⟨S²⟩ < 1e-13, gap 0.127 and
+0.109 Ha (§6.2). The ⟨S²⟩ = 0.398 first recorded at n = 12 came from an unconverged Davidson solve in
+the premise check. The premise itself did not fail. That check is fixed and gated (G4). Amends
+[`SPEC_hchain_vsdp_bracket.md`](SPEC_hchain_vsdp_bracket.md) §7/§8 (R3).
 
 ---
 
@@ -19,7 +24,8 @@ PQG+T2 lower bound becomes computable at n = 10 and 12 on a 16 GB laptop, and th
 - **Can claim:** a floating-point-rigorous lower bound on E0 for the Hamiltonian defined by the
   *reflection-symmetrized* float64 Löwdin integrals (h ← (h + PhP)/2, same for eri; changes FCI by
   < 1e-12 Ha), valid *if* that Hamiltonian's Sz = 0 ground state is a nondegenerate singlet. That
-  premise is FCI-verified for every n reported (gap and ⟨S²⟩ recorded per row).
+  premise is checked for every n reported by a converged FCI solve, and the gap and ⟨S²⟩ are
+  recorded per row (§6.2).
 - **Cannot claim:** rigor without the singlet premise (beyond FCI size it is an assumption);
   anything at n > 12 (this spec does not run them); T2-tightness in other bases or geometries.
 
@@ -33,7 +39,7 @@ PQG+T2 lower bound becomes computable at n = 10 and 12 on a 16 GB laptop, and th
   block-diagonal on (spin S, parity). Only highest-weight copies are kept: the S = 1/2 block is
   ker(ad S⁺) inside the M = +1/2 Sz-sector, the S = 3/2 block is the whole M = +3/2 sector; each is
   split by parity. M = −1/2, −3/2 and the S = 3/2 part of M = 1/2 are exact duplicates and dropped.
-  Blocks at n = 4/6/8/10/12: 32/108/256/500/**864** (vs 88/306/736/1150/2520 Sz-only).
+  Blocks at n = 4/6/8/10/12: 32/108/256/500/**864** (vs 88/306/736/1450/2520 Sz-only).
 - **Exactness of the map.** Basis columns are built per reflection orbit of spatial labels by
   `fractions.Fraction` Gram–Schmidt, then scaled to primitive integer vectors, so each adapted entry
   X = QᵀMQ is an integer linear form of RDM parameters (A stays exact).
@@ -52,7 +58,8 @@ vsdp_hchain.build(h1, eri, na, nb, t2="sym") -> dict      # adds groups: {name: 
 vsdp_hchain.sym_basis(words, r) -> {+1: [(orbit, {word: int})], -1: [...]}
 vsdp_hchain.sym_integrals(n) -> (h1, eri, (na, nb), e_nuc)  # reflection-averaged
 vsdp_hchain.solve_scs(prob, **scs_settings) -> (value, y, status)
-uv run python vsdp_hchain.py --ns 10,12 --sym             # certified PQG+T2sym rows + FCI gap / <S^2>
+vsdp_hchain.singlet_premise(n) -> (E0, gap, <S^2>)          # converged 2-root FCI; raises if premise fails
+uv run python vsdp_hchain.py --ns 10,12 --sym   # -> data/hchain_vsdp_t2sym.json; premise checked before the SDP
 ```
 
 ## 5. Acceptance criteria — `tests/test_hchain_t2sym_spec.py`
@@ -65,11 +72,117 @@ uv run python vsdp_hchain.py --ns 10,12 --sym             # certified PQG+T2sym 
   adapted block ≤ dim(M=½)/2.5 (n = 4, 6).
 - **G3 — same optimum, still valid (H4).** Adapted and Sz-only PQG+T2 SDP values agree to 2e-6 Ha;
   both certified bounds ≤ E0; adapted certified bound within 1e-5 Ha of E0.
+- **G4 — the premise check is a converged eigenvector (H10).** `singlet_premise(10)` returns an E0
+  that matches the independently converged `fci_energy` to 1e-8 Ha, with ⟨S²⟩ < 1e-6 and gap > 1 mHa.
+  Added after §6.2. The replaced unchecked 50-iteration call fails this gate: its E0 is 29 µHa high.
+- **G5 — the CLI keeps chem-3z8's rows.** Rows are keyed by n only. `--sym` without `--output`
+  therefore writes only `data/hchain_vsdp_t2sym.json`, not the PQG file. Before the fix it wrote the PQG file.
 - **Kill test (the finding, not a gate):** certified width per atom at n = 12 vs 1 mHa/atom.
 
 ## 6. Results
 
-RESULTS_TABLE
+**Kill test: survives at n = 12.** The certified width is **0.126 mHa/atom**, against a kill threshold
+of 1 mHa/atom. This assumes the ground state is a nondegenerate singlet. Converged FCI confirms that at
+every n below (§6.2).
+
+### 6.1 Certified PQG+T2(sym) bracket (STO-6G, R = 1.8 bohr, Löwdin sites, reflection-symmetrized)
+
+| n | SDP value (Ha) | certified lower bound (Ha) | FCI upper (Ha) | width (mHa/atom) | certified − SDP (mHa) | SCS (eps 1e-8) | FCI gap (Ha) | ⟨S²⟩ ground | T2 blocks h±/q± |
+|---|---|---|---|---|---|---|---|---|---|
+| 4 | −2.19038422 | −2.19039933 | −2.19038422 | 0.0038 | −0.015 | solved, 56 525 it | 0.2562 | 2e-30 | 32/32/12/12 |
+| 6 | −3.26685747 | −3.26686454 | −3.26674310 | 0.0202 | −0.007 | solved, 18 875 it | 0.1912 | 3e-29 | 108/108/45/45 |
+| 10 | −5.42513490 | −5.42526721 | −5.42438538 | 0.0882 | −0.132 | solved, 52 075 it | 0.1273 | 4e-14 | 500/500/225/225 |
+| 12 | −6.50545003 | −6.50574320 | −6.50422696 | **0.1264** | −0.293 | solved, 48 400 it | 0.1092 | 1e-14 | 864/864/396/396 |
+
+- At n = 10 the SDP value lies 0.75 mHa below FCI, and at n = 12 it lies 1.22 mHa below. That is the
+  relaxation gap of PQG+T2 itself: 0.075 and 0.102 mHa/atom. Certification adds another 0.013 and
+  0.024 mHa/atom (R3).
+- At n = 4 and 6 these widths differ from the Sz-only T2 widths (0.0006 and 0.022 mHa/atom,
+  [SPEC_hchain_vsdp_bracket](SPEC_hchain_vsdp_bracket.md) §6) by at most 0.004 mHa/atom. G3 shows the
+  two SDP optima agree at n = 4, so the difference is in certification: R3's max‖q‖² factor and SCS
+  accuracy.
+- The n = 12 problem: largest T2 block 864 (Sz-only: 2520), 2 006 006 SCS rows (1 008 902 equalities
+  plus 997 104 svec PSD entries), and nnz(A) 6.15e6 including the −I cone block.
+
+Producing commands:
+- **n = 10, 12:** `/usr/bin/time -l uv run python vsdp_hchain.py --ns 10 --sym --output <dir>/sym_n10.json`
+  (and `--ns 12`). These ran from commit 9f60190 (branch `cloud/chem-7ko`). That code matches this
+  branch except for the premise check and the default `--output`.
+  - The outputs are kept in the main checkout's gitignored `data/chem-7ko_runs/`: `sym_n1{0,2}.json`
+    and `cli_n1{0,2}.log`.
+  - Those JSON files still hold the stale `fci_gap` and `fci_s2` (§6.2). The gap and ⟨S²⟩ columns above
+    come from `singlet_premise(n)` on this branch.
+  - The FCI upper is the recorded `fci_energy` value. `singlet_premise` reproduces it to < 1e-10 Ha.
+- **n = 4, 6:** `uv run python vsdp_hchain.py --ns 4,6 --sym --output data/chem-7ko_e2e_sym.json`, run
+  on this branch.
+
+### 6.2 The n = 12 ⟨S²⟩ = 0.398 flag: a solver artifact; the premise holds
+
+**What was recorded, and why it was suspect.** The n = 12 run recorded `fci_s2` = 0.398 and
+`fci_gap` = 0.1815 Ha. At n = 10 it recorded 4.4e-5 and 0.1280 Ha. Both values were suspect:
+- A nondegenerate eigenstate must have ⟨S²⟩ ∈ {0, 2, 6, …}, and 0.398 is none of these.
+- The recorded gap grows with n, which a spin gap should not do.
+
+**Cause.** The premise check called `fci.direct_spin1.kernel(h1, eri, n, ne, nroots=2,
+conv_tol=1e-10)`. That function defaults to `max_cycle=50` and does not check convergence. This is the
+same latent bug that [SPEC_hchain_largen2](SPEC_hchain_largen2.md) §10 found in `fci_energy`: in the
+site basis, the diagonal initial guess is poor. Re-running those settings reproduces both recorded
+(gap, ⟨S²⟩) pairs bit for bit. pyscf reports `converged = [False, False]` for them.
+
+| n | premise solve | E0 (Ha) | E0 − FCI (mHa) | gap (Ha) | ⟨S²⟩ root 0 |
+|---|---|---|---|---|---|
+| 10 | replaced call: 50 iterations, unchecked | −5.42435643 | +0.029 | 0.12798 | 4.4e-5 |
+| 10 | `singlet_premise`: ≤ 1000 iterations, converged | −5.42438538 | ref. | 0.12730 | 4.3e-14 |
+| 12 | replaced call | −6.47679671 | **+27.4** | 0.18155 | **0.398** |
+| 12 | `singlet_premise` | −6.50422696 | ref. | 0.10916 | 1.4e-14 |
+
+**Cross-checks.**
+- The converged E0 matches the separately converged one-root `fci_energy` (the upper bound in §6.1)
+  to 9.5e-11 Ha at n = 10 and 8.8e-11 Ha at n = 12.
+- For the replaced settings, the root-0 residual ‖Hc − Ec‖ is 5.3e-3 at n = 10 and 0.10 at n = 12.
+  Converged, it is ≈ 2e-7.
+- Root 1 of the converged solve is the M = 0 triplet (⟨S²⟩ = 2.000).
+- These three facts come from a scratch probe that was not committed. It used pyscf's
+  `FCISolver.converged`, `contract_2e` and `spin_square0`, plus the RDM-based `spin_square`, which
+  agrees with `spin_square0` to < 1e-12.
+
+**Resolution.** At n = 10 and 12 the Sz = 0 ground state of the symmetrized Hamiltonian is a
+nondegenerate singlet. The premise holds.
+- The 0.398 belonged to a vector 27 mHa above E0. It was not an eigenstate.
+- The SDP never used that vector, because the premise enters only as equality rows. So the SDP
+  values and certified bounds in §6.1 are unaffected. Only the two premise columns were wrong.
+- Converged, the gap now falls with n: 0.256, 0.191, 0.127 and 0.109 Ha at n = 4, 6, 10 and 12.
+
+**Fix.** The CLI now runs `singlet_premise` before the SDP, and stops if the premise fails. It also
+asserts that the premise E0 matches the FCI upper bound to 1e-8 Ha. G4 pins this behaviour.
+
+**Reproduce.** Each command takes under a minute at n = 12.
+- `uv run python -c "import vsdp_hchain as V; print(V.singlet_premise(12))"`
+- The replaced call:
+  `uv run python -c "import vsdp_hchain as V; from pyscf import fci; h,g,ne,c=V.sym_integrals(12); e,v=fci.direct_spin1.kernel(h,g,12,ne,nroots=2,conv_tol=1e-10); print(e+c, e[1]-e[0], fci.spin_op.spin_square0(v[0],12,ne)[0])"`
+  This prints `[-6.47679671 -6.29525105] 0.18154565316611126 0.39827518743699336`.
+
+### 6.3 Cost (Apple M3, 8 cores, 16 GB, macOS 27; SCS 3.3.1, one process per n)
+
+| n | SCS iterations | SCS solve clock (s) | CPU user + sys (s) | wall (s) | max RSS |
+|---|---|---|---|---|---|
+| 10 | 52 075 | 7.51e3 | 7 955 | 40 494 | 1.31 GB |
+| 12 | 48 400 | 1.37e4 | 13 974 | 46 691 | 3.24 GB |
+
+Wall time does not measure cost here.
+- Both runs started at 2026-10-01 20:21 and ran at the same time, later alongside other jobs.
+- `pmset -g log` shows the Mac in system sleep for about 9.2 h (33 104 s) between 20:50 and 06:10.
+
+The SCS solve clock and the CPU time are the cost: about 2.1 h of solve at n = 10 and 3.8 h at
+n = 12. For comparison, Sz-only T2 at n = 8 took 91 min and 2.4 GB. The problem build is not timed
+separately.
+
+### 6.4 Not verified here
+
+- G3's same-optimum check runs at n = 4 only. At n = 10 and 12 the Sz-only SDP does not fit, so
+  there is nothing to compare against.
+- The n = 10 and 12 runs did not save the dual vector y. Re-checking the certificate therefore
+  means re-solving, about 2–4 h of SCS. Follow-up: save y next to the row.
 
 ## 7. Out of scope
 
@@ -80,6 +193,9 @@ RESULTS_TABLE
 
 - **R1** as chem-3z8 (BLAS error model for the Cholesky bound).
 - **R2 — premise.** The singlet/reflection equalities are only valid for a nondegenerate singlet.
-  Verified by FCI here; if it failed, the equality rows would be wrong and the bound void.
+  Converged FCI verifies it at every n in §6, and G4 guards the check itself; the first n = 12
+  check was not converged (§6.2). If the premise failed, the equality rows would be wrong and the
+  bound void.
 - **R3 — trace bound.** Using maxₐ‖qₐ‖² (= 12 for S=½, 2 for S=3/2) instead of per-column norms costs up to that factor on the
-  dual-infeasibility term only; it is visible as the certified − solver gap in §6.
+  dual-infeasibility term only. It shows up as the certified − SDP gap in §6.1: 0.13 mHa at n = 10
+  and 0.29 mHa at n = 12, which is 0.013 and 0.024 mHa/atom.

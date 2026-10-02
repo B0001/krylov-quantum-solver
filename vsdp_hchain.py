@@ -262,7 +262,7 @@ def build(h1, eri, na, nb, t2=False):
 
     from array import array
 
-    ri, ci, vals, bvec = array("q"), array("q"), array("d"), []  # n=12 sym: ~1e8 entries
+    ri, ci, vals, bvec = array("q"), array("q"), array("d"), []  # n=12 sym: 5.15e6 entries (= nnz A)
 
     def add_row(terms, rhs):
         i = len(bvec)
@@ -505,6 +505,23 @@ def hchain_problem(n, t2=False):
 FCI_MAX_N = 12
 
 
+def singlet_premise(n):
+    """The T2sym premise by converged FCI on the symmetrized integrals: (E0, gap, <S^2> of root 0) over
+    the lowest two Sz = 0 roots. Raises unless Davidson converged and root 0 is a nondegenerate singlet.
+    pyscf's direct_spin1.kernel defaults (50 iterations, unchecked) reported <S^2> = 0.398 at n = 12 for
+    a vector 27 mHa above E0 (chem-7ko, SPEC_hchain_t2sym §6)."""
+    from pyscf import fci
+
+    h1, eri, ne, e_nuc = sym_integrals(n)
+    s = fci.direct_spin1.FCI()
+    s.max_cycle, s.conv_tol, s.nroots = 1000, 1e-10, 2
+    e, ci = s.kernel(h1, eri, len(h1), ne)
+    gap, s2 = e[1] - e[0], fci.spin_op.spin_square0(ci[0], len(h1), ne)[0]
+    if not (np.all(s.converged) and gap > 1e-3 and s2 < 1e-6):
+        raise RuntimeError(f"n={n}: singlet premise not verified (converged {s.converged}, gap {gap}, <S^2> {s2})")
+    return e[0] + e_nuc, gap, s2
+
+
 def upper_bound(n, sym=False):
     """Variational upper bound: exact FCI up to n=12, else the DMRG energy from --dmrg-upper."""
     if n <= FCI_MAX_N:
@@ -549,7 +566,7 @@ def main():
     ap.add_argument("--solver", default="SCS", help="SCS; CLARABEL is exact-er but ~(block size)^6")
     ap.add_argument("--eps", type=float, default=1e-8)
     ap.add_argument("--max-iters", type=int, default=200000)
-    ap.add_argument("--output", default="data/hchain_vsdp.json")
+    ap.add_argument("--output", help="default data/hchain_vsdp[_t2|_t2sym].json (rows are keyed by n only)")
     ap.add_argument("--dump", nargs=2, metavar=("N", "PATH"), help=argparse.SUPPRESS)
     ap.add_argument("--dmrg-upper", type=int, metavar="N")
     ap.add_argument("--bond-dims", default="250,500,1000,1500")
@@ -569,12 +586,14 @@ def main():
         dmrg_upper(args.dmrg_upper, tuple(map(int, args.bond_dims.split(","))), args.threads)
         return
 
+    args.output = args.output or f"data/hchain_vsdp{'_t2sym' if args.sym else '_t2' if args.t2 else ''}.json"
     results = {}
     if os.path.exists(args.output):
         with open(args.output) as f:
             results = json.load(f)
     os.makedirs("data", exist_ok=True)
     for n in map(int, args.ns.split(",")):
+        premise = singlet_premise(n) if args.sym and n <= FCI_MAX_N else None  # seconds, before hours of SDP
         if args.table:
             row = results[str(n)]
         else:
@@ -590,12 +609,9 @@ def main():
                        worst_block_lambda=min(lams.values()),
                        t2_blocks={k: v for k, v in prob["size"].items() if k.startswith("T2")})
         up, how = upper_bound(n, args.sym)
-        if args.sym and n <= FCI_MAX_N and "fci_gap" not in row:  # the adaptation's premise, checked by FCI
-            from pyscf import fci
-
-            h1, eri, ne, e_nuc = sym_integrals(n)
-            e, ci = fci.direct_spin1.kernel(h1, eri, n, ne, nroots=2, conv_tol=1e-10)
-            row.update(fci_gap=e[1] - e[0], fci_s2=fci.spin_op.spin_square0(ci[0], n, ne)[0])
+        if premise:
+            assert abs(premise[0] - up) < 1e-8, (premise[0], up)  # the premise state is the bounding E0
+            row.update(fci_gap=premise[1], fci_s2=premise[2])
         row.update(upper=up, upper_method=how,
                    width_mHa_per_atom=None if up is None else (up - row["certified_lb"]) / n * 1e3)
         results[str(n)] = row
