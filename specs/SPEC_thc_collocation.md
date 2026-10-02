@@ -1,7 +1,7 @@
 # SPEC: Scoring THC collocation strategies with the native qubitization λ (revisits SPEC_thc_lambda G4)
 
 **Status:** CLOSED — gates G1–G4 PASS (`tests/test_thc_collocation_spec.py`, 2026-10-01, 4 passed in
-66.5s). **Finding:** Kill A does not fire — `fit_thc`'s nonlinear collocation lands ≈65–69× below
+66.5s). **Finding:** Kill A does not fire — `fit_thc`'s nonlinear collocation lands ≈60–69× below
 random collocation in λ, comfortably past the ≥5× bar. Kill B fires at most (not all) seeds —
 nonlinear collocation beats `df_lambda` at 4/5 pinned seeds (norb=6) and at the one norb=7 point
 checked — but §8 R1's caveat holds exactly as anticipated: every "beats `df_lambda`" run also fails
@@ -188,12 +188,28 @@ The honest finding is not "nonlinear collocation solves the 62× penalty" — it
 error-optimal THC fit is λ-small but not λ-controlled, and its apparent wins over `df_lambda` come
 from fitting a different (wrong) Hamiltonian, not from a validated small-λ reconstruction of the
 real one." This does not revise `SPEC_thc_lambda` G4 (which is about the *exact* random-collocation
-THC, re-confirmed unchanged here at ≈65–68× above `df_lambda`) and does not shorten the path to a
+THC, re-confirmed unchanged here at ≈62–65× above `df_lambda`) and does not shorten the path to a
 genuine λ advantage, which still needs ISDF/optimized collocation that preserves reconstruction
 fidelity (out of scope, §7, unchanged).
 
 **Hardware:** `Linux 7843f162c504 7.0.14-linuxkit x86_64`, 8 vCPU, container (no GPU). All of the
 above (gate run + 3-part sweep) took ≈13 CPU-minutes wall time.
+
+**Landing re-run (batch/ft-landing, 2026-10-02; macOS 27, Apple M3, 2 BLAS threads).** Gate:
+4 passed in 30.4s. Sweep: `uv run python scripts/thc_collocation_sweep.py`, 542 s wall. The
+deterministic numbers reproduce exactly: `df_lambda` 15.4846 / 86.9575, `random_lambda` 1001.6941
+/ 5377.3005, and `n_params` 602. The LM fits reproduce qualitatively but not bit-for-bit:
+- 12-seed reconstruction error is 3.65e-3 to 2.28e-2 (mean 1.40e-2), against 3.82e-3 to 2.02e-2
+  above. Every seed is still above 1e-6.
+- The 5-seed check still beats `df_lambda` at seeds 0, 2, 3, 4 but not seed 1 (λ = 16.6635), so
+  4/5 again. `ratio_to_random` is in [0.0144, 0.0166].
+- The norb=7 point has reconstruction error 9.00e-2, λ = 85.1301, ratio 0.0158, and still beats
+  `df_lambda`.
+
+Landing corrections to the arithmetic: the λ ratios 0.0144–0.0166 mean fit_thc sits ≈60–69× below
+random collocation (this text said ≈65–69×). Random collocation sits 1001.69/15.48 = 64.7× (norb=6)
+and 5377.30/86.96 = 61.8× (norb=7) above `df_lambda` (this text said ≈65–68×). Neither change
+alters a verdict.
 
 ## 10. Deliverables
 
