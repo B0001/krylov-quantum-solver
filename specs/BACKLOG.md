@@ -410,8 +410,9 @@ hypothesis whose death is informative is worth more here than a safe one.
 
 ### Fault-tolerant stack
 
-- [x] **QPE's precision constant is not a measurement — it is π·sin θ₀, and it is portable** —
-  `SPEC_qpe_precision_bound` (chem-0ke), gated by `tests/test_qpe_precision_bound_spec.py`.
+- [x] **CLOSED (chem-0ke) — QPE's precision constant is π·sin θ₀: CONFIRMED (pre-registered, never
+  exceeded, tight to ≤5% on all three systems); "portable" holds only as a large-t envelope.**
+  [SPEC](SPEC_qpe_precision_bound.md), `tests/test_qpe_precision_bound_spec.py` (7/7 green).
   *Claim:* `SPEC_qpe_readout_laws` recorded max ratio 2.175 on H₂ CAS(2,2) and explicitly disclaimed
   derivation. It is derivable: `run_qpe` decodes E = λ·cos(2πφ), so the arccos Jacobian plus a
   half-bin dyadic error gives a **bound π·sin θ₀ with θ₀ = arccos(E₀/λ)** — per-system predictable,
@@ -427,7 +428,10 @@ hypothesis whose death is informative is worth more here than a safe one.
   earlier scout-probe numbers logged in this entry's history ("2.285 vs 2.175, 2.351 vs 2.285, 2.391
   vs 2.364") are close to but not identical with this closure's pre-registered `π·sin θ₀` values —
   they predate the pre-registration discipline applied here and were not reproduced as part of this
-  closure; treat this entry's own numbers above as the checked ones.
+  closure; treat this entry's own numbers above as the checked ones. **Landing finding (not gated):**
+  on chem-177's recentered walk, H₂ at t=4 reaches 2.6966 > π·sin θ₀' = 2.6212. That is under the
+  exact nearest-bin bound 2.7739, so the first-order envelope is not a strict bound at small t
+  (SPEC §10).
   *Cost:* cheap; ≤6 qubits (`pauli_decompose` is exponential). *Caveat:* an upper envelope (first-order
   geometric argument, not a worst-case proof), tested on 3 systems, all STO-3G, all ≤6 qubits, all near
   equilibrium geometry — generalization beyond that is not tested (`SPEC_qpe_precision_bound` R1-R3).

@@ -113,3 +113,14 @@ def test_G2_bound_is_tight_on_at_least_one_system():
         tightness[name] = max_ratio / bound
 
     assert any(t >= 0.8 for t in tightness.values()), tightness
+
+
+if __name__ == "__main__":
+    # The measured side of SPEC_qpe_precision_bound.md (sec.10): uv run python tests/test_qpe_precision_bound_spec.py
+    for name, spec in SYSTEMS.items():
+        h1, eri, e_core, norb, casci = _build(spec)
+        _Ek, Vk = np.linalg.eigh(build_qubit_hamiltonian(h1, eri, norb)[0])
+        ratios = _measured_ratios(dict(h1=h1, eri=eri, e_core=e_core, norb=norb, casci=casci, ground=Vk[:, 0]))
+        bound = PREREGISTERED[name]["bound"]
+        print(f"{name}: max_ratio(t=4..14)={max(ratios):.6f} at t={T_RANGE[int(np.argmax(ratios))]}  "
+              f"bound={bound:.6f}  max/bound={max(ratios) / bound:.1%}")

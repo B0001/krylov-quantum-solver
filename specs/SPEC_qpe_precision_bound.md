@@ -1,6 +1,7 @@
 # SPEC: QPE's precision constant is not a measurement — it is a per-system closed form
 
-**Status:** DRAFT — awaiting approval. No implementation until the acceptance gates are agreed.
+**Status:** CLOSED (chem-0ke) — CONFIRMED. G1–G3 green (`tests/test_qpe_precision_bound_spec.py`,
+7 passed); measured numbers in §10.
 
 ---
 
@@ -121,3 +122,28 @@ QPE sweep inside it — only the exact-spectrum-derived prediction).
 - `scripts/spec_qpe_precision_bound.py` — pre-registration script (no library changes).
 - `tests/test_qpe_precision_bound_spec.py` — gates G1-G3.
 - This file's §3 table — the committed, before-the-fact prediction.
+
+## 10. Results
+
+Run `uv run python tests/test_qpe_precision_bound_spec.py` to regenerate the measured side. The
+sandbox's numbers reproduce to all 6 decimals on macOS 27 / Apple M3. The pre-registration script
+also reproduces the §3 table exactly.
+
+| System       | predicted bound | measured max ratio (t = 4..14) | at t | max/bound |
+|--------------|----------------:|-------------------------------:|-----:|----------:|
+| H2 CAS(2,2)  |        2.285077 |                       2.175167 |   11 |     95.2% |
+| LiH CAS(2,2) |        2.351497 |                       2.284570 |   14 |     97.2% |
+| N2 CAS(3,4)  |        2.396444 |                       2.303179 |   14 |     96.1% |
+
+G1 is never exceeded, and G2 is tight to within 5% on all three systems. **CONFIRMED.**
+
+**Landing finding: the first-order envelope does not port as a strict bound.** chem-177's
+identity-free walk operator (`run_qpe(recenter=True)`, `SPEC_ft_identity_shift`, landed together
+with this spec) moves θ₀ toward π/2. On recentered H₂ at t = 4 the measured ratio is 2.6966, above
+`π·sin θ₀'` = 2.6212. That value sits under the exact nearest-bin bound
+`2^t·max±|cos(θ₀ ± π/2^t) − cos θ₀|` = 2.7739, which tends to `π·sin θ₀` as t grows. This is the
+finite-bin term that R2's "first-order argument, not a proof" leaves out. It does not touch G1–G3,
+which were pre-registered on the identity-included walk; there the raw sweep stays under
+`π·sin θ₀` through t = 20 on all four of SPEC_ft_identity_shift's systems. "Portable" holds as a
+large-t envelope, not as a bound at every t. Regenerate with
+`uv run python tests/test_ft_identity_shift_spec.py`. Not gated; see the PR follow-ups.
