@@ -116,8 +116,27 @@ hypothesis whose death is informative is worth more here than a safe one.
   *Cost:* cheap. *Caveat:* whichever value wins, at least one recorded result moves; the spec must
   re-run the affected sweeps rather than assert the old numbers still hold.
 
-- [ ] **The identity fix has a THIRD call site — `operator_one_norms`, found while fixing the
-  second** *(verified: `certified_dipole_noise.py:48-53` does `np.abs(op.coeffs).sum()` on both
+- [x] **The identity fix has a THIRD call site — `operator_one_norms`, found while fixing the
+  second** — **CLOSED 2026-09-30 (chem-hbv): fixed, and the claimed finding (G3) survives verbatim;
+  only its recorded magnitude moved, and that move predates this bead.** `operator_one_norms` now takes
+  `include_identity: bool = False` and excludes the identity term by default via the same `_one_norm`
+  helper `hamiltonian_one_norms` uses; `include_identity=True` reproduces the old inflated numbers
+  for archaeology. **The bead's own falsifier did not fire:** the dipole operator's identity
+  coefficient is the nuclear dipole moment, generically nonzero here, so λ_A moved 3.2–3.8% and
+  λ_{A²} moved 7.9–22.7% (HeH+/LiH) — not a no-op. Effect on `SPEC_certified_dipole_noise`'s G1–G4:
+  **none flip.** `finite_frac` is untouched (0.0000 delta on every one of 24 `(system, shots, z)`
+  grid points) because the finite-bracket gate depends only on `hamiltonian_one_norms`, never on
+  `operator_one_norms`; `coverage` moves by at most 0.0003 absolute (noise-floor sized at 6000 MC
+  trials). The §5 "Measured" numbers *had already moved* before this bead touched anything, because
+  `SPEC_lambda_h2_bridge` changed `hamiltonian_one_norms`'s default earlier and never republished
+  this spec's numbers — that drift (0.728→0.884 / 0.554→0.819 on the G3 finite_frac pair) is
+  unrelated to this bead's fix and is disentangled from it in the revision note. Both call sites now
+  agree; nothing is stale. → [`SPEC_certified_dipole_noise.md`](SPEC_certified_dipole_noise.md) §10
+  (revision note with the two-cause breakdown and the before/after summary);
+  `tests/test_certified_dipole_noise_spec.py` (G1–G4, 4 passed); regenerate the 24-point grid from
+  the repo root with `git show 5c5c6db:scratch_before_after_hbv.py | uv run python -` (597f343 /
+  chem-0tb deleted the script from the tree).
+  *(original entry: verified: `certified_dipole_noise.py:48-53` does `np.abs(op.coeffs).sum()` on both
   λ_A and λ_{A²}, and its docstring says it mirrors `certified_noise.hamiltonian_one_norms` "same
   construction" — the function that was just corrected)* — *Claim:* the same zero-variance argument
   applies to a dipole operator's constant term, so `operator_one_norms` inflates λ_A the same way,
