@@ -328,19 +328,30 @@ hypothesis whose death is informative is worth more here than a safe one.
   helps and where it silently breaks, not a certificate. Pairs with `SPEC_odmd_uq`'s recorded blind
   spot (single-signal resampling cannot see model bias, so it cannot flag the overshoot either).
 
-- [ ] **Classical shadows buy ⟨H⟩ and ⟨H²⟩ from one dataset — cheaper than the repo's λ² model, but
-  they do not buy coverage** — *Claim:* `SPEC_certified_noise` found λ_{H²} ≫ λ_H (H₄: 63 vs 10),
-  making the Temple lower bound the noise-expensive side, and `temple_bounds` states outright that the
-  ⟨H²⟩ hardware cost is unmodeled. Random-Pauli shadows estimate both moments from the **same**
-  snapshots, with HKP variance below the assumed λ². *Check (killable):* G1 unbiasedness on the Krylov
-  Ritz state (not just HF) within 4·stderr at 16k snapshots; G2 dies if shadow_norm(H²) ≥ λ_{H²}²;
-  G4 feed shadow-estimated moments into the Temple bracket over 200 seeds — **kills the free-lunch
-  reading if coverage is also ~0.40**, i.e. the variational knife-edge is estimator-independent.
-  *(scout probe, H₄: shadow_norm/λ² a stable 0.35–0.42 across both operators; but shadow_norm ratio
-  H²/H = 29.3 vs λ-ratio 35.6 — shadows do **not** remove the asymmetry.)* *Cost:* cheap-to-medium;
-  record the honest seam that H² for H₄ has 1775 Pauli terms vs H's 185, growing O(N⁸). *Caveat:*
-  comparing `shadow_norm` to λ² compares **two different upper bounds from two different protocols** —
-  the gate must also measure empirical single-shot variance or the comparison is apples-to-oranges.
+- [x] **CLOSED (chem-loe) — shadows beat the λ² model's variance on both moments but do NOT buy
+  Temple coverage, and a third, unpredicted finding: the HKP `shadow_norm` bound itself breaks on
+  H².** *Claim confirmed (G2/G3):* on H₄/STO-3G's M=12 Krylov Ritz state, `shadow_norm` and the
+  directly-measured empirical single-shot variance both beat λ² for H (185 terms: shadow_norm
+  40.18 < λ²=58.63, empirical ≈ 29.7–38.2 over 10 seeds) and H² (1775 terms, O(N⁸): shadow_norm
+  1193.38 < λ²=3050.85, empirical ≈ 1384–1774 over 10 seeds) alike; the shadow-norm H²/H ratio
+  (29.7) is smaller than the λ²-based ratio (52.0, post `SPEC_lambda_h2_bridge` correction) — the
+  asymmetry shrinks, does not vanish, exactly as scouted. **Claim confirmed (G4, the real test):**
+  200-trial shadow-estimated-moment Temple coverage lands at cov_raw=0.395, essentially identical to
+  the λ²-model's cov_raw=0.385 at a matched 4000-shot budget (Δ=0.01, well inside the 0.15
+  free-lunch threshold) — **no free lunch**, the variational knife-edge is estimator-independent.
+  **NOT predicted, and the sharper finding:** the HKP-style additive `shadow_norm` bound
+  (`Σ|c_k|²3^{w_k}`, previously validated only on H by the closed `SPEC_classical_shadows`) holds
+  empirically for H (measured/bound ratio 0.69–0.95 over 10 seeds) but is **violated, reproducibly,
+  for H²** (ratio 1.16–1.49× over the same 10 seeds — not a sampling fluctuation): the naive
+  per-term diagonal sum ignores positive cross-correlations between H²'s 1775 heavily
+  support-overlapping Pauli terms, non-negligible at this term count. `shadow_norm` cannot be
+  trusted as a literal shot-budget bound for composite operators like H² even though the headline
+  "beats λ²" efficiency claim survives. *Also caught a real units bug*: an early draft of G2
+  compared `shadow_norm`'s ratio (variance-scale) against the bare λ ratio (amplitude-scale)
+  instead of the λ² ratio — the backlog's own "35.6" figure above was itself a λ²-scale number
+  ((62.9/10.3)²≈37.3 at the pre-correction λ values), confirming the squared reading was intended.
+  → [`SPEC_shadow_temple.md`](SPEC_shadow_temple.md); `shadow_temple.py`;
+  `tests/test_shadow_temple_spec.py` (5/5 green).
 
 ### Nb₃X₈ materials line
 

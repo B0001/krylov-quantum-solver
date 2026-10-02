@@ -10,14 +10,19 @@ the repo's assumed i.i.d. lambda^2-Gaussian shot-noise model (`certified_noise.p
 bridges the two, composing both without adding a new measurement primitive: H^2 is the same
 `(H @ H).simplify()` expansion `certified_noise.hamiltonian_one_norms` already builds.
 
-THE FINDING (specs/SPEC_shadow_temple.md): shadows DO give a lower variance -- both the HKP bound
-and the directly-measured empirical single-shot variance beat the lambda^2 model, for H and H^2
-alike, and the H^2-vs-H cost asymmetry SHRINKS under shadows (it does not vanish -- shadows are
-still more expensive on H^2 than on H). But feeding shadow-estimated moments into the Temple bracket
-does NOT buy back coverage: the noisy-Temple break (raw coverage ~0.40 at converged depth,
-`SPEC_certified_noise`) is a structural property of the variational knife-edge rho_0 -> E_0, not an
-artifact of the Gaussian noise model -- so a cheaper, unbiased estimator lands in the SAME broken
-regime. The efficiency win is real; the coverage win is not.
+THE FINDING (specs/SPEC_shadow_temple.md): shadows DO give a lower empirical variance than the
+lambda^2 model, for H and H^2 alike, and the H^2-vs-H cost asymmetry SHRINKS under shadows (it does
+not vanish -- shadows are still more expensive on H^2 than on H). A SHARPER, unpredicted finding:
+the HKP-style additive `shadow_norm` bound itself (valid, empirically, for H -- ratio 0.69-0.95 over
+10 seeds) is VIOLATED, reproducibly, for H^2 (ratio 1.16-1.49x over 10 seeds) -- the per-term
+diagonal sum ignores positive cross-correlations between H^2's 1775 heavily support-overlapping
+Pauli terms that are not negligible at this scale. `shadow_norm` cannot be trusted as a shot-budget
+bound for H^2 even though the measured variance still beats lambda^2. Separately, feeding
+shadow-estimated moments into the Temple bracket does NOT buy back coverage: the noisy-Temple break
+(raw coverage ~0.40 at converged depth, `SPEC_certified_noise`) is a structural property of the
+variational knife-edge rho_0 -> E_0, not an artifact of the Gaussian noise model -- so a cheaper,
+unbiased estimator lands in the SAME broken regime. The efficiency-vs-lambda^2 win is real; the
+shadow_norm bound and the coverage win are not.
 
 HONEST SCOPE: single molecule (H4, the system SPEC_certified_noise recorded the lambda ratio on),
 single Krylov depth (M=12, converged), exact statevector simulation of the shadow measurement,
@@ -129,14 +134,16 @@ if __name__ == "__main__":
 
     lam_h, lam_h2 = hamiltonian_one_norms(mh)
     cmp = shadow_vs_lambda_model(mh, psi, n_shots=16000, seed=1)
-    print(f"lambda_H={lam_h:.2f}  lambda_H2={lam_h2:.2f}  (lambda ratio {lam_h2 / lam_h:.2f})")
+    print(f"lambda_H={lam_h:.2f}  lambda_H2={lam_h2:.2f}  (lambda^2 ratio {(lam_h2 / lam_h) ** 2:.2f})")
     for key in ("H", "H2"):
         r = cmp[key]
+        bound_note = "HOLDS" if r["empirical_var"] <= r["shadow_norm"] * 1.05 else "VIOLATED"
         print(f"  {key}: shadow_norm={r['shadow_norm']:8.2f}  lambda^2={r['lambda2']:8.2f}  "
-              f"empirical_var={r['empirical_var']:8.2f}  "
-              f"(shadow_norm/lambda^2={r['shadow_norm'] / r['lambda2']:.3f})")
+              f"empirical_var={r['empirical_var']:8.2f}  (empirical/shadow_norm={r['empirical_var'] / r['shadow_norm']:.3f}, "
+              f"bound {bound_note})  (empirical/lambda^2={r['empirical_var'] / r['lambda2']:.3f})")
     shadow_ratio = cmp["H2"]["shadow_norm"] / cmp["H"]["shadow_norm"]
-    print(f"shadow_norm ratio H2/H = {shadow_ratio:.2f}  vs  lambda ratio = {lam_h2 / lam_h:.2f}  "
+    lambda2_ratio = (lam_h2 / lam_h) ** 2
+    print(f"shadow_norm ratio H2/H = {shadow_ratio:.2f}  vs  lambda^2 ratio = {lambda2_ratio:.2f}  "
           "(asymmetry shrinks, does not vanish)")
 
     print("-" * 78)

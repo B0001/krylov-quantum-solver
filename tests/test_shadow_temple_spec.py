@@ -56,7 +56,14 @@ def test_G1_unbiased_on_krylov_ritz_state():
 
 def test_G2_shadow_bound_beats_lambda_model_but_keeps_the_asymmetry():
     """shadow_norm < lambda^2 for BOTH H and H^2 (an efficiency win); the shadow-norm H^2/H ratio is
-    smaller than the lambda-based ratio (the asymmetry SHRINKS) but stays > 1 (it does not vanish)."""
+    smaller than the lambda^2-based ratio (the asymmetry SHRINKS) but stays > 1 (it does not vanish).
+
+    Units note (a real bug this gate caught, not a scientific finding): shadow_norm and lambda^2 are
+    both VARIANCE-scale quantities, so the "lambda-based ratio" the backlog/spec compare the shadow
+    ratio against must also be variance-scale, i.e. (lambda_H2/lambda_H)**2, not the bare amplitude
+    ratio lambda_H2/lambda_H. The backlog's own recorded number (35.6) is in fact the squared ratio
+    of its scout-probe lambdas ((62.9/10.3)**2 ~= 37.3, matching within scout-probe rounding) -- an
+    earlier draft of this test compared against the unsquared ratio and failed as a result."""
     mh, _ = _mh_solver()
     op = mh.qubit_hamiltonian
     op2 = h2_operator(mh)
@@ -67,23 +74,41 @@ def test_G2_shadow_bound_beats_lambda_model_but_keeps_the_asymmetry():
     assert norm_h2 < lam_h2 ** 2, (norm_h2, lam_h2 ** 2)
 
     shadow_ratio = norm_h2 / norm_h
-    lambda_ratio = lam_h2 / lam_h
-    assert shadow_ratio < lambda_ratio, (shadow_ratio, lambda_ratio)   # asymmetry SHRINKS
-    assert shadow_ratio > 1.0, shadow_ratio                            # but does NOT vanish
+    lambda2_ratio = (lam_h2 / lam_h) ** 2
+    assert shadow_ratio < lambda2_ratio, (shadow_ratio, lambda2_ratio)   # asymmetry SHRINKS
+    assert shadow_ratio > 1.0, shadow_ratio                              # but does NOT vanish
 
 
 def test_G3_empirical_variance_measured_directly():
-    """The empirical single-shot variance (measured, not inferred from bounds alone) is <=
-    shadow_norm (HKP bound holds) AND < lambda^2 (beats the model it is compared against) for both
-    H and H^2 -- the apples-to-apples check the bound-only comparison in G2 cannot provide alone."""
+    """The empirical single-shot variance (measured, not inferred from bounds alone) beats
+    lambda^2 (the efficiency claim under test) for BOTH H and H^2 -- the apples-to-apples check the
+    bound-only comparison in G2 cannot provide alone.
+
+    SHARPER FINDING (not predicted by the spec as written): the HKP-style additive shadow_norm
+    formula (sum_k |c_k|^2 3^{w_k}, validated on H alone by the closed SPEC_classical_shadows) is
+    itself only a valid empirical bound on H's 185-term operator here (ratio 0.69-0.95 over 10
+    seeds, see specs/SPEC_shadow_temple.md Sec 8). On H^2's 1775-term, heavily support-overlapping
+    expansion it is VIOLATED, reproducibly, by roughly 1.16x-1.49x across 10 independent seeds (not
+    a one-off sampling fluctuation) -- the naive per-term-diagonal sum ignores positive cross-term
+    correlations between overlapping Pauli strings that become non-negligible once the term count
+    and support overlap grow this far (O(N^8) in H^2's expansion). This does not kill the headline
+    efficiency claim (empirical variance for H^2 is still well under the lambda^2 model it is
+    compared against -- shadows remain cheaper than the repo's assumed noise model), but it does
+    mean `shadow_norm` itself cannot be trusted as a shot-budget bound for composite operators like
+    H^2 -- recorded here rather than hidden behind a loosened tolerance."""
     mh, solver = _mh_solver()
     psi, solver = ritz_state(mh, _M, solver=solver)
     result = shadow_vs_lambda_model(mh, psi, n_shots=16000, seed=5)
 
-    for key in ("H", "H2"):
-        r = result[key]
-        assert 0 < r["empirical_var"] <= r["shadow_norm"] * 1.05, (key, r)   # HKP bound (5% seed slack)
-        assert r["empirical_var"] < r["lambda2"], (key, r)                   # beats the lambda^2 model
+    rH = result["H"]
+    assert 0 < rH["empirical_var"] <= rH["shadow_norm"] * 1.05, rH   # HKP bound holds for H
+    assert rH["empirical_var"] < rH["lambda2"], rH                  # beats the lambda^2 model
+
+    rH2 = result["H2"]
+    # The bound is VIOLATED for H^2 -- pin the violation itself so a future fix to shadow_norm (or
+    # to this finding) has to touch this test, not silently pass through a loosened tolerance.
+    assert rH2["empirical_var"] > rH2["shadow_norm"] * 1.1, rH2     # HKP bound measurably fails here
+    assert rH2["empirical_var"] < rH2["lambda2"], rH2               # but still beats the lambda^2 model
 
 
 def test_G4_shadow_moments_do_not_buy_temple_coverage():
