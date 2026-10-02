@@ -148,8 +148,6 @@ def _objective_coefficients_check():
     for k in range(1, M):
         f_full[k] = f[k]
         f_full[-k] = np.conj(f[k])
-    direct = sum(f_full[k] * np.conj(c[k]) if k >= 0 else f_full[k] * np.conj(c[-k]).conj()
-                 for k in range(M))
     # sum_k f_k conj(c_k), k=-(M-1)..M-1, c_{-k}=conj(c_k)
     total = f_full[0] * np.conj(c[0])
     for k in range(1, M):

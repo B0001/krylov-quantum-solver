@@ -83,12 +83,20 @@ Gates in `tests/test_moment_pds_spec.py` (test-first). Exact statevector; pyscf/
   [`SPEC_pds_excited_roots.md`](SPEC_pds_excited_roots.md) (chem-pc1): the bound holds, but the
   usefulness claim is killed and the bound itself can fail in float64 at high K on near-degenerate
   systems.
-- High-order PDS (K ≳ 5) where the moment matrix is severely ill-conditioned.
+- High-order PDS (K ≳ 5) where the moment matrix is severely ill-conditioned — **in the raw
+  frame**. Revisited by [`SPEC_centered_pds.md`](SPEC_centered_pds.md) (chem-70c): most of that
+  ill-conditioning is the frame, and centered PDS is gated to K = 8.
 
 ## 8. Caveats and risks
 
 - **R1 — ill-conditioning at high K.** `det M → 0` as the reference approaches the exact state and at
   large K. *Mitigation:* gate K ≤ 4; record the conditioning limit rather than pushing K blindly.
+  *Revised (chem-70c, [`SPEC_centered_pds.md`](SPEC_centered_pds.md)):* R1 conflated two causes.
+  The large-K part is mostly a **frame artifact**: raw moments scale like ‖H‖ⁿ, and building the
+  same moments of `H − μI` cuts cond(M) at K=8 by 11–17 orders (H₄/LiH/N₂) with identical PDS
+  values, giving variational, monotone PDS to K=8. The "reference → exact state" part is
+  **fundamental**: once K exceeds the number of HF-reachable eigenstates (H₂: 2), M is exactly
+  singular in every frame.
 - **R2 — reference dependence.** A poor HF overlap slows convergence. *Mitigation:* gate on
   near-equilibrium geometries with a decent HF reference; a stretched/multireference case would need
   higher K (a follow-up finding).
