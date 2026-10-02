@@ -2,13 +2,16 @@
 Acceptance gates G1-G3 for specs/SPEC_centered_pds_roots.md (chem-dcz, revised for chem-8tl): does
 the centered moment frame remove the raw-frame PDS excited-root bound violation on stretched H4?
 
-The raw violation is a function of the LAST BITS of the qubit Hamiltonian: the Jordan-Wigner mapper
-sums colliding Pauli terms in the fermionic operator's key order, and at cond(M) ~ 1e17 those bits
-pick the path. Before chem-8tl that order followed PYTHONHASHSEED; build_molecular_hamiltonian is
-now canonical, so the paths are pinned instead by mapping the same fermionic terms in a seeded
-SHUFFLED order (SHUFFLES; None = the canonical build). Each configuration runs in a child process
-(this file as __main__) with hash seed and BLAS/OpenMP threads pinned; given those it is
-deterministic.
+The raw violation is a function of the LAST BITS of the qubit Hamiltonian and of its TERM ORDER:
+the Jordan-Wigner mapper sums colliding Pauli terms in the fermionic operator's key order, the
+moments accumulate in the qubit term order, and at cond(M) ~ 1e17 those bits pick the path. Before
+chem-8tl both orders followed PYTHONHASHSEED; build_molecular_hamiltonian is now canonical, so the
+child builds the paths explicitly: "canonical" (the library build), "0".."15" (the same fermionic
+terms mapped in a seeded SHUFFLED order: new coefficient bits and term order) and "order0".."order15"
+(the canonical operator with only its qubit term order permuted). Each configuration runs in a child
+process (this file as __main__) with hash seed and BLAS/OpenMP threads pinned; given those it is
+deterministic. WHICH path violates is platform-specific (spec R1), so G1 asserts on the worst of
+these pre-registered paths, not on one hard-coded shuffle.
 
 PySCF/qiskit only (no block2); `make gates` runs it in its own process.
 """
@@ -24,12 +27,11 @@ GEOMETRY = "H 0 0 0; H 0 0 2.0; H 0 0 4.0; H 0 0 6.0"  # SPEC_pds_excited_roots'
 KS = range(3, 9)
 THREAD_VARS = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS")
 SHUFFLES = range(16)
-VIOLATING = "15"  # measured (Linux/OpenBLAS): shuffles 4 and 15 violate (-1.33, -5.91 mHa), 14 don't
 
 
 def _child():
-    """Per path (canonical + each shuffle): raw moment hash, per-K min_j(root_j - reachable_j) raw
-    and centered, and cond(M) raw and centered."""
+    """Per path (canonical, each shuffle, each term-order permutation): raw moment hash, per-K
+    min_j(root_j - reachable_j) raw and centered, and cond(M) raw and centered."""
     import dataclasses
 
     from qiskit_nature.second_q.drivers import PySCFDriver
@@ -68,40 +70,44 @@ def _child():
         }
 
     out = {"canonical": path(mh)}
+    q = mh.qubit_hamiltonian
     for s in SHUFFLES:
         perm = np.random.default_rng(s).permutation(len(items))
         op = FermionicOp(dict(items[i] for i in perm), num_spin_orbitals=fermionic.num_spin_orbitals)
         out[str(s)] = path(dataclasses.replace(mh, qubit_hamiltonian=JordanWignerMapper().map(op)))
+        order = np.random.default_rng(s).permutation(len(q))  # same coefficient bits, new term order
+        out[f"order{s}"] = path(dataclasses.replace(mh, qubit_hamiltonian=q[order]))
     print(json.dumps(out))
 
 
 _cache = {}
 
 
-def _run(seed, threads=1):
-    """Pinned configuration -> child's JSON result (keys come back as strings)."""
-    if (seed, threads) not in _cache:
-        env = dict(os.environ, PYTHONHASHSEED=str(seed), **{v: str(threads) for v in THREAD_VARS})
+def _run(seed):
+    """Pinned configuration (hash seed, 1 thread) -> child's JSON result (keys come back as str)."""
+    if seed not in _cache:
+        env = dict(os.environ, PYTHONHASHSEED=str(seed), **{v: "1" for v in THREAD_VARS})
         out = subprocess.run([sys.executable, __file__], env=env, check=True, capture_output=True,
                              text=True, cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        _cache[seed, threads] = json.loads(out.stdout.strip().splitlines()[-1])
-    return _cache[seed, threads]
+        _cache[seed] = json.loads(out.stdout.strip().splitlines()[-1])
+    return _cache[seed]
 
 
 def test_G1_raw_violation_reproduces_in_a_pinned_configuration():
-    """Pinned (shuffle 15, hash seed 2, 1 thread): raw PDS(7) puts a root below its reachable target
-    by mHa (measured -5.91 mHa on Linux/OpenBLAS; the magnitude is LAPACK-dependent, the violation
-    is not), at cond(M) > 1e14. A fresh process gives bit-identical moments and margins."""
-    a = _run(2)[VIOLATING]
-    assert a["raw"]["7"] < -1e-3, a["raw"]
-    assert a["cond_raw"]["7"] > 1e14, a["cond_raw"]
-    _cache.pop((2, 1))
-    assert _run(2)[VIOLATING] == a   # fresh process, same bits
+    """Pinned (hash seed 2, 1 thread): the worst of the pre-registered paths puts a raw PDS(7) root
+    below its reachable target by mHa, at cond(M) > 1e14, and a fresh process reproduces every path
+    bit for bit. Which path is worst depends on the platform (spec §6); the violation does not."""
+    r = _run(2)
+    worst = min(r, key=lambda s: r[s]["raw"]["7"])
+    assert r[worst]["raw"]["7"] < -1e-3, (worst, r[worst]["raw"])
+    assert r[worst]["cond_raw"]["7"] > 1e14, (worst, r[worst]["cond_raw"])
+    _cache.pop(2)
+    assert _run(2) == r   # fresh process, same bits on every path
 
 
-def test_G1b_the_hidden_variable_is_summation_order_not_the_hash_seed():
-    """The canonical build is the same bits under hash seeds 0 and 2 (chem-8tl), and so is every
-    shuffle; the summation order alone splits raw PDS(7) into violating and bound-respecting paths."""
+def test_G1b_the_hidden_variable_is_the_operator_bits_not_the_hash_seed():
+    """Hash seeds 0 and 2 give the same bits on every path (chem-8tl); the operator's summation and
+    term order alone split raw PDS(7) into violating and bound-respecting paths."""
     a, b = _run(2), _run(0)
     assert a == b
     k7 = [a[s]["raw"]["7"] for s in a]
@@ -110,9 +116,9 @@ def test_G1b_the_hidden_variable_is_summation_order_not_the_hash_seed():
 
 
 def test_G2_centered_roots_stay_above_reachable_targets_to_K8_on_every_path():
-    """THE CLAIM: on every path (canonical + 16 shuffles, violating ones included), every centered
-    root_j >= reachable_j - 1e-9 Ha at K=3..8, and the centered margins agree across paths to
-    < 1e-8 Ha -- centering makes the result insensitive to the bits that split raw."""
+    """THE CLAIM: on every path (canonical, 16 shuffles, 16 term orders; violating ones included),
+    every centered root_j >= reachable_j - 1e-9 Ha at K=3..8, and the centered margins agree across
+    paths to < 1e-8 Ha -- centering makes the result insensitive to the bits that split raw."""
     r = _run(2)
     ref = r["canonical"]["cen"]
     for p in r.values():
