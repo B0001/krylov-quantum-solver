@@ -34,8 +34,8 @@ make lint      # ruff check .
 
 Run a single test:
 ```bash
-conda run -n chem python -m pytest tests/test_krylov_convergence.py -v
-conda run -n chem python -m pytest tests/test_krylov_convergence.py::test_name -v
+uv run pytest tests/test_krylov_convergence.py -v
+uv run pytest tests/test_krylov_convergence.py::test_name -v
 ```
 
 `bash run_in_chem.sh` does the full validation walkthrough (versions → deps → tests → benchmarks).
