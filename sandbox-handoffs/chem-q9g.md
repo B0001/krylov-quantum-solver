@@ -156,3 +156,24 @@ signatures changed with new required args — the new params are keyword-only an
 
 Committed on `sandbox/chem-q9g` (this run's git policy: commit here, do not push -- the host pushes
 and a human merges). No push performed.
+
+## Correction note, 2026-10-02 (batch landing, branch `batch/nb3x8-landing`)
+
+Added when the work was landed on `origin/main` and re-run on a different machine (Apple M3,
+macOS 27, Accelerate BLAS; the original run was the x86_64 Docker VM above).
+
+- **Not reproduced on the second platform: "Nb3Br8 z=3 also hits the default cap".** On Apple M3
+  `coordination_gap(*NB3X8_LT_BULK_5P["Nb3Br8"], z=3)` converges at the default `max_cycle=1000`
+  (759.364488172 meV, throttled to 2 threads and unthrottled alike); only Nb3Cl8 raises there (it
+  converges at `max_cycle=2000`). So *which* clusters hit the cap is BLAS-dependent. The converged
+  values agree across platforms to 12 digits (Cl 872.925212893, Br 759.364488172 meV).
+- **Consequence for gate G7:** its first version asserted that BOTH Cl and Br raise at the default and
+  failed on the M3 (`DID NOT RAISE`). It was reworded to assert only what holds on both platforms
+  (default call raises the documented error or returns the converged value; the override converges and
+  is cap-independent; at least one of Cl/Br hits the default cap). The Br "default raises" assertion
+  was dropped, not the numbers; the platform dependence is recorded in the test docstring and
+  `specs/SPEC_nb3x8_gaps.md` G7.
+- The fix itself (keyword-only `max_cycle` threaded through `fixed_filling_energy` and the nb3x8
+  charge gaps; sharpened `fci_energy` error text) is unchanged. `fci_energy`'s integral convention
+  (`solver.kernel(h1, eri, norb, (na, nb), ecore=...)`) is untouched: only the `RuntimeError` message
+  text differs.

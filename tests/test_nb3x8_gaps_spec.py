@@ -126,16 +126,31 @@ def test_G7_coordination_gap_max_cycle_override():
     not converge in the N=9, (5,4)-electron sector), but the function accepts an override so callers
     aren't stuck reimplementing the cluster. A looser cap converges, and agrees with an even looser
     one to high precision -- confirming this is an iteration-cap issue, not genuine non-convergence
-    or near-degeneracy."""
-    import pytest
+    or near-degeneracy.
 
+    Platform note (chem-nb3x8-landing): WHICH z=3 clusters exceed the 1000-iteration default is
+    BLAS/platform dependent. Nb3Cl8 AND Nb3Br8 raise on the x86_64 Linux container where chem-q9g
+    found the bug, but only Nb3Cl8 raises on Apple M3 / macOS (Accelerate, throttled or not); Nb3Br8
+    converges at the default there, to the same 759.364488 meV. The first version of this gate asserted
+    that BOTH raise and so failed on that Mac. It now asserts only what holds on both platforms: a
+    default-cap call either raises the documented error or returns the converged value (never a
+    silently wrong number), the override converges and is cap-independent, and at least one of the
+    two clusters still hits the default cap (the failure the override exists for still reproduces).
+    """
+    n_raised = 0
     for name in ("Nb3Cl8", "Nb3Br8"):
         p = NB3X8_LT_BULK_5P[name]
-        with pytest.raises(RuntimeError, match="did not converge"):
-            coordination_gap(*p, z=3)                                # default cap: fails
         g_loose = coordination_gap(*p, z=3, max_cycle=4000)
         g_looser = coordination_gap(*p, z=3, max_cycle=8000)
         assert abs(g_loose - g_looser) < 1e-6, (name, g_loose, g_looser)   # same answer, not drifting
+        try:
+            g_default = coordination_gap(*p, z=3)                    # default cap
+        except RuntimeError as e:
+            assert "did not converge" in str(e), (name, e)
+            n_raised += 1
+        else:                                  # converged under the default cap: must be the same number
+            assert abs(g_default - g_loose) < 1e-6, (name, g_default, g_loose)
+    assert n_raised >= 1, "no z=3 cluster hit the default max_cycle: G7's motivating failure is gone"
 
     # z=0..2 (and Nb3I8/Nb3F8 at z=3) already converge under the default cap -- the override must not
     # change their answer.

@@ -91,6 +91,15 @@ all 10 dimer-cluster parameter sets (`NB3X8_CLUSTERS`).
 > broke on the extended dataset — G4 — which is why the robust claim is material-level, not a scaling
 > law.)
 
+- **G7 — `max_cycle` override on the FCI charge gaps (chem-q9g, added after close).** The default
+  `max_cycle=1000` Davidson cap is too tight for the z=3 (L=8, N=9) clusters: Nb₃Cl₈ raises
+  "did not converge" at the default on both platforms checked; Nb₃Br₈ also raises on the x86_64 Linux
+  container where the bead was filed but **converges at the default on Apple M3 / Accelerate** (which
+  clusters hit the cap is BLAS-dependent; the gate asserts only the platform-independent half). The
+  keyword-only `max_cycle` now threads through `fixed_filling_energy` → `coordination_gap`,
+  `ssh_chain_gap`, `four_site_exact_gap`, `exact_charge_gap`; caps of 4000 and 8000 agree to `<1e-6` meV
+  (Nb₃Cl₈ z=3 872.925213, Nb₃Br₈ z=3 759.364488), so the failure is an iteration cap, not a
+  near-degeneracy, and Nb₃I₈ z=3 is unchanged to `<1e-9` meV (default-preserving).
 - **G8 — the SAME coordination machinery, spin channel (chem-g78, added after close).**
   `SPEC_nb3x8_magnetometry.md` §7 names coordination/mean-field reduction as the likely explanation
   for the 5.3×/2.3× Tc overprediction of `nb3x8_magnetometry`'s isolated-dimer J. `coordination_gap`'s
