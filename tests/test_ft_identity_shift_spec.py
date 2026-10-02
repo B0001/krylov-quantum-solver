@@ -21,15 +21,18 @@ EXACT_SYSTEMS = ("H2", "LiH")  # small enough (4 qubits) for a fresh exact-matri
 
 
 def _reference(label):
+    symmetry = None
     if label == "H2":
         atom, norb, ne = "H 0 0 0; H 0 0 0.74", 2, 2
     elif label == "LiH":
         atom, norb, ne = "Li 0 0 0; H 0 0 1.6", 2, 2
     elif label == "N2":
-        atom, norb, ne = "N 0 0 0; N 0 0 1.10", 3, 4
+        # D2h pins the RHF gauge of N2's degenerate pi pairs, which CAS(3,4) splits; unpinned, the
+        # active space (and lambda) is platform-dependent (SPEC_lambda_ladder_honest_caveat R2).
+        atom, norb, ne, symmetry = "N 0 0 0; N 0 0 1.10", 3, 4, "D2h"
     else:
         atom, norb, ne = "O 0 0 0.117; H 0 0.757 -0.467; H 0 -0.757 -0.467", 3, 4
-    mol = gto.M(atom=atom, basis="sto-3g", verbose=0)
+    mol = gto.M(atom=atom, basis="sto-3g", symmetry=symmetry, verbose=0)
     mf = scf.RHF(mol).run()
     cas = mcscf.CASCI(mf, norb, ne)
     cas.verbose = 0
@@ -142,7 +145,7 @@ def test_G4_fixed_t_point_estimate_ratio_is_killed(label):
     assert max(ratios) / min(r for r in ratios if r > 1e-12) > 5.0, (label, ratios)
 
 
-@pytest.mark.parametrize("label", ("N2", "H2O"))
+@pytest.mark.parametrize("label", SYSTEMS)  # spec G5 claims all four; was N2/H2O only until landing
 def test_G5_df_lambda_comparability_not_a_flip(label):
     """The df_lambda / SPEC_scdf_lambda G1(b) comparability question, resolved explicitly:
     (a) df_lambda <= identity-INCLUDED naive Pauli lambda still holds (G1(b) unbroken);
@@ -168,3 +171,36 @@ def test_G5_df_lambda_comparability_not_a_flip(label):
 
     assert abs(c_identity) / lam > 0.25  # the identity mass being excluded is itself material (G1)
     assert lam_df > lam_excl, (label, lam_df, lam_excl)  # (c): reconfirms the scout's "loss"
+
+
+if __name__ == "__main__":
+    # Regenerates every number in SPEC_ft_identity_shift.md sec.3: uv run python tests/test_ft_identity_shift_spec.py
+    for label in SYSTEMS:
+        h1, eri, e_core, norb, casci, H, n, terms, lam, non_identity, c_identity, lam_excl = (
+            _terms_and_lambda(label)
+        )
+        Ek, Vk = np.linalg.eigh(H)
+        th_raw, th_rec = np.arccos(Ek[0] / lam), np.arccos((Ek[0] - c_identity) / lam_excl)
+        sin_raw, sin_rec = np.sin(th_raw), np.sin(th_rec)
+
+        def halfbin(th, t):  # exact nearest-bin ceiling on err*2^t/lam; -> pi*sin(th) as t grows
+            return 2**t * max(abs(np.cos(th + s * np.pi / 2**t) - np.cos(th)) for s in (1, -1))
+
+        k_raw, k_rec, ratios = {}, {}, []
+        for t in range(4, 21):
+            err_raw = abs(run_qpe(h1, eri, norb, e_core, Vk[:, 0], t)[0] - casci)
+            err_rec = abs(run_qpe(h1, eri, norb, e_core, Vk[:, 0], t, recenter=True)[0] - casci)
+            k_raw[t], k_rec[t] = err_raw * 2**t / lam, err_rec * 2**t / lam_excl
+            if err_raw > 1e-10:
+                ratios.append(err_rec / err_raw)
+        t_kr, t_kc = max(k_raw, key=k_raw.get), max(k_rec, key=k_rec.get)
+        leaves, _g, _full_rank = double_factorize(eri, norb)
+        print(f"{label}: |c_I|/lam={abs(c_identity) / lam:.1%} lam={lam:.4f} lam'={lam_excl:.4f} "
+              f"lam'/lam={lam_excl / lam:.3f} lam_eff ratio={lam_excl * sin_rec / (lam * sin_raw):.3f} "
+              f"t*(eps=1e-3) raw={_t_star(lam, 1e-3)} rec={_t_star(lam_excl, 1e-3)}")
+        print(f"  max_t err*2^t/lam (t=4..20): raw={k_raw[t_kr]:.4f}@t={t_kr} (pi*sin(theta0)="
+              f"{np.pi * sin_raw:.4f}, half-bin@t={halfbin(th_raw, t_kr):.4f})  rec={k_rec[t_kc]:.4f}@t={t_kc} "
+              f"(pi*sin(theta0')={np.pi * sin_rec:.4f}, half-bin@t={halfbin(th_rec, t_kc):.4f})")
+        print(f"  G4 rec/raw error ratio (t=4..20): [{min(ratios):.4f}, {max(ratios):.4f}] "
+              f"swing={max(ratios) / min(ratios):.1f}x  |  df_lambda={df_lambda(leaves, h1, norb):.4f} "
+              f"lam_incl={lambda_and_terms(h1, eri, norb)[0]:.4f} lam_excl={lam_excl:.4f}")

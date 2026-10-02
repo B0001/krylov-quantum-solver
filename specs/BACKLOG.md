@@ -432,19 +432,20 @@ hypothesis whose death is informative is worth more here than a safe one.
   geometric argument, not a worst-case proof), tested on 3 systems, all STO-3G, all ≤6 qubits, all near
   equilibrium geometry — generalization beyond that is not tested (`SPEC_qpe_precision_bound` R1-R3).
 
-- [x] **The identity term inflates the FT λ too — the third strike in an arc that has self-corrected
-  twice** — DONE, see `specs/SPEC_ft_identity_shift.md` + `tests/test_ft_identity_shift_spec.py`
-  (gates G1–G5, 17/17 green). Findings: (1) identity fraction reconfirmed material — |c_I|/λ = 30.1%
-  H₂, 44.2% LiH, 48.5% N₂(3,4), 45.6% H₂O(3,4) (G1); (2) the drop is free and exact — a fresh walk
-  operator built from the identity-free terms plus a classical `+c_I` correction reproduces the full
-  original spectrum to <1e-8 Ha on H₂/LiH (G2); (3) the real falsifier survives **at the envelope
-  level, not the point-estimate level** — the bead's proposed `λ_eff = √(λ²−E₀²)` closed form for a
-  literal *fixed-t* point-estimate ratio is **killed** (measured ratio swings >5× across a t-sweep on
-  every system — a dyadic-grid staircase artifact, same phenomenon the π·sin θ₀ entry above names),
-  but the honest restatement — recentering needs no more (and on several systems strictly fewer)
-  phase bits to *guarantee* a fixed target ε via the already-validated bound
-  `err(t) ≤ 3λ/2^t` (`SPEC_qpe_readout_laws` G2) — is real, non-noisy, and confirmed by actually
-  running `run_qpe` end to end at each variant's own computed budget (G3); (4) `df_lambda` vs
+- [x] **CLOSED (chem-177) — the identity term inflates the FT λ too (the third strike): the drop is
+  free and exact, the budget claim SURVIVES at the envelope level, and the fixed-t closed form is
+  KILLED.** [SPEC](SPEC_ft_identity_shift.md), `tests/test_ft_identity_shift_spec.py` (G1–G5, 19/19
+  green). Findings: (1) identity fraction reconfirmed material — |c_I|/λ = 30.1%
+  H₂, 44.2% LiH, 48.5% N₂(3,4) (D2h-pinned), 45.6% H₂O(3,4) (G1); (2) the drop is free and exact — a
+  fresh walk operator built from the identity-free terms plus a classical `+c_I` correction
+  reproduces the full original spectrum to <1e-8 Ha on H₂/LiH (G2); (3) the real falsifier survives
+  **at the envelope level, not the point-estimate level** — the bead's proposed `λ_eff = √(λ²−E₀²)`
+  closed form for a literal *fixed-t* point-estimate ratio is **killed** (the ratio swings 18–279×
+  across t=4..20 on every system — the dyadic staircase the π·sin θ₀ entry above bounds), while
+  λ'/λ = 0.51–0.70 cuts the walk-step budget ∝ λ/ε by 1.43–1.94× and the phase-bit count at ε=1e-3
+  by 0–1 bit (13→13, 13→12, 15→14, 15→14 under the *empirical* `3λ/2^t` envelope of
+  `SPEC_qpe_readout_laws` G2; the decode's hard ceiling is π), confirmed by running `run_qpe` end to
+  end at each variant's own budget (G3); (4) `df_lambda` vs
   identity-excluded naive λ resolved as **NOT-COMPARABLE-AND-VACUOUS, not a flip**: `SPEC_scdf_lambda`
   G1(b) (identity-*included* comparison) still holds on every system, and `df_lambda` is a provably
   pure function of `(h1, eri)` with no lever for identity-exclusion at all, so the identity-excluded
