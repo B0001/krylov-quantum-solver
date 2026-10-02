@@ -47,8 +47,9 @@ So:
 
 ## Chem-specific rules
 
-- **Setup:** `uv sync --extra dmrg --extra test`. You are on Linux (arm64) with no GPU; do **not**
-  install the `gpu` extra.
+- **Setup:** `uv sync --extra dmrg --extra test --extra dev`. You are on Linux (arm64) with no GPU;
+  do **not** install the `gpu` extra. `--extra dev` is required for `ruff` (`make lint`) — it lives
+  in the `dev` extra, not `test` or `dmrg` (chem-zz0).
 - **block2 segfaults when it shares a process with pyscf/qiskit-aer.** Run spec gates one file per
   process: `scripts/run_gates.sh` (`GATE_JOBS=1` if one is SIGKILLed), or `uv run pytest -q
   tests/<file>` one at a time. Never one pytest process across all DMRG gates.

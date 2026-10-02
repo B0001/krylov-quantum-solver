@@ -21,6 +21,10 @@ it. When adding capability, follow this — do not introduce numbers without a g
 - **Package Manager:** `uv` is the exclusive dependency manager. `pip`, `poetry`, and `conda` are strictly prohibited.
 - **Dependency Installation:** Use `uv add <package>` for new dependencies and `uv remove <package>` for removal. Never invoke `pip install`.
 - **Script Execution:** Execute all Python scripts and commands via `uv run` (e.g., `uv run python script.py`). Never invoke a bare `python` or `python3` command.
+- **Setup:** `uv sync --extra dmrg --extra test --extra dev` (do not add `--extra gpu`: no GPU
+  target here). The `dev` extra is required for `make lint` / `uv run ruff check .` — `ruff`
+  lives there, not under `test` or `dmrg`, so a sync without `--extra dev` leaves `ruff`
+  unavailable (chem-zz0).
 
 ```bash
 make gates     # run every tests/test_*_spec.py, each in its OWN process (see segfault note)
