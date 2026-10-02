@@ -575,6 +575,8 @@ def main():
     ap.add_argument("--sym", action="store_true", help="SU(2) x reflection adapted T2, direct SCS (chem-7ko)")
     ap.add_argument("--table", action="store_true", help="re-pair saved bounds with current upper bounds")
     args = ap.parse_args()
+    if args.sym and (args.solver != "SCS" or max(map(int, args.ns.split(","))) > FCI_MAX_N):
+        ap.error(f"--sym always runs SCS and needs the FCI-checked singlet premise, so n <= {FCI_MAX_N}")
 
     if args.dump:
         from benchmark_hchain_tdl import integrals
@@ -593,7 +595,7 @@ def main():
             results = json.load(f)
     os.makedirs("data", exist_ok=True)
     for n in map(int, args.ns.split(",")):
-        premise = singlet_premise(n) if args.sym and n <= FCI_MAX_N else None  # seconds, before hours of SDP
+        premise = singlet_premise(n) if args.sym else None  # seconds, before hours of SDP
         if args.table:
             row = results[str(n)]
         else:

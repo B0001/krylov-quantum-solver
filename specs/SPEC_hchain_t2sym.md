@@ -77,6 +77,10 @@ uv run python vsdp_hchain.py --ns 10,12 --sym   # -> data/hchain_vsdp_t2sym.json
   Added after §6.2. The replaced unchecked 50-iteration call fails this gate: its E0 is 29 µHa high.
 - **G5 — the CLI keeps chem-3z8's rows.** Rows are keyed by n only. `--sym` without `--output`
   therefore writes only `data/hchain_vsdp_t2sym.json`, not the PQG file. Before the fix it wrote the PQG file.
+- **G6 — the CLI refuses what it cannot certify.** `--sym` with n > 12 (premise not FCI-checkable)
+  or with `--solver` ≠ SCS exits before building the SDP. Before the fix, the n > 12 case certified
+  without the premise, and the non-SCS case ran SCS with default tolerances under the wrong solver
+  label. Found in code review.
 - **Kill test (the finding, not a gate):** certified width per atom at n = 12 vs 1 mHa/atom.
 
 ## 6. Results
@@ -186,7 +190,8 @@ separately.
 
 ## 7. Out of scope
 
-- n = 14, 16 (DMRG upper bounds exist from chem-3z8; the singlet premise is then unverified).
+- n = 14, 16. DMRG upper bounds exist from chem-3z8, but the singlet premise is then unverified, so
+  the CLI refuses these sizes (G6).
 - A custom boundary-point solver; multi-threaded eigensolves inside SCS.
 
 ## 8. Caveats

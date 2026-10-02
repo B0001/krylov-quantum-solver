@@ -124,3 +124,13 @@ def test_sym_cli_keeps_pqg_rows(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "argv", ["vsdp_hchain.py", "--ns", "2", "--sym"])
     V.main()
     assert sorted(p.name for p in (tmp_path / "data").iterdir()) == ["hchain_vsdp_t2sym.json"]
+
+
+@pytest.mark.parametrize("argv", [["--ns", "14"], ["--ns", "2", "--solver", "CLARABEL"]])
+def test_sym_cli_refuses_what_it_cannot_certify(argv, tmp_path, monkeypatch):
+    """--sym needs the FCI-checked premise (n <= 12) and always runs SCS: refuse before any SDP work."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(V, "hchain_problem", lambda *a: pytest.fail("built the SDP"))
+    monkeypatch.setattr(sys, "argv", ["vsdp_hchain.py", "--sym", *argv])
+    with pytest.raises(SystemExit):
+        V.main()
