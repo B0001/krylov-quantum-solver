@@ -285,6 +285,15 @@ hypothesis whose death is informative is worth more here than a safe one.
   PDS to < 1e-6 Ha with a 9.5–14-order cut, and δμ ∈ [−5, +2] Ha is harmless on N₂ (δ = +10 Ha
   breaks it).
 
+- [x] **CLOSED (chem-dcz): centering removes the PDS excited-root bound violation. SURVIVES, now
+  pinned.** [`SPEC_centered_pds_roots.md`](SPEC_centered_pds_roots.md),
+  `tests/test_centered_pds_roots_spec.py` (4/4 green). The raw path's "bimodality" is
+  **PYTHONHASHSEED**, not BLAS threads. The hash seed changes the qubit Hamiltonian's term order and
+  coefficient bits. Seed 2 at 1 thread reproduces raw PDS(7) at **−3.548 mHa** below a reachable
+  target (cond 1.2e17; the size depends on LAPACK, chem-pc1 saw −7.49), and seed 0 gives +0.026 mHa.
+  On both seeds, centered roots stay above every target for K=3..8 (min +0.0042 mHa at K=8) and match
+  across the seeds to < 1e-13 Ha. Follow-up: hash-seed-deterministic `build_molecular_hamiltonian`.
+
 - [x] **CLOSED (chem-pc1) — the higher roots of P_K(E) are bounded excited-state estimates, but the
   usefulness claim is KILLED, and a second, sharper finding: the bound itself can break in floating
   point.** `pds_roots` added (`moment_expansion.py`), `pds_energy` now `pds_roots(...)[0]` (no

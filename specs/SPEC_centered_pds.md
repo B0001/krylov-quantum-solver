@@ -105,7 +105,9 @@ re-inflates the dynamic range. μ = ⟨H⟩ sits at δ ≈ −2.26 Ha, inside th
 - Higher-root/excited-state use (`SPEC_pds_excited_roots`). *Lead, not gated:* on stretched H₄
   the centered frame kept every root above its reachable target at K=3..8 at 1 and 4 threads
   (min margin +0.0042 mHa at K=8), but this container's raw run did not reproduce that spec's
-  −7.49 mHa violation, so "centering fixes it" is not yet shown.
+  −7.49 mHa violation, so "centering fixes it" is not yet shown. **Resolved in
+  `SPEC_centered_pds_roots` (chem-dcz):** the raw split is set by PYTHONHASHSEED, not by threads. On a
+  pinned violating seed, raw is −3.548 mHa at K=7 while centered is above every target for K=3..8.
 - Changing `moment_expansion` to center by default (would alter a closed spec's API).
 
 ## 8. Caveats and risks
