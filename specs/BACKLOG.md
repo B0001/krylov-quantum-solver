@@ -436,9 +436,12 @@ hypothesis whose death is informative is worth more here than a safe one.
   given from this entry's own prior citation, not re-sourced. *Convergence note (filed separately,
   chem-q9g):* the public `coordination_gap(z=3)` call raises `RuntimeError` for Nb3Cl8 under the
   module's default `max_cycle=1000` (an iteration-cap artifact, not near-degeneracy — the
-  non-converged energy already agreed with the converged one to 6 decimals); this check reproduces
-  the number with `max_cycle=4000, conv_tol=1e-10` instead. Full reproduction commands and output:
-  `sandbox-handoffs/chem-a04.md`.
+  non-converged energy already agreed with the converged one to 6 decimals); chem-q9g's keyword-only
+  `max_cycle` override fixed it, and this check now calls `coordination_gap(..., max_cycle=4000)`
+  (it first carried a hand-rolled copy with `max_cycle=4000, conv_tol=1e-10` — PySCF's default
+  tolerance — with identical output). **Re-run on a second machine (Apple M3) when landed: every
+  number above reproduces** (LT Cl 1117.5 meV / +1.59%, spread 44.3%, HT 1065.3 meV / −4.67%,
+  z=3 872.93 meV; ~65–90 s). Full reproduction commands and output: `sandbox-handoffs/chem-a04.md`.
 
 - [x] **CLOSED 2026-09-30 (chem-1gr) — Magnetocaloric S(T,B): the named follow-up, closed as a
   quantified negative, on both counts.** `SPEC_nb3x8_thermo` §7 and `SPEC_nb3x8_metamagnetism` §7

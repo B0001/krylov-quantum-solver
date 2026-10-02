@@ -193,3 +193,21 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 
 - `chem-a04`: closed (this session, after this handoff was written).
 - `chem-q9g`: open, P3, filed this session (coordination_gap convergence cap).
+
+## Landing note, 2026-10-02 (batch landing, branch `batch/nb3x8-landing`)
+
+Added when the work was landed on `origin/main` after chem-q9g (see its handoff).
+
+- **Re-run on a second machine (Apple M3, macOS 27, Accelerate; throttled to 2 threads; 63-90 s wall):
+  every number in this handoff reproduces** -- LT Cl base 1117.5 meV (+1.59% vs 1100 meV), family
+  spread 44.3% (Cl 1117.5 / Br 963.7 / I 774.4 meV), HT-parameter model 1065.3 meV (-4.67% vs a
+  measured 42.7% drop), `coordination_gap` z=0..4 = 1311.81 / 1167.54 / 1092.09 / 872.93 / 786.45 meV
+  (z=3 is 242.93 meV short of 630 meV and above the 700 meV kill line). Both kill conditions survive.
+- **The check script changed shape.** The "verbatim re-implementation of the cluster construction"
+  and hand-rolled FCI loop described above (`_build_coordination_cluster`,
+  `leg3_coordination_gap_robust`) were deleted: chem-q9g's keyword-only `max_cycle` override now exists,
+  so leg 3b calls `coordination_gap(*NB3X8_LT_BULK_5P["Nb3Cl8"], z, max_cycle=4000)`. Output is
+  identical (the old explicit `conv_tol=1e-10` equals PySCF's default, so it was a no-op).
+- `chem-q9g` is no longer "open": it is landed in the same PR. Its Br z=3 finding is platform
+  dependent (it converges at the default `max_cycle=1000` on Apple M3); the Cl z=3 failure this script
+  was written around reproduces on both platforms.
