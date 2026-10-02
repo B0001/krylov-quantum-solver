@@ -165,6 +165,10 @@ spectrum has several levels within ~20 mHa of each other — see §6). PySCF/qis
   companion-matrix eigensolve internals, or both) is not pinned down further here. The practical
   upshot: **do not trust a PDS higher-root bound at `cond(M) > ~1e14`** on a system with
   near-degenerate orbitals, even if a single run looks fine — rerun or check conditioning first.
+  **Update (chem-dcz, `SPEC_centered_pds_roots`):** the split's source is **PYTHONHASHSEED**.
+  Hash-randomized iteration in the operator build changes the qubit Hamiltonian's term order and
+  coefficient bits, and so the moment bits. The split is neither SCF gauge nor threads. Pinning the
+  seed makes it deterministic, and the centered frame removes the violation.
 - Honest limitation: exact statevector, minimal-basis H₄ only — a correctness/behavior study, not a
   claim about production excited-state usefulness of raw-frame PDS.
 
