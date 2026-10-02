@@ -39,6 +39,7 @@ from qiskit_nature.second_q.circuit.library import HartreeFock
 from qiskit_nature.second_q.drivers import PySCFDriver
 from qiskit_nature.second_q.hamiltonians import ElectronicEnergy
 from qiskit_nature.second_q.mappers import JordanWignerMapper
+from qiskit_nature.second_q.operators import FermionicOp
 from qiskit_nature.second_q.transformers import ActiveSpaceTransformer
 
 
@@ -73,6 +74,24 @@ class MolecularHamiltonian:
         """
         eigenvalue = float(np.linalg.eigvalsh(self.qubit_hamiltonian.to_matrix())[0])
         return self.total_energy(eigenvalue)
+
+
+def map_canonical(mapper, fermionic_op: FermionicOp) -> SparsePauliOp:
+    """Map a fermionic operator to qubits bit-for-bit independently of PYTHONHASHSEED.
+
+    ``second_q_op()`` returns the same coefficients in every process, but its KEY ORDER follows
+    Python's randomized hashing. The mapper sums colliding Pauli terms in that order, so the low
+    bits of the qubit coefficients (and the term order) changed between processes -- enough to
+    flip ill-conditioned downstream results (raw PDS K=7 on stretched H4: +0.026 vs -3.548 mHa,
+    chem-8tl). Mapping a label-sorted operator fixes the summation order; sorting the Pauli
+    labels fixes the output order. Gate: tests/test_hamiltonian_determinism.py.
+    """
+    ordered = FermionicOp(dict(sorted(fermionic_op.items())),
+                          num_spin_orbitals=fermionic_op.num_spin_orbitals)
+    qubit_op = mapper.map(ordered)
+    labels = [p.to_label() for p in qubit_op.paulis]
+    idx = sorted(range(len(labels)), key=labels.__getitem__)
+    return SparsePauliOp.from_list([(labels[i], qubit_op.coeffs[i]) for i in idx])
 
 
 def build_molecular_hamiltonian(
@@ -117,7 +136,7 @@ def build_molecular_hamiltonian(
     elif (active_electrons is None) ^ (active_orbitals is None):
         raise ValueError("Provide BOTH active_electrons and active_orbitals, or neither.")
 
-    qubit_hamiltonian = mapper.map(problem.hamiltonian.second_q_op())
+    qubit_hamiltonian = map_canonical(mapper, problem.hamiltonian.second_q_op())
 
     # Every constant the driver/transformer set aside (nuclear repulsion, and for an
     # active space the inactive/frozen-core energy) must be re-added to recover totals.
@@ -170,7 +189,8 @@ def build_hamiltonian_from_integrals(
     if eri.shape != (n_orb, n_orb, n_orb, n_orb):
         raise ValueError(f"eri must have shape {(n_orb,) * 4}, got {eri.shape}")
 
-    qubit_hamiltonian = mapper.map(ElectronicEnergy.from_raw_integrals(h1, eri).second_q_op())
+    qubit_hamiltonian = map_canonical(
+        mapper, ElectronicEnergy.from_raw_integrals(h1, eri).second_q_op())
     offset = float(energy_offset)
 
     hf_circuit = HartreeFock(n_orb, tuple(num_particles), mapper)
@@ -216,7 +236,7 @@ def build_dipole_operators(
 
     operators = []
     for axis, key in enumerate(("XDipole", "YDipole", "ZDipole")):
-        elec = mapper.map(elec_ops[key])
+        elec = map_canonical(mapper, elec_ops[key])
         identity = SparsePauliOp.from_list([("I" * elec.num_qubits, nuclear[axis])])
         operators.append((identity - elec).simplify())
     return operators

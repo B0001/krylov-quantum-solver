@@ -28,6 +28,7 @@ from __future__ import annotations
 import dataclasses
 
 import numpy as np
+import scipy.linalg
 from qiskit.quantum_info import SparsePauliOp
 
 from hybrid_quantum_solver.hardware_krylov import HardwareKrylovSolver
@@ -43,7 +44,14 @@ def centered_frame(mh: MolecularHamiltonian):
     ``odmd.build_odmd_problem`` / ``trotter_odmd.build_trotter_odmd_problem`` (dense
     diagonalization: validation scale only).
     """
-    w_eig, V = np.linalg.eigh(mh.qubit_hamiltonian.to_matrix())
+    h = mh.qubit_hamiltonian.to_matrix()
+    try:
+        w_eig, V = np.linalg.eigh(h)
+    except np.linalg.LinAlgError:
+        # macOS Accelerate's ZHEEVD rejects its own LRWORK at 12+ qubits (chem-aj1, same bug as
+        # reachability._dense_hf_projection / chem-a0y). ZHEEVR is unaffected; failure-only, so
+        # Linux/OpenBLAS results stay bit-identical.
+        w_eig, V = scipy.linalg.eigh(h, driver="evr")
     psi0 = np.asarray(mh.hf_state().data, dtype=complex)
     pops = np.abs(V.conj().T @ psi0) ** 2
     reach = w_eig[pops > 1e-8].real
