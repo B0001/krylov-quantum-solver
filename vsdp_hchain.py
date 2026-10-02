@@ -125,12 +125,112 @@ def _spin_ok(key, r):
     return len(C) == len(A) and sum(p < r for p in C) == sum(p < r for p in A)
 
 
+# ---- symmetry-adapted T2 (chem-7ko): SU(2) highest-weight vectors x chain-reflection parity.
+# Valid for a nondegenerate singlet ground state of a reflection-symmetric chain: then S+|psi> = 0 and
+# P|psi> = +-|psi>, so <[S+, w]> = 0 and <w> = <P w P^dag> for every word w (imposed on the RDM), and the
+# T2 matrix is SU(2)-invariant, hence block-diagonal on (spin S, highest weight M = S) x parity.
+
+def _word(key):
+    return tuple((True, p) for p in key[0]) + tuple((False, p) for p in key[1])
+
+
+def ad_splus(word, r):
+    """[S+, w] as {canonical key: coef}, S+ = sum_i a+_{i alpha} a_{i beta}."""
+    out = {}
+    for i in {p % r for _, p in word}:
+        s = ((True, i), (False, r + i))
+        for sgn, w in ((1, s + tuple(word)), (-1, tuple(word) + s)):
+            for k, v in normal_order(w).items():
+                out[k] = out.get(k, 0) + sgn * v
+    return {k: v for k, v in out.items() if v}
+
+
+def reflect(key, r):
+    """Site i -> r-1-i on both spins: (canonical key, sign)."""
+    f = lambda p: (p // r) * r + r - 1 - p % r  # noqa: E731
+    return canon(tuple((True, f(p)) for p in key[0]) + tuple((False, f(p)) for p in key[1]))
+
+
+def sym_basis(words, r):
+    """Orthogonal integer basis of ker(ad S+) within one T2 Sz-sector, split by reflection parity.
+
+    Exact (Fraction) Gram-Schmidt per reflection orbit of spatial labels, so every column is a primitive
+    integer vector and the adapted block Q^T M Q has exact integer constraint coefficients.
+    Returns {+1: [(orbit, {word: int})], -1: [...]}."""
+    from fractions import Fraction
+    from math import gcd, lcm
+
+    def spatial(w):
+        return w[0][1] % r, tuple(sorted(p % r for _, p in w[1:]))
+
+    groups = {}
+    for w in words:
+        groups.setdefault(spatial(w), []).append(w)
+
+    def gs(u, basis):
+        for b in basis:
+            c = sum(x * y for x, y in zip(u, b)) / sum(y * y for y in b)
+            u = [x - c * y for x, y in zip(u, b)]
+        return u
+
+    out, seen = {1: [], -1: []}, set()
+    for g in groups:
+        if g in seen:
+            continue
+        gp = (r - 1 - g[0], tuple(sorted(r - 1 - x for x in g[1])))
+        seen |= {g, gp}
+        ws = groups[g] + (groups[gp] if gp != g else [])
+        idx = {w: i for i, w in enumerate(ws)}
+        m = len(ws)
+        brows = {}
+        for i, w in enumerate(ws):
+            for t, v in ad_splus(w, r).items():
+                brows.setdefault(t, [Fraction(0)] * m)[i] = Fraction(v)
+        rowspace = []
+        for b in brows.values():
+            b = gs(b, rowspace)
+            if any(b):
+                rowspace.append(b)
+        perm = []
+        for w in ws:
+            key, s = reflect(canon(w)[0], r)
+            perm.append((idx[_word(key)], s))
+        for sigma in (1, -1):
+            basis = []
+            for i in range(m):
+                v = gs([Fraction(int(j == i)) for j in range(m)], rowspace)
+                u = list(v)
+                for j, (pj, s) in enumerate(perm):
+                    u[pj] += sigma * s * v[j]
+                u = gs(u, basis)
+                if any(u):
+                    basis.append(u)
+            for u in basis:
+                L = lcm(*(x.denominator for x in u))
+                ints = [int(x * L) for x in u]
+                G = gcd(*ints)
+                out[sigma].append((len(seen), {ws[j]: x // G for j, x in enumerate(ints) if x}))
+    return out
+
+
 def build(h1, eri, na, nb, t2=False):
     """Standard-form PQG SDP: min c.v  s.t.  A v = b,  v = [vec_F(X_j)], X_j PSD.
 
+    t2=True adds T2 split by Sz; t2="sym" adds the SU(2) x reflection adapted T2 blocks plus the
+    singlet/reflection equalities on the RDM (needs exactly reflection-symmetric integrals).
     A and c touch only upper-triangle positions (a <= b) of each block."""
     r = h1.shape[0]
-    rows = block_rows(r, t2)
+    sym = t2 == "sym"
+    rows = block_rows(r, bool(t2) and not sym)
+    adapted = {}  # block name -> (sector, [(orbit, combo)])
+    if sym:
+        assert np.array_equal(h1, h1[::-1, ::-1]) and np.array_equal(eri, eri[::-1, ::-1, ::-1, ::-1])
+        full = block_rows(r, True)
+        for sec, w in (("h", full["T2_+0"]), ("q", full["T2_+1"])):  # M = 1/2 and M = 3/2 sectors
+            for sigma, cols in sym_basis(w, r).items():
+                name = f"T2{sec}{'+' if sigma > 0 else '-'}"
+                adapted[name] = (sec, cols)
+                rows[name] = [c for _, c in cols]
     names = list(rows)
     size = {k: len(rows[k]) for k in names}
     off, tot = {}, 0
@@ -160,7 +260,9 @@ def build(h1, eri, na, nb, t2=False):
                 terms[p] = terms.get(p, 0) + c
         return terms, const
 
-    ri, ci, vals, bvec = [], [], [], []
+    from array import array
+
+    ri, ci, vals, bvec = array("q"), array("q"), array("d"), []  # n=12 sym: ~1e8 entries
 
     def add_row(terms, rhs):
         i = len(bvec)
@@ -169,8 +271,36 @@ def build(h1, eri, na, nb, t2=False):
                 ri.append(i), ci.append(p), vals.append(c)
         bvec.append(rhs)
 
+    for sec in ("h", "q"):  # adapted entries X[a,b] = sum_{w,w'} Q[w,a] Q[w',b] <{w^dag, w'}>
+        blocks = [k for k in adapted if adapted[k][0] == sec]
+        if not blocks:
+            continue
+        norb = 1 + max(o for k in blocks for o, _ in adapted[k][1])
+        by_orb = {k: [[] for _ in range(norb)] for k in blocks}
+        for k in blocks:
+            for a_, (o, combo) in enumerate(adapted[k][1]):
+                by_orb[k][o].append((a_, combo))
+        for o1 in range(norb):
+            for o2 in range(o1, norb):
+                F = {}
+                for k in blocks:
+                    for a_, ca in by_orb[k][o1]:
+                        for b_, cb in by_orb[k][o2]:
+                            if b_ < a_:
+                                continue
+                            row, const = {pos(k, a_, b_): 1}, 0
+                            for w1, x1 in ca.items():
+                                for w2, x2 in cb.items():
+                                    if (w1, w2) not in F:
+                                        F[w1, w2] = linform(block_entry("T2", w1, w2))
+                                    terms, c0 = F[w1, w2]
+                                    const += x1 * x2 * c0
+                                    for p, c in terms.items():
+                                        row[p] = row.get(p, 0) - x1 * x2 * c
+                            add_row(row, const)
+
     for k in names:
-        if k in D_BLOCKS:
+        if k in D_BLOCKS or k in adapted:
             continue
         R = rows[k]
         for a_ in range(len(R)):
@@ -199,7 +329,31 @@ def build(h1, eri, na, nb, t2=False):
                     row[p1] = row.get(p1, 0) - (N[t] - (s == t)) * c1
                     add_row(row, 0)
 
-    A = sp.csr_matrix((np.array(vals, float), (ri, ci)), shape=(len(bvec), tot))
+    if sym:  # singlet: <[S+, w]> = 0 for every lowering w of rank <= 2; reflection: <w> = <P w P^dag>
+        seen = set()
+        for pid, p in loc.items():
+            k2, s_ = reflect(pid, r)
+            q = loc[pid_of(k2)]
+            if q != p or s_ < 0:
+                key = (min(p, q), max(p, q), s_)
+                if key not in seen:
+                    seen.add(key)
+                    add_row({p: 1, q: -s_} if q != p else {p: 1}, 0)
+        modes = range(2 * r)
+        for nb_ in (1, 2):
+            for C in combinations(modes, nb_):
+                for A_ in combinations(modes, nb_):
+                    if sum(x < r for x in C) - sum(x < r for x in A_) != -1:  # Sz(w) = -1
+                        continue
+                    terms, const = linform(ad_splus(_word((C, A_[::-1])), r))
+                    assert const == 0
+                    key = frozenset(terms.items())
+                    if terms and key not in seen:
+                        seen.add(key)
+                        add_row(terms, 0)
+
+    A = sp.csr_matrix((np.frombuffer(vals), (np.frombuffer(ri, np.int64), np.frombuffer(ci, np.int64))),
+                      shape=(len(bvec), tot))
     A.sum_duplicates()
 
     c, cabs, ccnt = np.zeros(tot), np.zeros(tot), np.zeros(tot)
@@ -233,9 +387,18 @@ def build(h1, eri, na, nb, t2=False):
     def det_value(nf):  # canonical keys: <a+C a_A> on a determinant is 1 iff A == reversed(C), all occupied
         return sum(v for (C, Ann), v in nf.items() if set(C) == set(Ann) and set(C) <= occ)
 
-    traces = {k: sum(det_value(block_entry(k, R, R)) for R in rows[k]) for k in names}
+    traces = {k: sum(det_value(block_entry(k, R, R)) for R in rows[k]) for k in names if k not in adapted}
+    # groups: (upper bound on sum_j tr X*_j, blocks j). An adapted block is Q^T M Q with orthogonal integer
+    # columns of one Sz-sector M, so its blocks' traces sum to <= max_a |q_a|^2 * tr M (exact N-only trace).
+    groups = {k: (t, [k]) for k, t in traces.items()}
+    for sec, k0 in (("h", "T2_+0"), ("q", "T2_+1")):
+        ks = [k for k in adapted if adapted[k][0] == sec]
+        if ks:
+            T = sum(det_value(block_entry("T2", w, w)) for w in block_rows(r, True)[k0])
+            maxd = max(sum(x * x for x in cmb.values()) for k in ks for _, cmb in adapted[k][1])
+            groups[sec] = (maxd * T, ks)
     return dict(A=A, b=np.array(bvec, float), c=c, cerr=cerr, names=names, size=size, off=off,
-                rows=rows, loc=loc, traces=traces, tot=tot, r=r, na=na, nb=nb)
+                rows=rows, loc=loc, traces=traces, groups=groups, tot=tot, r=r, na=na, nb=nb)
 
 
 def solve(prob, solver="CLARABEL", **kw):
@@ -247,6 +410,29 @@ def solve(prob, solver="CLARABEL", **kw):
     P = cp.Problem(cp.Minimize(prob["c"] @ v), [con])
     P.solve(solver=solver, **kw)
     return P.value, np.asarray(con.dual_value, float), P.status
+
+
+def solve_scs(prob, **settings):
+    """SCS called directly on svec variables (cvxpy's canonicalization does not fit n = 12 in 16 GB).
+
+    Column scaling svec <-> vec does not change the row duals, so y feeds `certify` unchanged."""
+    import scs
+
+    cols, scale, sizes = [], [], []
+    for k in prob["names"]:
+        n, o = prob["size"][k], prob["off"][k]
+        a, b = np.triu_indices(n)  # row-major upper == SCS's column-major lower triangle
+        cols.append(o + a + b * n)
+        scale.append(np.where(a == b, 1.0, 1 / math.sqrt(2)))
+        sizes.append(n)
+    cols, scale = np.concatenate(cols), np.concatenate(scale)
+    m, nv = prob["A"].shape[0], len(cols)
+    A = prob["A"].tocsc()[:, cols] @ sp.diags(scale)
+    data = dict(A=sp.vstack([A, -sp.identity(nv)]).tocsc(), b=np.concatenate([prob["b"], np.zeros(nv)]),
+                c=prob["c"][cols] * scale)
+    del A
+    sol = scs.SCS(data, dict(z=m, s=sizes), **settings).solve()
+    return sol["info"]["pobj"], np.asarray(sol["y"][:m]), sol["info"]["status"]
 
 
 def _lam_lower(Z):
@@ -288,7 +474,8 @@ def rigorous_lower_bound(prob, y, e_const=0.0):
         E = gamma(K) * (Wa + Wa.T) / 2 + (Ce + Ce.T) / 2 + U * np.abs(Z)
         lam = _lam_lower(Z) - math.sqrt(float(np.sum(E * E))) * (1 + 1e-6)
         lams[k] = lam
-        bound += prob["traces"][k] * min(0.0, lam) * (1 + 1e-12)
+    for T, ks in prob["groups"].values():
+        bound += T * min(0.0, *(lams[k] for k in ks)) * (1 + 1e-12)
     return bound + e_const - 1e-14 * (abs(bound) + abs(e_const)), lams
 
 
@@ -297,23 +484,34 @@ def certify(prob, y, e_const):
     return max((rigorous_lower_bound(prob, s * y, e_const) for s in (1.0, -1.0)), key=lambda t: t[0])
 
 
+def sym_integrals(n):
+    """Löwdin site integrals averaged over the chain reflection, so P H P^dag == H exactly in float."""
+    from benchmark_hchain_tdl import integrals
+
+    h1, eri, ne, e_nuc, _ = integrals(n, localize=True)
+    return (h1 + h1[::-1, ::-1]) / 2, (eri + eri[::-1, ::-1, ::-1, ::-1]) / 2, ne, e_nuc
+
+
 def hchain_problem(n, t2=False):
     from benchmark_hchain_tdl import integrals
 
-    h1, eri, (na, nb), e_nuc, _ = integrals(n, localize=True)
+    if t2 == "sym":
+        h1, eri, (na, nb), e_nuc = sym_integrals(n)
+    else:
+        h1, eri, (na, nb), e_nuc, _ = integrals(n, localize=True)
     return build(h1, eri, na, nb, t2), e_nuc
 
 
 FCI_MAX_N = 12
 
 
-def upper_bound(n):
+def upper_bound(n, sym=False):
     """Variational upper bound: exact FCI up to n=12, else the DMRG energy from --dmrg-upper."""
     if n <= FCI_MAX_N:
         from benchmark_hchain_tdl import integrals
         from hybrid_quantum_solver.dmrg_reference import fci_energy
 
-        h1, eri, ne, e_nuc, _ = integrals(n, localize=True)
+        h1, eri, ne, e_nuc = sym_integrals(n) if sym else integrals(n, localize=True)[:4]
         return fci_energy(h1, eri, ne, e_nuc), "FCI"
     path = "data/hchain_vsdp_upper.json"
     ub = json.load(open(path)) if os.path.exists(path) else {}
@@ -357,6 +555,7 @@ def main():
     ap.add_argument("--bond-dims", default="250,500,1000,1500")
     ap.add_argument("--threads", type=int, default=6)
     ap.add_argument("--t2", action="store_true", help="add the T2 condition (block ~1.5 r^3: n <= 8 here)")
+    ap.add_argument("--sym", action="store_true", help="SU(2) x reflection adapted T2, direct SCS (chem-7ko)")
     ap.add_argument("--table", action="store_true", help="re-pair saved bounds with current upper bounds")
     args = ap.parse_args()
 
@@ -379,13 +578,24 @@ def main():
         if args.table:
             row = results[str(n)]
         else:
-            prob, e_nuc = hchain_problem(n, args.t2)
+            prob, e_nuc = hchain_problem(n, "sym" if args.sym else args.t2)
             kw = dict(eps_abs=args.eps, eps_rel=args.eps, max_iters=args.max_iters) if args.solver == "SCS" else {}
-            val, y, status = solve(prob, args.solver, **kw)
+            if args.sym:
+                val, y, status = solve_scs(prob, **kw)
+            else:
+                val, y, status = solve(prob, args.solver, **kw)
             lb, lams = certify(prob, y, e_nuc)
-            row = dict(n=n, conditions="PQG+T2" if args.t2 else "PQG", solver=args.solver, status=status, sdp_value=val + e_nuc, certified_lb=lb,
-                       worst_block_lambda=min(lams.values()))
-        up, how = upper_bound(n)
+            cond = "PQG+T2sym" if args.sym else "PQG+T2" if args.t2 else "PQG"
+            row = dict(n=n, conditions=cond, solver=args.solver, status=status, sdp_value=val + e_nuc, certified_lb=lb,
+                       worst_block_lambda=min(lams.values()),
+                       t2_blocks={k: v for k, v in prob["size"].items() if k.startswith("T2")})
+        up, how = upper_bound(n, args.sym)
+        if args.sym and n <= FCI_MAX_N and "fci_gap" not in row:  # the adaptation's premise, checked by FCI
+            from pyscf import fci
+
+            h1, eri, ne, e_nuc = sym_integrals(n)
+            e, ci = fci.direct_spin1.kernel(h1, eri, n, ne, nroots=2, conv_tol=1e-10)
+            row.update(fci_gap=e[1] - e[0], fci_s2=fci.spin_op.spin_square0(ci[0], n, ne)[0])
         row.update(upper=up, upper_method=how,
                    width_mHa_per_atom=None if up is None else (up - row["certified_lb"]) / n * 1e3)
         results[str(n)] = row
