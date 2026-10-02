@@ -378,26 +378,34 @@ hypothesis whose death is informative is worth more here than a safe one.
   fact — it now encodes the *verified* miss, which was always the target, not a threshold picked to
   pass). → [`SPEC_nb3x8_magnetometry.md`](SPEC_nb3x8_magnetometry.md) §5 G5.
 
-- [x] **Coordination cannot rescue the 5.3× Tc overprediction: the spin gap goes the wrong way**
-  *(chem-g78)* — *Claim:* `SPEC_nb3x8_magnetometry` §7 names coordination/mean-field reduction as the
+- [x] **CLOSED (chem-g78) — coordination/mean-field reduction does NOT explain the 5.3× (Cl) / 2.3× (Br)
+  Tc overprediction: the spin gap goes the wrong way for both halides** [SPEC](SPEC_nb3x8_gaps.md) G8
+  (`tests/test_nb3x8_gaps_spec.py`, both halides), J_eff(z=0→3) Nb₃Cl₈ 66.20→71.08→66.55→71.12 meV,
+  Nb₃Br₈ 119.11→126.50→120.11→126.63 meV, charge-channel control −33.5% / −30.1% at z=3.
+  *Claim:* `SPEC_nb3x8_magnetometry` §7 names coordination/mean-field reduction as the
   follow-up and its backlog entry *attributes* the 5.3×(Cl)/2.3×(Br) miss to it. **THE FINDING: the
-  attribution is FALSE.** Running the identical `coordination_gap` cluster topology in the **spin**
-  channel (`nb3x8_gaps.coordination_spin_gap`: J_eff = E(Sz=1 lowest) − E(Sz=0 lowest) at half-filling)
-  on Nb₃Cl₈ at L=4,6,8 (z=1,2,3): J_eff = 66.20 (z=0, isolated) → 71.08 (L=4) → 66.55 (L=6) → 71.12 meV
-  (L=8) — it rises then partially returns then rises again, never falls, and is *larger* at the
-  largest cluster reached than in the isolated dimer. Every Sz=0/Sz=1 lowest state checked out as a
-  clean singlet/triplet (⟨S²⟩ = 0.000/2.000 at every z — no higher-S intruder). **Primary kill did
-  NOT trigger:** J_eff(z=3) = 71.12 meV is nowhere near J₀/3 ≈ 22.1 meV, so coordination does not
-  eventually deliver the reduction even at the largest tractable cluster (L=8, per the L=12
-  half-filled FCI convergence warning at `nb3x8_gaps.py`). **Secondary kill (machinery-broken check)
-  also did NOT trigger:** the charge-channel control (`coordination_gap`) on the *identical* Nb₃Cl₈
-  clusters drops monotonically 1311.8 → 1167.5 → 1092.1 → 872.9 meV, a 33.5% reduction at z=3 (≥20%
-  required) — confirming the machinery itself works and the spin/charge contrast is real, not an
-  artifact. **Verdict:** coordination/mean-field reduction of the interlayer J does not explain the
-  Tc overprediction; the 5.3×/2.3× miss must be reassigned to physics the isolated-dimer model can't
-  see — the cooperative/first-order structural transition itself, in-plane kagome exchange, or a
-  direct lattice renormalization of t_s⊥. Gate G8 in `tests/test_nb3x8_gaps_spec.py`; implementation
-  in `nb3x8_gaps.py` (`coordination_spin_gap`, `_coordination_cluster`).
+  attribution is FALSE** (within finite open L≤8 clusters; no 3-D triplon band). Running the identical
+  `coordination_gap` cluster topology in the **spin** channel (`nb3x8_gaps.coordination_spin_gap`:
+  J_eff = E(Sz=1 lowest) − E(Sz=0 lowest) at half-filling) at L=4,6,8 (z=1,2,3): **Nb₃Cl₈** J_eff =
+  66.20 (z=0, isolated) → 71.08 (L=4) → 66.55 (L=6) → 71.12 meV (L=8); **Nb₃Br₈** 119.11 → 126.50 →
+  120.11 → 126.63 meV — it rises then partially returns then rises again, never falls, and is *larger*
+  at the largest cluster reached than in the isolated dimer. The Br leg was added when the work was
+  landed (the original chem-g78 run covered Cl only; its "5.3×/2.3×" wording was ahead of its data).
+  Every Sz=0/Sz=1 lowest state checked out as a clean singlet/triplet (⟨S²⟩ = 0.000/2.000 at every z,
+  both halides — no higher-S intruder). **Primary kill did NOT trigger:** the bar is the reduction
+  coordination must deliver, `min(3, Tc overprediction)` — J₀/3 = 22.07 meV for Cl, J₀/2.26 = 52.79 meV
+  for Br — and J_eff(z=3) = 71.12 / 126.63 meV is nowhere near it (Br's J_eff/J₀ ≥ 1.00 at every L, so
+  any bar ≤ 1 gives the same verdict); L=12 is out of reach (half-filled FCI convergence warning at
+  `nb3x8_gaps.py`). **Secondary kill (machinery-broken check) also did NOT trigger:** the
+  charge-channel control (`coordination_gap`) on the *identical* clusters drops monotonically,
+  Cl 1311.8 → 1167.5 → 1092.1 → 872.9 meV (33.5% at z=3), Br 1086.0 → 994.0 → 923.5 → 759.4 meV
+  (30.1%) (≥20% required) — confirming the machinery itself works and the spin/charge contrast is
+  real, not an artifact. **Verdict:** coordination/mean-field reduction of the interlayer J, as
+  modelled by finite clusters, does not explain the Tc overprediction; what does is **open** —
+  candidates the isolated-dimer model can't see (none tested here): the cooperative/first-order
+  structural transition itself, in-plane kagome exchange, or a direct lattice renormalization of
+  t_s⊥. Gate G8 in `tests/test_nb3x8_gaps_spec.py`; implementation in `nb3x8_gaps.py`
+  (`coordination_spin_gap`, `_coordination_cluster`); regenerate with `uv run python nb3x8_gaps.py`.
   → [`SPEC_nb3x8_gaps.md`](SPEC_nb3x8_gaps.md) G8; [`SPEC_nb3x8_magnetometry.md`](SPEC_nb3x8_magnetometry.md)
   §7 (follow-up closed as a negative result, not deferred).
 

@@ -51,23 +51,27 @@ sampled only the nearest neighbour; coordination and the full chain (above) move
 as the likely explanation for the 5.3x (Nb3Cl8) / 2.3x (Nb3Br8) overprediction of the singlet-formation
 Tc by the isolated-dimer J. Running ``coordination_spin_gap`` -- the IDENTICAL cluster topology as
 ``coordination_gap``, just measuring E(Sz=1 lowest) - E(Sz=0 lowest) at half-filling instead of the
-charge gap -- on Nb3Cl8 shows J_eff does NOT fall monotonically:
+charge gap -- shows J_eff does NOT fall monotonically, for either halide (``python nb3x8_gaps.py``):
 
-  z=0 (isolated) 66.20 -> z=1 71.08 -> z=2 66.55 -> z=3 71.12 meV   (<S^2> = 0.000/2.000 every z; clean
-  singlet reference, no higher-S intruder in the Sz=1 state)
+  Nb3Cl8: z=0 (isolated) 66.20 -> z=1 71.08 -> z=2 66.55 -> z=3 71.12 meV
+  Nb3Br8: z=0 (isolated) 119.11 -> z=1 126.50 -> z=2 120.11 -> z=3 126.63 meV
+  (<S^2> = 0.000/2.000 at every z for both; clean singlet reference, no higher-S intruder in Sz=1)
 
 J_eff oscillates around the isolated value and is *larger*, not smaller, at the largest cluster reached
-(L=8) -- nowhere near the J0/3 = 22.1 meV the "coordination rescues Tc" attribution would need. The
-SAME machinery's charge-channel control on the SAME Nb3Cl8 clusters (z=0..3) gives the expected
-monotonic softening (1311.8 -> 1167.5 -> 1092.1 -> 872.9 meV, a 33.5% drop at z=3, confirming the
-machinery itself works and the charge/spin contrast is not an artifact).
+(L=8) -- nowhere near the J0/3 = 22.1 meV (Cl) or J0/2.26 = 52.8 meV (Br) that the "coordination
+rescues Tc" attribution would need (the bar is the reduction factor needed to remove the miss, capped
+at 3; Br's J_eff/J0 >= 1.00 at every L, so the verdict does not depend on it). The SAME machinery's
+charge-channel control on the SAME clusters (z=0..3) gives the expected monotonic softening
+(Cl 1311.8 -> 1167.5 -> 1092.1 -> 872.9 meV, a 33.5% drop at z=3; Br 1086.0 -> 994.0 -> 923.5 ->
+759.4 meV, 30.1%), confirming the machinery works and the charge/spin contrast is not an artifact.
 
-**Verdict: the coordination/mean-field attribution for the 5.3x/2.3x Tc miss is FALSE.** Coordination
+**Verdict: the coordination/mean-field attribution for the 5.3x (Cl) / 2.3x (Br) Tc miss is FALSE
+within this finite-cluster model (L <= 8 open clusters; no 3-D triplon band).** Coordination
 (open-boundary band broadening of the interlayer bond) softens the CHARGE gap but does not deliver a
 comparable softening of the SPIN gap -- if anything the finite clusters modestly stiffen J_eff. The
-5.3x/2.3x miss must be reassigned to physics ``nb3x8_magnetometry``'s isolated-dimer J cannot see: the
-cooperative/first-order structural transition itself, in-plane kagome exchange, or a lattice
-renormalization of t_s directly (not simple coordination broadening). See ``coordination_spin_gap`` /
+miss is therefore NOT explained by this mechanism; what explains it is open. Candidates this module
+cannot see and did not test: the cooperative/first-order structural transition itself, in-plane
+kagome exchange, or a lattice renormalization of t_s directly. See ``coordination_spin_gap`` /
 ``tests/test_nb3x8_gaps_spec.py::test_G8_*`` and specs/BACKLOG.md ("Coordination cannot rescue the
 5.3x Tc overprediction").
 """
@@ -339,19 +343,32 @@ if __name__ == "__main__":
           "(The 4-site 'bath bound' was too\noptimistic: it sampled only the nearest neighbour.)")
 
     print("\n*** chem-g78: does coordination rescue the Nb3X8 Tc overprediction? (spin channel) ***")
-    print("Nb3Cl8: the IDENTICAL coordination machinery, spin channel (J_eff) vs charge channel (gap):")
-    cl = NB3X8_LT_BULK_5P["Nb3Cl8"]
-    print(f"{'z':>3} {'J_eff (meV)':>12} {'<S^2> Sz=0/1':>14} {'charge gap (meV)':>17}")
-    j_by_z = {}
-    for z in (0, 1, 2, 3):
-        j_eff, ss0, ss1 = coordination_spin_gap(*cl, z)
-        j_by_z[z] = j_eff
-        cgap = coordination_gap(*cl, z, max_cycle=2000)
-        print(f"{z:>3} {j_eff:12.2f} {f'{ss0:.3f}/{ss1:.3f}':>14} {cgap:17.1f}")
-    j0, j3 = j_by_z[0], j_by_z[3]
-    print(f"J_eff at z=3 ({j3:.1f} meV) vs the J0/3 = {j0 / 3:.1f} meV rescue threshold: "
-          f"{'RESCUED' if j3 <= j0 / 3 else 'NOT rescued -- attribution FALSE'}.")
-    print("Charge-channel control on the same clusters drops monotonically (coordination softens the "
+    from nb3x8_magnetometry import overprediction_factor
+
+    rescued = []
+    for name in ("Nb3Cl8", "Nb3Br8"):
+        p5 = NB3X8_LT_BULK_5P[name]
+        over = overprediction_factor(name)
+        needed = min(3.0, over)      # reduction coordination must deliver (the gate's kill bar)
+        print(f"\n{name} (isolated-dimer Tc overprediction {over:.2f}x): the IDENTICAL coordination "
+              "machinery, spin channel (J_eff) vs charge channel (gap):")
+        print(f"{'z':>3} {'J_eff (meV)':>12} {'<S^2> Sz=0/1':>14} {'charge gap (meV)':>17}")
+        j_by_z = {}
+        for z in (0, 1, 2, 3):
+            j_eff, ss0, ss1 = coordination_spin_gap(*p5, z)
+            j_by_z[z] = j_eff
+            cgap = coordination_gap(*p5, z, max_cycle=4000)
+            print(f"{z:>3} {j_eff:12.2f} {f'{ss0:.3f}/{ss1:.3f}':>14} {cgap:17.1f}")
+        j0, j3 = j_by_z[0], j_by_z[3]
+        if j3 <= j0 / needed:
+            rescued.append(name)
+        print(f"J_eff at z=3 ({j3:.1f} meV) vs the J0/{needed:.2f} = {j0 / needed:.1f} meV rescue "
+              f"threshold: {'RESCUED' if name in rescued else 'NOT rescued'}.")
+    print("\nCharge-channel control on the same clusters drops monotonically (coordination softens the "
           "charge\ngap as designed); the spin channel does not -- it oscillates and is largest, not "
-          "smallest, at z=3.\nVerdict: coordination/mean-field reduction does NOT explain the "
-          "5.3x/2.3x Tc overprediction;\nsee the module docstring and specs/BACKLOG.md.")
+          "smallest, at z=3.")
+    print("Verdict (finite L<=8 open clusters): "
+          + (f"coordination reduction RESCUES the Tc overprediction for {', '.join(rescued)}."
+             if rescued else
+             "coordination/mean-field reduction does NOT explain the 5.3x (Cl) / 2.3x (Br) Tc "
+             "overprediction;\nsee the module docstring and specs/BACKLOG.md."))

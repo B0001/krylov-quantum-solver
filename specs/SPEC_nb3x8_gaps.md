@@ -104,13 +104,18 @@ all 10 dimer-cluster parameter sets (`NB3X8_CLUSTERS`).
   `SPEC_nb3x8_magnetometry.md` §7 names coordination/mean-field reduction as the likely explanation
   for the 5.3×/2.3× Tc overprediction of `nb3x8_magnetometry`'s isolated-dimer J. `coordination_gap`'s
   cluster topology, run in the spin channel (`coordination_spin_gap`: J_eff = E(Sz=1 lowest) −
-  E(Sz=0 lowest) at half-filling) instead of the charge channel, on Nb₃Cl₈ at L=4,6,8 (z=1,2,3):
+  E(Sz=0 lowest) at half-filling) instead of the charge channel, at L=4,6,8 (z=1,2,3):
   machinery anchor (z=0 reduces to the exact closed-form dimer J to `<1e-6` meV); every Sz=0/Sz=1
   lowest state is a clean singlet/triplet (`⟨S²⟩ = 0.000/2.000`, no higher-S intruder); J_eff never
-  drops below `J₀/3` anywhere in `L≤8` (66.20→71.08→66.55→71.12 meV — it rises, it does not fall);
-  the charge-channel control on the identical clusters *does* drop monotonically by 33.5% at z=3,
-  confirming the machinery itself is not broken. **Verdict: the coordination/mean-field attribution
-  is FALSE** — recorded in the module docstring and `specs/BACKLOG.md`, not merely deferred.
+  drops below the kill bar `J₀/min(3, Tc overprediction)` anywhere in `L≤8` — it rises, it does not
+  fall: **Nb₃Cl₈** 66.20→71.08→66.55→71.12 meV (bar J₀/3 = 22.07), **Nb₃Br₈**
+  119.11→126.50→120.11→126.63 meV (bar J₀/2.26 = 52.79; Br was measured at landing, the original
+  chem-g78 run covered Cl only); the charge-channel control on the identical clusters *does* drop
+  monotonically, by 33.5% (Cl) / 30.1% (Br) at z=3, confirming the machinery itself is not broken.
+  **Verdict: the coordination/mean-field attribution is FALSE for both halides** — within this
+  finite-cluster model (open L≤8 clusters, no 3-D triplon band), recorded in the module docstring and
+  `specs/BACKLOG.md`, not merely deferred. What explains the 5.3×/2.3× miss is left open.
+  Regenerate: `uv run python nb3x8_gaps.py`.
 
 ## 6. Implementation plan (test-first)
 
