@@ -54,7 +54,8 @@ class EnergyBracket:
         """Oracle-free PROOF that Temple's premise eps <= E_1 failed, so ``lower`` certifies
         nothing: eps > theta_1 >= E_1 (1e-9 Ha float margin, G1's tolerance). One-sided -- an eps
         in (E_1, theta_1] passes undetected, and self mode (eps = theta_1 - sigma_1) can never trip
-        it. Coverage measured in specs/SPEC_odmd_temple_repair_map.md."""
+        it. Noiseless solver only: with shot noise theta_1 is no bound, so ``theta1`` is left
+        inf and this never fires. Coverage measured in specs/SPEC_odmd_temple_repair_map.md."""
         return self.eps > self.theta1 + 1e-9
 
 
@@ -103,7 +104,8 @@ def krylov_bracket(mh: MolecularHamiltonian, m: int, eps: Optional[float] = None
                          width=upper - lower, variance=var0,
                          eps=eps_e + offset if np.isfinite(eps_e) else -np.inf,
                          eps_source=eps_source,
-                         theta1=energies[1] if len(energies) > 1 else np.inf)
+                         theta1=energies[1] if len(energies) > 1 and not solver.noise_sigma
+                         else np.inf)
 
 
 def bracket_ladder(mh: MolecularHamiltonian, dims: Sequence[int], eps: Optional[float] = None,

@@ -83,7 +83,7 @@ def summarize(mp: dict) -> dict:
         self_m4_contains=bool(self4.lower <= e0 + TOL),
         overshoot_k=sorted({k for _, k in over}),
         escapes=sorted(escapes),
-        worst_mha=max((br.lower - e0) * 1e3 for br in cells.values()),
+        worst_mha=max(((br.lower - e0) * 1e3 for br in cells.values()), default=-np.inf),
         degraded=sorted(over - escapes),
         flagged=sorted(c for c, br in cells.items() if br.premise_refuted),
         repair_k_m4=sorted(k for (m, k), br in cells.items()

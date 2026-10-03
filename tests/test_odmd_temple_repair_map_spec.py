@@ -14,7 +14,10 @@ only). PySCF/qiskit, no block2; two 12-qubit dense references dominate the run t
 """
 from functools import lru_cache
 
+from hybrid_quantum_solver.molecular_hamiltonian import build_molecular_hamiltonian
+from hybrid_quantum_solver.quantum_krylov_solver import QuantumKrylovSolver
 from odmd_temple_repair_map import SYSTEMS, TOL, k_vs_validity_map, summarize
+from temple_bounds import krylov_bracket
 
 
 @lru_cache(maxsize=None)
@@ -64,6 +67,10 @@ def test_Gb_oracle_free_flag_sound_and_partial():
         assert not any(br.premise_refuted for br in mp["self"].values()), key
         caught = [mp["cells"][c].premise_refuted for c in s["escapes"]]
         assert not caught or (any(caught) and not all(caught)), (key, s["escapes"], caught)
+    mh = build_molecular_hamiltonian(**SYSTEMS["h2"])   # shot noise: theta_1 is no bound -> off
+    noisy = QuantumKrylovSolver(mh, noise_sigma=1e-3, seed=0)
+    assert krylov_bracket(mh, 2, eps=10.0).premise_refuted
+    assert not krylov_bracket(mh, 2, eps=10.0, solver=noisy).premise_refuted
 
 
 def test_Gc_free_region_does_not_repair():
