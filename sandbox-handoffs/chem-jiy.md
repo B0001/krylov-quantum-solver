@@ -241,3 +241,20 @@ uv run python nb3x8_magnetometry.py                                   # CLI outp
 Per this run's git instructions (which supersede the repo's general "do not commit" policy for this
 specific sandbox branch): I committed this work on `sandbox/chem-jiy` and did **not** push — the
 host pushes and a human merges.
+
+## Landing note, 2026-10-02 (batch landing, branch `batch/nb3x8-landing`)
+
+Added when the work was landed on `origin/main`; the sections above are unchanged.
+
+- **Primary source re-checked independently** (not taken from this handoff): fetched
+  `https://arxiv.org/pdf/1701.05528` (23 pages), text via `pypdf` (`uv run --no-sync --with pypdf`, not
+  added as a dependency). It contains "... for T > 140 K yields a Curie constant C = 0.484 emu K
+  mol f.u.^-1 Oe^-1 (p_eff = 1.97, consistent with S_eff = 1/2) and a Weiss temperature of
+  theta = -51.2 K" (and later "theta = 51.2 K"); the string "13.1" does not occur anywhere in the
+  extracted text. So the -13.1 K datum is not in the cited source, as this handoff states.
+- **Numbers reproduce on a second machine (Apple M3)** via `uv run python nb3x8_magnetometry.py`
+  (2 s): overprediction 5.32x (Cl) / 2.26x (Br); -J/4 = -192 K vs measured -51.2 K (3.75x);
+  HT J(Cl) = 1.099 meV, z_eff = 16.06 (outside the [1, 12] bound); chi_HT(200 K)*T / C = 1.53x.
+- **Review-driven guard:** `z_eff_ht` and `chi_ht_curie_ratio` raised a bare `TypeError` (None
+  arithmetic) for any name without a measured HT datum (Nb3Br8's `theta_K` / `C_emu` are None). They
+  now raise `ValueError` naming the material; G5 pins this.

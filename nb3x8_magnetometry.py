@@ -106,25 +106,37 @@ def theta_over_measured(name: str) -> float:
     return theta_pred_K / EXPERIMENT[name]["theta_K"]
 
 
+def _measured_ht(name: str, key: str) -> float:
+    """``EXPERIMENT[name][key]`` (an HT Curie-Weiss datum), or a clear error where none is quoted:
+    only Nb3Cl8 has a primary-source-verified HT fit here (Nb3Br8's theta_K / C_emu are None)."""
+    v = EXPERIMENT.get(name, {}).get(key)
+    if v is None:
+        raise ValueError(f"no primary-source HT {key} quoted for {name} (only Nb3Cl8 has one)")
+    return v
+
+
 def z_eff_ht(name: str) -> float:
     """Mean-field coordination implied by theta = -z*J_HT/4, using the HT-phase cRPA parameters
     (``NB3X8_HT_BULK``, Table IV) and the measured HT theta_W. z_eff is EXTRACTED from the fit, not
     predicted independently -- it is only meaningful gated against a physical bound (1-12 for a
     layered stack), never as a free-standing prediction (see specs/BACKLOG.md Nb3X8 entry, bd
-    chem-jiy)."""
+    chem-jiy). Defined only where a measured theta_W is quoted (Nb3Cl8)."""
+    theta_K = _measured_ht(name, "theta_K")
     J_ht = dimer_exchange_analytic(**NB3X8_HT_BULK[name])
     theta_pred_ht_K = curie_weiss_theta(J_ht) / MEV_PER_K
-    return EXPERIMENT[name]["theta_K"] / theta_pred_ht_K
+    return theta_K / theta_pred_ht_K
 
 
 def chi_ht_curie_ratio(name: str, T_K: float = 200.0) -> float:
     """(exact HT-phase chi(T_K) * T_K) / measured HT Curie constant C -- the "apparent Curie
     constant" the HT-phase model implies at T_K, versus the primary-source-verified C. Deep in the
     Curie-Weiss regime chi*T -> C; at finite T_K it also carries the theta/T_K correction, so this
-    ratio is a sanity bound (order-1), not an exact reproduction target."""
+    ratio is a sanity bound (order-1), not an exact reproduction target. Defined only where a
+    measured C is quoted (Nb3Cl8)."""
+    C_emu = _measured_ht(name, "C_emu")
     p = NB3X8_HT_BULK[name]
     chi_emu = EMU_PER_REDUCED * susceptibility(**p, T=T_K * MEV_PER_K)
-    return chi_emu * T_K / EXPERIMENT[name]["C_emu"]
+    return chi_emu * T_K / C_emu
 
 
 if __name__ == "__main__":

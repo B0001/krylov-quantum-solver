@@ -13,6 +13,7 @@ bilayer dimer, density-density only. PySCF/qiskit, no block2; `make gates` runs 
 process.
 """
 import numpy as np
+import pytest
 
 from nb3x8_gaps import NB3X8_LT_BULK
 from nb3x8_magnetometry import (
@@ -134,3 +135,6 @@ def test_G5_phase_correction_does_not_survive_primary_source_verification():
     # the verified, corrected miss (LT J vs the verified theta_W) is real but smaller than the
     # originally-published, uncited 15x
     assert 3.0 < abs(theta_over_measured("Nb3Cl8")) < 5.0, theta_over_measured("Nb3Cl8")
+    for fn in (z_eff_ht, chi_ht_curie_ratio):   # no primary-source HT datum for Br: ValueError, not TypeError
+        with pytest.raises(ValueError, match="Nb3Br8"):
+            fn("Nb3Br8")
