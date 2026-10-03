@@ -126,7 +126,8 @@ No behaviour change. No call site is edited.
 
 ## 5. Acceptance criteria (validation gates)
 
-`tests/test_reachability_tolerance_spec.py` — pure, ~8 qubits, seconds.
+`tests/test_reachability_tolerance_spec.py` — pure, ~8 qubits, seconds. **G1–G3 are
+Linux-reference-only (skipped elsewhere) — see §10.**
 
 - **G1 — the witness (DEFINITION OF DONE).** At square H₄ a = 1.1 Å the two thresholds select
   different lowest-reachable eigenstates, and the resulting HF overlaps differ by > 1000×. Killed if
@@ -174,3 +175,42 @@ No behaviour change. No call site is edited.
 
 - `hf_overlap_certificate.py` — `REACHABLE_TOL_CERTIFIED`, no behaviour change.
 - `tests/test_reachability_tolerance_spec.py` — G1–G5.
+
+## 10. Platform dependence — G1–G3 are Linux-reference-only (chem-7rb, 2026-10-02)
+
+On macOS 27 (Apple M3, scipy 1.15.3 on Accelerate, qiskit-nature 0.8.0, pyscf 2.13.1) G1, G2 and G3
+fail and the other nine gates pass (`3 failed, 9 passed`). The cause is neither LAPACK noise in a
+degenerate eigenspace nor a symmetry-broken SCF; it is where the SCF stops:
+
+| conv_tol | p₀ Linux (§2b) | p₀ macOS 27 (measured) |
+|---|---|---|
+| 1e-6 | 1.49e-9 | 2.66e-6 |
+| 1e-7 | — | 1.34e-6 |
+| 1e-8 | — | 8.69e-8 |
+| **1e-9 (default)** | **5.07e-10** | **1.2e-29** |
+| 1e-11 | 1.14e-10 | 1.2e-29 |
+| 1e-13 | 1.53e-28 | 1.2e-29 |
+
+At a = 1.1 and the default, the lowest level's HF population on macOS is machine zero (the floor
+moves between 1.2e-29 and 3.9e-29 from run to run), not degenerate: both thresholds select the Ag
+level (overlap 0.6672), so G1 and G2 see a = b = 0.667 and G3's (1e-10, 1e-8) window is empty.
+`scf_symmetry_status(1.1) = (False, −5.3e-15)`: the symmetric branch, as in the Linux session
+(`test_symmetry_reachability_spec` passes 14/14 here). No `conv_tol` puts the lowest-level population
+in the window on macOS — 2.7e-6, 1.3e-6, 8.7e-8, then machine zero — so no tolerance reproduces G1–G3
+there. Regenerate: `t.residue_sweep()` in `tests/test_scf_conv_tol_spec.py` (docstring has the
+command) and `uv run --no-sync python reachability.py` (p₀ and SCF branch over the a-sweep).
+
+**Consequence.** G1–G3 assert a property of a platform-specific SCF stopping point, which §2b(i)
+and G6 establish is unphysical. They are `skipif(sys.platform != "linux")` with the measured macOS
+numbers in the reason; no threshold changed and Linux behaviour is untouched. The platform-independent
+claim is carried by G6 (residue moves 19 orders with `conv_tol`), G7 (symmetry mechanism) and G8
+(no fixed constant is safe), all of which pass on macOS. G4 and G5 also pass everywhere.
+
+**G8 weakness (not changed).** On macOS a = 1.185 is a symmetry-broken solve (ΔE = −7.6e-2 Ha,
+p₀ = 0.4625) and also counts as an offender (p₀ > 1e-8), so G8 would pass even if a = 1.190 did not
+breach. The symmetric offender carries §2b(iii): a = 1.190 gives p₀ = 1.401e-8 (symmetric, ΔE =
+−8.9e-16 Ha), matching the Linux 1.4e-8; a = 1.195 (symmetric) gives 3.8e-12. Requiring a
+symmetric-SCF offender would make G8 stricter; not done because it cannot be verified on Linux here.
+(Source: throwaway probe, `scf_symmetry_status` plus the default-build p₀ at these three a; not committed.)
+
+**Not verified:** Linux. The Linux column rests on the numbers this spec recorded in §2b.
