@@ -125,8 +125,9 @@ def test_G6_coordination_collapses_the_isolated_cluster_error():
 
 
 def test_G7_coordination_gap_max_cycle_override():
-    """chem-q9g: the default max_cycle=1000 is too tight for the z=3 Cl/Br clusters (Davidson does
-    not converge in the N=9, (5,4)-electron sector), but the function accepts an override so callers
+    """chem-q9g: the default max_cycle=1000 is too tight for the z=3 Nb3Cl8 cluster, and for Nb3Br8
+    on some platforms (Davidson does not converge in the N=9, (5,4)-electron sector; see the platform
+    note below), but the function accepts an override so callers
     aren't stuck reimplementing the cluster. A looser cap converges, and agrees with an even looser
     one to high precision -- confirming this is an iteration-cap issue, not genuine non-convergence
     or near-degeneracy.
