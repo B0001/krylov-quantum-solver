@@ -1,12 +1,54 @@
-# SPEC: a per-eigenstate symmetry decision for HF reachability, wired into the threshold sites
+# SPEC: a per-eigenstate symmetry decision for HF reachability — killed as a reference veto, kept as a diagnostic
 
-**Status:** IMPLEMENTED once gates green (chem-obf). Builds the per-eigenstate decision that
-[`SPEC_symmetry_reachability`](SPEC_symmetry_reachability.md) did not deliver (it decided only
-*whether* a filter is possible), then rewires the `|⟨HF|ψ_k⟩|² > tol` sites onto it.
+**Status:** REVISED after merge (chem-obf fix-forward, 2026-10-03). PR #62 used this decision to
+*veto* the levels it judges symmetry-forbidden from every reference. A post-merge review showed that
+QKSD from |HF⟩ converges to exactly the level it vetoed, so **the veto premise is KILLED for
+references** (§0, gate G9): a reference must describe what the data targets. `reachable_mask` is
+the population cut again; the decision survives only as a best-effort **diagnostic** that warns,
+never changes a mask and never raises. G1–G8 are re-pinned to those semantics and G9–G10 added —
+pre-registered in this revision, committed before the revised gate file ran. Results: §9.
 
 ---
 
-## 1. Goal
+## 0. The kill (post-merge review, 2026-10-03)
+
+What PR #62 claimed holds as *physics*: the residue level is symmetry-forbidden to the exact Ag HF
+determinant, and the decision identifies it against an independent symmetry-adapted FCI (G1, G2).
+What it got wrong is what a reference is for. The qubit Hamiltonian is built from the *loose* SCF's
+MOs. In that basis |HF⟩ really carries the residue amplitude, exact evolution conserves it, and the
+Krylov space amplifies it like any other component until the solver lands on the lowest level
+|HF⟩ touches. Scout (macOS, `QuantumKrylovSolver(mh)` defaults, electronic energies; script not
+committed — G9 re-derives what it asserts):
+
+| witness | residue pop | first M with E(M) − E_B1g < 1e-2 Ha | E − E_B1g at M = 24 | max over M ∈ [24, 40] |
+|---|---|---|---|---|
+| sq-H₄ 1.10, `conv_tol` 1e-6 | 2.66e-6 | 13 | 1.3e-4 | 3.8e-4 |
+| sq-H₄ 1.19, `conv_tol` 1e-6 | 5.48e-8 | 21 | 1.5e-4 | 1.1e-3 |
+| sq-H₄ 1.19, builder default 1e-9 | 1.40e-8 | 22 | 1.5e-4 | 2.0e-3 |
+| sq-H₄ 1.10 or 1.19, `conv_tol` 1e-13 | ~4e-30 | never (M ≤ 40) | 0.15 | — (stays on Ag) |
+
+E_B1g = −4.556211 / −4.374274 Ha and E_Ag = −4.404505 / −4.224669 Ha at a = 1.10 / 1.19 (PySCF
+symmetry-adapted FCI). PR #62's reference sat ~150 mHa *above* the energy the solver returns: any
+"variational floor" built on it is violated by the data it is meant to check.
+
+The review also confirmed two crashes, fixed here: `orbital_parity_bounds` raised on geometries
+PySCF half-detects (sq-H₄ a = 1.1 with one atom moved +1.5e-5 Å along x → `IndexError` inside
+`symm_adapted_basis`, +2e-5 Å → `PointGroupSymmetryError`), which took down every rewired site; and
+a tuple `active_electrons` (odd-electron active spaces, e.g. OH doublet `(3, 2)`) raised
+`TypeError` in `_driver_orbitals`. Both reproduced by probe on macOS. The other review findings only
+matter for a veto; they are the diagnostic's known limitations (§8).
+
+**The fix (forward, not a revert).**
+`reachable_mask(mh, w, vecs, pops, tol) = pops > tol` — the cut the sites made before PR #62. The
+symmetry decision runs inside it as a diagnostic: a population-admitted level it judges forbidden
+triggers a `RuntimeWarning` naming the level's energy and population, calling the population SCF
+residue and the remedy a rebuild at `conv_tol=TIGHT_SCF_CONV_TOL`. Any exception inside the
+diagnostic means "no diagnostic". A tuple `active_electrons` is summed, as `ActiveSpaceTransformer`
+does. Kept from PR #62: every site's routing through `_dense_hf_projection` (the macOS ZHEEVD
+fallback that fixed five gate files) and every signature. Where the residue really belongs — a
+tight or symmetric SCF in the builder — is a follow-up.
+
+## 1. Goal (original, PR #62)
 
 `SPEC_reachability_tolerance` §2b: no fixed population threshold separates a physical HF overlap
 from SCF-convergence residue on a symmetry-forbidden level (square H₄: the residue sits at 5e-10 at
@@ -14,7 +56,8 @@ a = 1.1 Å and at 1.4e-8 at a = 1.19 Å, while LiH carries *physical* levels bet
 **Claim:** an exact symmetry decision per eigenvector — *is the majority of ψ_k's weight in the HF
 determinant's symmetry sector?* — removes every residue level the population cut admits on those
 witnesses, agrees with an independent symmetry-adapted FCI, and changes **nothing** on the ordinary
-gated systems (the bead's prediction).
+gated systems (the bead's prediction). *Since the revision:* the identification and "nothing
+changes on ordinary systems" halves survive (G1–G3); "removes" is what §0 kills.
 
 ## 2. Background and honest framing
 
@@ -35,10 +78,10 @@ gate file re-derives every number it asserts):
 
 | system | MO impurity of the residue bit | β (bound, §3) | population cut admits | decision |
 |---|---|---|---|---|
-| sq-H₄ 1.10, ct 1e-6 | 1.4e-6 | 9.5e-3 | B1g @ −4.556211, p = 2.7e-6 | rejected; allowed set = Ag FCI (10 states, 6e-15) |
-| sq-H₄ 1.19, ct 1e-9 | 7.6e-9 | 7.0e-4 | B1g @ −4.374274, p = 1.4e-8 | rejected; allowed set = Ag FCI |
-| sq-H₄ 1.20 (broken RHF) | 0.5 | 6.3 | — | bit excluded; naive labels would veto p = 3.7e-2 |
-| LiH (π pair rotated by the free SCF) | 0.05–0.16 | 1.7–3.3 | — | σᵥ bit excluded, C₂ bit used; no veto |
+| sq-H₄ 1.10, ct 1e-6 | 1.4e-6 | 9.5e-3 | B1g @ −4.556211, p = 2.7e-6 | flagged; allowed set = Ag FCI (10 states, 6e-15) |
+| sq-H₄ 1.19, ct 1e-9 | 7.6e-9 | 7.0e-4 | B1g @ −4.374274, p = 1.4e-8 | flagged; allowed set = Ag FCI |
+| sq-H₄ 1.20 (broken RHF) | 0.5 | 6.3 | — | bit excluded; naive labels would flag p = 3.7e-2 |
+| LiH (π pair rotated by the free SCF) | 0.05–0.16 | 1.7–3.3 | — | σᵥ bit excluded, C₂ bit used; nothing flagged |
 
 ## 3. Approach
 
@@ -54,67 +97,94 @@ gate file re-derives every number it asserts):
    Z-string surrogate uses the labels `d = sign(diag R_b)`. Bound: `||Γ(D_b) − Γ(R_b)||` on
    N-electron states ≤ β_b = sum of the N largest spin-orbital `|1 − λ|` over eigenvalues λ of
    `D_b R_b` (rigorous for the full space, where `D_b R_b` is orthogonal; a heuristic for active
-   spaces, whose compression is only measured orthogonal to ~1e-14).
+   spaces — and a wrong one when the window splits a degenerate shell, §8 L1).
 3. **Sector.** HF's exact sector σ = same (N_α, N_β) as the HF bitstring, plus the parity of every
    bit in the greedy set with **Σβ < 1** (smallest first). Σβ < 1 is not a tuned constant: the
    product projector then differs from the exact one by < 1/2 in norm, so the majority decision
    below cannot flip for any non-degenerate symmetry eigenstate.
-4. **Decision.** Per cluster C of numerically degenerate eigenvalues (gap ≤ 1e-9 Ha; `eigh` splits
-   exact degeneracies by ~1e-14), on HF's basis-independent projection φ_C = V_C V_C†|HF⟩:
-   `allowed_C ⟺ ||P_σ φ_C||² > ||φ_C||²/2` (the rounding of a 0/1 quantity; for a non-degenerate
-   level it is the majority test on ψ_k's sector weight), and `reachable_k ⟺ allowed_C(k) ∧
-   pop_k > tol`. *Revised after code review:* the first version tested each eigenvector's own
-   sector weight, and `eigh` mixes exactly degenerate open-shell M_s = ±S pairs (different
-   (N_α, N_β) sectors) — it dropped populated levels (H₄ triplet: 2 with p > 1e-3; OH doublet
-   38 → 22 kept at 1e-8). Gated as G8. The site's own `tol` is kept for allowed levels: below
-   it they are physically populated but faint (LiH has 4 such levels in (1e-10, 1e-8]); that
-   remaining 1e-8/1e-10 difference is the sites' visibility choice, not the artifact.
+4. **Decision — now a diagnostic.** Per cluster C of numerically degenerate eigenvalues (gap ≤ 1e-9
+   Ha; `eigh` splits exact degeneracies by ~1e-14), on HF's basis-independent projection
+   φ_C = V_C V_C†|HF⟩: `allowed_C ⟺ ||P_σ φ_C||² > ||φ_C||²/2` (the rounding of a 0/1 quantity; for
+   a non-degenerate level it is the majority test on ψ_k's sector weight). It is defined only where
+   HF's projection is above roundoff. *Revised after the first code review:* the first version
+   tested each eigenvector's own sector weight, and `eigh` mixes exactly degenerate open-shell
+   M_s = ±S pairs (different (N_α, N_β) sectors) — it dropped populated levels (H₄ triplet: 2 with
+   p > 1e-3; OH doublet 38 → 22 kept at 1e-8). Gated as G8. *Revised after merge (§0):* `reachable_k ⟺ pop_k > tol`, and the
+   diagnostic warns on `pop_k > tol ∧ ¬allowed_C(k)`.
 
 **Reference:** PySCF symmetry-adapted FCI (`fci` with `wfnsym`, tight symmetric SCF) — independent
-of the qubit path — and the dense population spectrum for the "no change" controls.
+of the qubit path — for the diagnostic's verdicts, and `QuantumKrylovSolver` from |HF⟩ for what the
+data targets (G9).
 
 ## 4. Public interface
 
 ```
 MolecularHamiltonian.build_args : dict | None          # set by build_molecular_hamiltonian
-reachability.orbital_parity_bounds(mh) -> list[(odd: bool[n_orb], beta: float)] | None
-reachability.hf_symmetry_sector(mh)    -> bool[2**n] | None   # None: not a JW HF layout
-reachability.symmetry_allowed(mh, w, vecs) -> bool[n_eig]      # per degenerate cluster
-reachability.reachable_mask(mh, w, vecs, pops, tol) -> bool[n_eig]
-reachability.reachable_eigenpairs(mh, tol)   # DELIBERATE CHANGE: now applies reachable_mask
+reachability.orbital_parity_bounds(mh) -> list[(odd: bool[n_orb], beta: float)] | None   # diagnostic
+reachability.hf_symmetry_sector(mh)    -> bool[2**n] | None   # diagnostic; None: not a JW HF layout
+reachability.symmetry_allowed(mh, w, vecs) -> bool[n_eig]      # diagnostic, per degenerate cluster
+reachability.reachable_mask(mh, w, vecs, pops, tol) -> pops > tol   # + RuntimeWarning on a flagged level
+reachability.reachable_eigenpairs(mh, tol)   # the population cut again (the pre-PR-#62 numbers)
 ```
 `_dense_hf_projection`, `hf_population_spectrum` and the signatures above are unchanged.
 
 ## 5. Acceptance criteria (validation gates)
 
-`tests/test_eigenstate_reachability_spec.py`. Thresholds pre-registered before the gate ran.
+`tests/test_eigenstate_reachability_spec.py`. **Revised and pre-registered 2026-10-03**, after the
+§0 scout and before the revised gate file ran; thresholds kept from PR #62 wherever its claim
+survives. Witnesses: sq-H₄ a = 1.10 and 1.19, **both at `conv_tol=1e-6`**. (a = 1.19 moves off the
+builder default, where its 1.40e-8 residue cleared the 1e-8 site cut by only 1.4×; at 1e-6 the scout
+measured 5.48e-8, unchanged for `conv_tol` 1e-5…1e-8.)
 
-- **G1 — the witnesses (DEFINITION OF DONE).** sq-H₄ a = 1.10 / `conv_tol=1e-6` at tol 1e-10, and
-  a = 1.19 / default `conv_tol` at tol 1e-8: the population cut admits ≥ 1 level the decision
-  rejects; the lowest population-reachable energy is the B1g FCI ground state and the lowest
-  decision-reachable one is the Ag FCI ground state (both |ΔE| < 1e-8 Ha).
-- **G2 — brute force vs an independent reference.** sq-H₄ a ∈ {1.05, 1.10, 1.19, 1.35} ×
-  `conv_tol` ∈ {1e-6, 1e-9}, linear H₄ and H₂: the multiset of allowed eigenvalues equals PySCF's
-  D2h symmetry-adapted FCI spectrum in the HF irrep (Ag, S_z = 0) — same count, max |ΔE| < 1e-8 Ha.
-- **G3 — the bead's prediction: no recorded number moves.** H₂ (0.74, 2.0), linear H₄, HeH⁺, LiH
-  (12 qubits), LiH CAS(2,5), N₂ CAS(6,6): `reachable_mask == (pops > tol)` for tol ∈ {1e-8, 1e-10}.
-  One gained or lost level kills it (and becomes the finding).
-- **G4 — the bound is load-bearing.** sq-H₄ a ∈ {1.20, 1.40} (broken RHF) and LiH: some bit has
-  β ≥ 1 and is excluded; the decision then equals the population cut; and at a = 1.20 the naive
-  labels (every bit, no bound) would veto a level with population > 1e-3.
-- **G5 — fallback is the old behaviour.** No `build_args` (integrals path): only N/S_z is used
-  and the decision equals the population cut. A `build_args` that does not reproduce the operator
-  (a different geometry swapped in) disables the spatial bits; a constant shift does not.
-- **G6 — never near the boundary.** On every G1–G4 system, eigenvectors with population > 1e-10
-  have sector weight within 1e-3 of 0 or 1.
-- **G7 — the sites consume it.** At the two witnesses, `reachable_eigenpairs`,
-  `hf_overlap_certificate.exact_reachable_overlap`, `hf_overlap_subspace.exact_hf_subspace_overlap`
-  and the centered frames of `odmd`, `msd`, `trotter_odmd`, `device_odmd`,
-  `trotter_resolution_floor` are built from the decision's reachable set (μ, τ, overlaps), not the
-  population cut's.
-- **G8 — open shells (added after code review).** H₄ triplet and OH doublet: the decision equals
-  the population cut at both tols; on the triplet the per-vector majority test would drop a level
-  with p > 1e-3 (so the gate is not vacuous).
+- **G1 — the witnesses: identified, warned, kept.** At tol ∈ {1e-8, 1e-10}: `reachable_mask ==
+  (pops > tol)`; the call emits a `RuntimeWarning` naming SCF residue; the lowest populated level
+  `symmetry_allowed` rejects is the B1g FCI ground state, and the lowest populated level it allows
+  is the Ag one (both |ΔE| < 1e-8 Ha).
+- **G2 — brute force vs an independent reference, every populated level.** sq-H₄ a ∈ {1.05, 1.10,
+  1.19, 1.35} × `conv_tol` ∈ {1e-6, 1e-9}, linear H₄ and H₂: the eigenvectors in HF's sector
+  (per-vector weight > 1/2) reproduce PySCF's D2h Ag FCI spectrum (same count, max |ΔE| < 1e-8 Ha),
+  **and** `symmetry_allowed` is True exactly on the eigenvectors with population > 1e-20 whose
+  energy is in that spectrum (|ΔE| < 1e-8). The floor 1e-20 (amplitude 1e-10, six orders above
+  double-precision roundoff) is where HF's projection, hence the decision, is defined; the scout
+  gave the same verdicts at floors 1e-30…1e-16 and up to 6 mismatches per case at floor 0 (levels whose
+  HF overlap is roundoff, where the decision is undefined).
+- **G3 — no false alarm on ordinary systems.** H₂ (0.74, 2.0), linear H₄, HeH⁺, LiH (12 qubits),
+  LiH CAS(2,5), N₂ CAS(6,6), at tol ∈ {1e-8, 1e-10}: `symmetry_allowed` is True on every populated
+  level, and `reachable_mask` returns the cut with no warning.
+- **G4 — the bound is load-bearing.** sq-H₄ a ∈ {1.20, 1.40} (broken RHF): some bit has β ≥ 1 and is
+  excluded; nothing populated is flagged; at a = 1.20 the naive labels (every bit, no bound) would
+  flag a level with population > 1e-3. LiH: the C₂ bit is exact (β < 1e-10). *Dropped:* PR #62's
+  "the σᵥ bit has β ≥ 1" — it measures the arbitrary rotation SCF/LAPACK leave inside LiH's
+  degenerate π pair, not LiH: β = 3.2 at the default `conv_tol`, 0.646 at 1e-7, 0.606 with the atom
+  order swapped (probe; matches the review).
+- **G5 — fallback.** No `build_args` (integrals path): only (N_α, N_β) is used, no warning, the cut
+  is returned. A `build_args` that does not reproduce the operator (a different geometry swapped
+  in) disables the spatial bits; a constant shift does not.
+- **G6 — never near the boundary, and the decision is its rounding.** On sq-H₄ 1.10 and 1.19 (at
+  1e-6), 1.20, linear H₄, LiH and N₂ CAS(6,6): eigenvectors with population > 1e-10 have sector
+  weight within 1e-3 of 0 or 1, **and** `symmetry_allowed` equals (weight > 1/2) on them.
+- **G7 — the sites use the population cut.** At the witnesses: the centered frames of `odmd`, `msd`,
+  `trotter_odmd`, `device_odmd`, `trotter_resolution_floor` equal the 1e-8 population-cut frame
+  (μ abs 1e-10, τ rel 1e-10); `reachable_eigenpairs(mh)[0][0]` is the B1g FCI energy (1e-8); and
+  `hf_overlap_certificate.exact_reachable_overlap` and `hf_overlap_subspace.exact_hf_subspace_overlap
+  (mh, 1)` both equal √pop of that level (rel 1e-8).
+- **G8 — open shells, basis invariance.** H₄ triplet and OH doublet: `symmetry_allowed` is True on
+  every populated level at both tols; on the triplet it stays so in a deliberately M_s-mixed
+  degenerate eigenbasis, in which the per-vector rule flags a level with p > 1e-3 (non-vacuous).
+- **G9 — the falsification (DEFINITION OF DONE of this revision).** From |HF⟩, with
+  `QuantumKrylovSolver(mh)` defaults, at sq-H₄ 1.10 / 1e-6, 1.19 / 1e-6 and 1.19 at the builder's
+  default `conv_tol`: for **every M ∈ [28, 32]**, −1e-9 ≤ E(M) − E_B1g < **1e-2 Ha** (electronic;
+  the lower bound is the variational floor), i.e. > 0.1 Ha below the Ag level the veto kept; and
+  `reachable_eigenpairs(mh)[0][0]` is E_B1g (1e-8) — the reference keeps the level the solver
+  reaches. Control, a ∈ {1.10, 1.19} at `TIGHT_SCF_CONV_TOL`: E(M) ≥ E_Ag − 1e-8 for every M ≤ 32,
+  and `reachable_eigenpairs` starts at E_Ag (1e-8). The [28, 32] window sits ≥ 6 steps past the
+  scout's first convergence (≤ 22) and 1e-2 Ha is ≥ 5× the scout's worst value on it.
+- **G10 — the diagnostic never raises.** `reachable_mask` returns the cut, without raising, on the
+  §0 crash geometries (sq-H₄ 1.1 with the second atom at x = 1.100015 and 1.10002 Å) and when
+  `symmetry_allowed` itself raises (monkeypatched — the non-vacuous check). OH doublet,
+  `active_electrons=(3, 2), active_orbitals=4`: `orbital_parity_bounds` verifies the rebuilt
+  operator (not None) and nothing populated is flagged (the scout: 18 levels with p > 1e-10, none
+  flagged).
 
 ## 6. Implementation plan (test-first)
 
@@ -125,11 +195,14 @@ reachability.reachable_eigenpairs(mh, tol)   # DELIBERATE CHANGE: now applies re
    `device_odmd`, `trotter_resolution_floor` — each through `_dense_hf_projection` (which also
    removes their macOS ZHEEVD crash at 12 qubits).
 4. Re-run every affected gate; record any moved number below.
+5. *Revision:* this spec (§0, §5) committed first; then `reachable_mask` → population cut +
+   diagnostic, the tuple fix, docstrings, the re-pinned gate file; then the before/after gate run.
 
 ## 7. Out of scope — sites deliberately NOT rewired, and why (part of the finding)
 
-The symmetry argument holds where a site thresholds HF populations **in the exact-H eigenbasis**
-(exact evolution conserves them). It does not transfer to:
+*Since the revision every site is on the population cut, so this section now only says where the
+diagnostic does not run.* The symmetry argument holds where a site thresholds HF populations **in the
+exact-H eigenbasis** (exact evolution conserves them). It does not transfer to:
 
 - `trotter_odmd.select_ground_eigenphase` (`pop_cut`) and `trotter_resolution_floor._eigenphase_energy`
   (`pops_u > 1e-8`): populations in the **Trotter circuit's** eigenbasis. A product of single-Pauli
@@ -143,21 +216,40 @@ The symmetry argument holds where a site thresholds HF populations **in the exac
 - `rodeo.py` :71/:87 (literal 1e-8; `overlap_tol` at :49 unused): molecular but only H₂/H₄ (no
   residue); left for a follow-up rather than widening this diff.
 
-## 8. Caveats and risks
+## 8. Known limitations of the diagnostic, and other caveats
 
-- **R1 — degeneracy.** Handled per cluster (§3.4, G8). What remains: two levels of *different*
-  symmetry closer than 1e-9 Ha are one cluster and fall back to the population cut — fail-safe,
-  never seen on a gated system.
+The diagnostic can warn wrongly or stay silent; since the revision it never changes a number.
+
+- **L1 — compressed R_b (review).** β is rigorous only where `D_b R_b` is orthogonal (the full
+  orbital space). An active window that splits a degenerate shell compresses R_b far from orthogonal
+  and β under-reports: symmetric CH₄ (Td, C–H 1.087 Å) CAS(2,2) flags a populated level (probe:
+  −0.669500 Ha electronic, p = 3.3e-6) that `QuantumKrylovSolver.solve_excited(4)` returns as θ₁ —
+  under the PR #62 veto `reachable_gap` was off by 0.81 Ha (review). The review also reports NH₃
+  CAS(4,4) flagging populations up to 8.1e-4; not reproduced at our probe geometry (PySCF found only
+  Cs there). Upgrade path: an orthogonality check on R_b.
+- **L2 — symmetry PySCF detects only within its geometric tolerance is treated as exact (review).**
+  sq-H₄ 1.1 with the fourth atom moved 5e-6 / 1e-5 Å along x, `conv_tol=1e-13`: a level whose
+  population is real distortion, 2.1e-9 / 5.8e-9 (probe), is flagged as residue. Upgrade path:
+  tolerance-aware symmetry detection.
+- **L3 — mapper not recorded (review).** `hf_symmetry_sector`'s Jordan–Wigner layout guard checks
+  only the HF index, which an `InterleavedQubitMapper` operator can share (linear H₄, spin = 2), and
+  `build_args` does not record the mapper. No in-repo caller. Upgrade path: record the mapper.
+- **L4 — accidental degeneracy.** Levels of different symmetry closer than 1e-9 Ha form one cluster
+  and share its majority verdict: a missed or a spurious warning for one of them. Never seen on a
+  gated system.
 - **R2 — residual symmetry outside PySCF's abelian frame.** At broken-RHF geometries a level can
   still carry convergence-dependent population (sq-H₄ 1.20: 1.5e-9 → 6.2e-9 between `conv_tol` 1e-9
-  and 1e-6) that the D2h bits cannot see; there the 1e-8/1e-10 split still bites.
-- **R3 — cost.** One extra SCF + JW map per decision (validation scale, like the dense `eigh`).
-- **R4 — Linux numbers.** Where Linux's default-`conv_tol` SCF leaves residue (sq-H₄ 1.1 Å,
-  5.07e-10), `exact_reachable_overlap` now returns the Ag overlap, so
-  `test_reachability_tolerance_spec` G2 and G5 (`constant_governs_the_certified_reference`), which
-  pin the *bug*, will fail on Linux. That file is owned elsewhere; recorded as a follow-up.
+  and 1e-6) that the D2h bits cannot see; the diagnostic is silent there.
+- **R3 — cost.** One extra SCF + JW map per Hamiltonian (cached on the instance), as in PR #62.
+- **R4 — Linux.** With the population cut restored, the Linux-only failures PR #62 predicted for
+  `test_reachability_tolerance_spec` G2 and G5 (`constant_governs_the_certified_reference`) should
+  not happen: those gates pin the residue the cut keeps. Not verifiable on this macOS host.
 
-## 9. Results (macOS 27, Apple M3, 2 BLAS/OMP threads, 2026-10-02)
+## 9. Results (macOS 27, Apple M3, 2 BLAS/OMP threads)
+
+**Revision (2026-10-03):** *(to be filled in from the gate run)*
+
+**PR #62 (2026-10-02; superseded):**
 
 - **This gate file:** 35 passed in 46 s (G1–G8).
 - **Recorded numbers that moved:** none on the ordinary systems — G3 shows identical masks, and the
@@ -171,8 +263,13 @@ The symmetry argument holds where a site thresholds HF populations **in the exac
   G1–G3 (no residue on macOS at the default `conv_tol`).
 - **Unit-1 interplay:** `map_canonical` (chem-8tl) and the plain JW map differ by ≤ 1.8e-15 per
   coefficient (LiH), far inside the 1e-12 rebuild check.
+- **Cross-PR effect missed (review):** `test_scf_conv_tol_spec` G2 [H4 square 1.35] and [1.19]
+  pin the default-`conv_tol` residue as the reachable reference (overlap < 1e-3); with the veto it
+  became 0.613 / 0.652 and both failed on main.
 
 ## 10. Deliverables
 
-- `reachability.py` — the decision; `molecular_hamiltonian.py` — `build_args` only.
-- Rewired sites listed in §6.3; `tests/test_eigenstate_reachability_spec.py` — G1–G7.
+- `reachability.py` — the population cut, the diagnostic, the tuple fix; `molecular_hamiltonian.py`
+  — `build_args` only.
+- Rewired sites listed in §6.3 (on `_dense_hf_projection` + `reachable_mask`);
+  `tests/test_eigenstate_reachability_spec.py` — G1–G10.
