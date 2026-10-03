@@ -75,7 +75,7 @@ vertices. The term changes only which f the LP picks, never the feasible set or 
   random synthetic spectra).
 - **G-b soundness (a bug check, not the claim).** Synthetic 7-atom measure with closed-form
   moments: bound ≥ η − 1e-6 for M ∈ {4, 8, 12, 20} and cap ∈ {1, 10, …, 1e4}; bound non-increasing
-  in M and in cap (1e-6); the stationary-point minimum matches a brute-force 10⁶-point minimum;
+  in M and in cap (1e-6); the stationary-point minimum is never above a brute-force 2·10⁵-point minimum;
   and on the three real witnesses B(M) ≥ η at every M.
 - **G-b kill rule (the claim).** B_w(M) at the default box (cap 1000) for M ∈ {8, 12, 16, 20, 24}.
   Witness w **SURVIVES iff min over those M of B_w(M) ≤ 0.05**, else **KILLED**. (The feasible sets
@@ -144,7 +144,10 @@ full kill.** The R=1.1 kill is not box-dependent: B(24) stays above 0.05 up to c
   γ_corr = 0.903 / 0.833 / 0.954 against exact 0.967 / 0.947 / 0.977: valid and non-vacuous,
   given oracle band edges.
 - **The quantified resolution requirement** (descriptive). R=1.1 first passes at M = 60, with
-  B = 0.0493 and 1/(MΔt) = 0.0429 Ha. At M = 24 it has 1/(MΔt) = 0.1072 Ha.
+  B = 0.0493 and 1/(MΔt) = 0.0429 Ha. At M = 24 it has 1/(MΔt) = 0.1072 Ha. M = 60 is tight on the
+  step-4 grid: at M = 56 the relaxed LP value is already 0.0509 > 0.05, so even an exact solve
+  fails there. Bound and lower value agree to 4 decimals at M = 48–60 (only M = 44 is off:
+  [0.0543, 0.0546]).
 - **The bead's design target is contradicted.** It said "needs 1/(MΔt) below the overshoot". At
   M = 24, 1/(MΔt) = 0.1205 / 0.1072 / 0.1114 Ha is below every overshoot, yet R=1.1 is killed. The
   overshoot does not even order the verdicts: the largest overshoot (asym, 1.0548 Ha) survives and
