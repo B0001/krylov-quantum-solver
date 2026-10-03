@@ -1,6 +1,24 @@
 # SPEC: Does centering preserve PDS accuracy under realistic shot noise?
 
-**Status:** CLOSED — verdict delivered (chem-u87). Centering's float64 advantage does NOT reliably survive shot-noise measurement at the moment level.
+> **SUPERSEDED (2026-10-02, chem-u87) by [`SPEC_centered_pds_shots.md`](SPEC_centered_pds_shots.md).
+> The text below is kept as the record. Do not cite its numbers or its verdict.**
+>
+> 1. **No code on main produces its numbers.** The two gate files it cites,
+>    `tests/test_centered_pds_shot_noise_simple_spec.py` and `..._relative_spec.py`, exist only in the
+>    unmerged WIP commit `c35de3f` on `sandbox/chem-nxn`. They call `hamiltonian_moments(...,
+>    centered=...)`, an argument that only that branch has. So "1.09×", the "1.5×" gate, "< 1e-7 Ha
+>    at 100k shots" and "10–100× smaller moments" have nothing behind them.
+> 2. **Its "14–15 orders" is wrong.** `SPEC_centered_pds` measured 13.0, 11.3 and 17.4 orders of
+>    cond(M) reduction at K=8 for H₄, LiH and N₂.
+> 3. **Its noise model is one it calls unrealistic itself.** It adds independent noise to each
+>    moment after computing exact moments. The replacement measures that kind of model against
+>    one shared shot record. On N₂ CAS(6,6) at 10⁶ snapshots, the centered PDS(8) median error is
+>    341× larger with independent per-moment noise: 30.2 mHa against 0.089 mHa (its G3, from
+>    `uv run python centered_pds_shots.py 16`).
+>
+> The "CLOSED" status and verdict below are withdrawn. The measured verdict is in the new spec.
+
+**Status:** SUPERSEDED (see the note above). Original status line, withdrawn: "CLOSED — verdict delivered (chem-u87). Centering's float64 advantage does NOT reliably survive shot-noise measurement at the moment level."
 
 ---
 
