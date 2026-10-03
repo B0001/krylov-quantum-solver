@@ -189,7 +189,9 @@ def _fci_sector(h1: np.ndarray, eri: np.ndarray, na: int, nb: int, *, max_cycle:
     solver.max_cycle = int(max_cycle)
     energy, civec = solver.kernel(h1, eri, L, (na, nb))
     if not solver.converged:
-        raise RuntimeError(f"FCI Davidson did not converge for nelec=({na},{nb}), L={L}")
+        raise RuntimeError(f"FCI Davidson did not converge in {max_cycle} iterations for "
+                           f"nelec=({na},{nb}), L={L}; retry with a larger (keyword-only) max_cycle "
+                           f"before concluding non-convergence (cf. chem-q9g)")
     ss, _ = solver.spin_square(civec, L, (na, nb))
     return float(energy), float(ss)
 
