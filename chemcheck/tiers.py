@@ -4,7 +4,8 @@ T0–T3 ship as immutable data — geometry, active space, exact FCI reference, 
 thresholds, reference two-qubit-gate count, and a canonical Hamiltonian SHA-256 — so scores are
 comparable within a benchmark version. Loading :data:`TIERS` pulls in **no** solver dependency;
 :func:`build_tier_hamiltonian` / :func:`canonical_hamiltonian_sha256` import PySCF/qiskit lazily
-and exist so a test can re-verify the frozen numbers on any machine.
+and exist so a test can re-verify the frozen numbers (the Hamiltonian hashes only on Linux, the
+freezing platform; see :func:`canonical_hamiltonian_sha256`).
 
 Frozen values were produced with ``basis="sto3g"`` and the same build path used here (full
 active space for T0/T1, explicit CAS for T2/T3), matching ``benchmark_resources.py``.
@@ -113,7 +114,12 @@ def canonical_hamiltonian_sha256(mh) -> str:
     """Deterministic content hash of a qubit Hamiltonian.
 
     Sorted ``(pauli_label, Re(coeff), Im(coeff))`` stream with coefficients quantized to 1e-12,
-    JSON-serialized, SHA-256'd — stable across machines and Pauli orderings.
+    JSON-serialized, SHA-256'd — invariant under Pauli *ordering* only. It is NOT stable across
+    machines for SCF-derived Hamiltonians: it hashes the integrals in whatever MO gauge the
+    platform's eigensolver returned (eigenvector signs; rotations inside degenerate orbital pairs),
+    so the frozen tier hashes reproduce on the freezing platform (Linux) only. Energies and term
+    counts are portable; so are the CX counts for T0-T2 (T3's differs by 2 on macOS, because the
+    Trotter order follows |coefficient|). See specs/SPEC_chemcheck.md, platform note.
     """
     op = mh.qubit_hamiltonian
     terms = sorted(
@@ -124,7 +130,7 @@ def canonical_hamiltonian_sha256(mh) -> str:
 
 
 def recompute_tier_reference(tier: Tier) -> dict[str, Any]:
-    """Recompute the live FCI / hash / CX-count for cross-machine verification of the freeze."""
+    """Recompute the live FCI / hash / CX-count for verification of the freeze (hash: Linux only)."""
     from hybrid_quantum_solver.hardware_krylov import HardwareKrylovSolver
 
     mh = build_tier_hamiltonian(tier)

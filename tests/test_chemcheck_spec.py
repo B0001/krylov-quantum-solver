@@ -1,5 +1,6 @@
 """Spec gate for ChemCheck M1 + Mode A (specs/SPEC_chemcheck.md, tasks 1-5,7,8)."""
 
+import functools
 import subprocess
 import sys
 
@@ -46,14 +47,53 @@ def test_benchmark_version_and_t4_aspirational():
     assert TIERS["T4"].hamiltonian_sha256 is None
 
 
+@functools.lru_cache(maxsize=None)
+def _live(name):
+    return recompute_tier_reference(TIERS[name])
+
+
 @pytest.mark.parametrize("name", ["T0", "T1", "T2", "T3"])
 def test_frozen_tier_values_match_live_recompute(name):
-    tier = TIERS[name]
-    live = recompute_tier_reference(tier)
-    assert live["hamiltonian_sha256"] == tier.hamiltonian_sha256
-    assert live["two_qubit_gates_per_trotter_step"] == tier.two_qubit_gates_per_trotter_step
+    """Platform-independent part of the freeze: FCI energy and Pauli-term count."""
+    tier, live = TIERS[name], _live(name)
     assert live["hamiltonian_pauli_terms"] == tier.hamiltonian_pauli_terms
     assert abs(live["fci_reference_hartree"] - tier.fci_reference_hartree) < 1e-6
+
+
+# The CX count is portable for T0-T2 but NOT for T3: build_trotter_step orders terms by |coefficient|
+# (trotter_krylov.canonical_term_order), a sign gauge cannot change that order but an MO rotation can.
+# Measured on macOS 27 (Apple M3, scipy 1.15.3/Accelerate, 2026-10-02): T0/T1/T2 match; T3 live 6530
+# vs frozen 6528, identical for PYTHONHASHSEED 0, 1 and 2. This contradicts the hand-off's "CX count
+# passes everywhere" (the original single test asserted the hash first, so it never reached the CX).
+@pytest.mark.parametrize("name", [
+    "T0", "T1", "T2",
+    pytest.param("T3", marks=pytest.mark.skipif(
+        sys.platform != "linux",
+        reason="T3 CX count is MO-gauge dependent (Trotter order is by |coeff|): macOS 27 gives "
+               "6530 vs frozen 6528, deterministic over PYTHONHASHSEED 0/1/2. "
+               "specs/SPEC_chemcheck.md platform note.")),
+])
+def test_frozen_tier_cx_count_matches_live_recompute(name):
+    assert _live(name)["two_qubit_gates_per_trotter_step"] == TIERS[name].two_qubit_gates_per_trotter_step
+
+
+# The canonical hash is a bitwise hash of SCF-derived integrals in whatever MO gauge the platform's
+# eigensolver returns, so the frozen values only reproduce on the freezing platform (Linux). Measured
+# on macOS 27 (same machine): T0 and T2 match; T1 live fff8a314e967 != frozen 2fe671eae4ae,
+# reproduced exactly by flipping the sign of one MO (4 of the 16 sign patterns match); T3 live
+# ccde9d59df68 != frozen 382de579ca32 and none of the 64 sign patterns matches -- its active space
+# holds two degenerate pi pairs (eps = -0.57139 x2, 0.28019 x2), and its CX count differs too, so an
+# in-pair rotation is inferred (not verified: needs the Linux orbitals). FCI energy and Pauli-term
+# count above still match on every platform. specs/SPEC_chemcheck.md platform note.
+@pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="hash is MO-gauge dependent, frozen on Linux; macOS 27: T1 differs by an MO sign flip, "
+           "T3 by more (no sign pattern of 64 matches; degenerate pi pairs), T0/T2 match. "
+           "specs/SPEC_chemcheck.md platform note.",
+)
+@pytest.mark.parametrize("name", ["T0", "T1", "T2", "T3"])
+def test_frozen_tier_hash_matches_live_recompute(name):
+    assert _live(name)["hamiltonian_sha256"] == TIERS[name].hamiltonian_sha256
 
 
 # --- Gate 2: submission validation ------------------------------------------------------
