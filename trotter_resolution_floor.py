@@ -51,7 +51,7 @@ def _centered(mh: MolecularHamiltonian):
     H_dense = np.asarray(mh.qubit_hamiltonian.to_matrix())
     psi0 = np.asarray(mh.hf_state().data, dtype=complex)
     w_eig, V, pops = _dense_hf_projection(mh)       # shared eigh: macOS ZHEEVD fallback
-    reach = w_eig[reachable_mask(mh, V, pops, 1e-8)].real    # symmetry-aware (chem-obf)
+    reach = w_eig[reachable_mask(mh, w_eig, V, pops, 1e-8)].real    # symmetry-aware (chem-obf)
     mu = float(0.5 * (reach.max() + reach.min()))
     tau = float(np.pi / (reach.max() - reach.min()))
     return H_dense, psi0, mu, tau, w_eig, V, pops
@@ -64,7 +64,7 @@ def reference_population(mh: MolecularHamiltonian) -> float:
     ground state can be strictly unreachable (population 0 by symmetry) -- it never anchors
     the eigenphase, so it is not the relevant signal."""
     _, _, _, _, w_eig, V, pops = _centered(mh)
-    reachable = reachable_mask(mh, V, pops, 1e-8)     # the frame's own reachable set
+    reachable = reachable_mask(mh, w_eig, V, pops, 1e-8)     # the frame's own reachable set
     i_low = int(np.argmin(np.where(reachable, w_eig.real, np.inf)))
     return float(pops[i_low])
 

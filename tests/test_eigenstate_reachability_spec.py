@@ -25,7 +25,6 @@ from reachability import (
     orbital_parity_bounds,
     reachable_eigenpairs,
     reachable_mask,
-    symmetry_allowed,
 )
 
 ODMD_TOL = 1e-8                     # the ODMD/MSD/Trotter family's population cut
@@ -75,7 +74,7 @@ def _weights(mh, V):
 @pytest.mark.parametrize("a, conv_tol, tol", WITNESSES)
 def test_G1_residue_level_rejected_and_the_Ag_ground_state_selected(a, conv_tol, tol):
     mh, w, V, pops = _system(_sq(a), conv_tol)
-    keep, cut = reachable_mask(mh, V, pops, tol), pops > tol
+    keep, cut = reachable_mask(mh, w, V, pops, tol), pops > tol
     assert (cut & ~keep).any(), "population cut admits nothing the decision rejects"
     assert w[cut].min() == pytest.approx(_fci(_sq(a), "B1g")[0], abs=1e-8)   # the forbidden state
     assert w[keep].min() == pytest.approx(_fci(_sq(a), "Ag")[0], abs=1e-8)   # HF's irrep
@@ -90,7 +89,7 @@ G2_CASES += [(LIN_H4, 1e-9), (H2, 1e-9)]
 @pytest.mark.parametrize("atom, conv_tol", G2_CASES)
 def test_G2_allowed_spectrum_equals_symmetry_adapted_fci(atom, conv_tol):
     mh, w, V, _ = _system(atom, conv_tol)
-    allowed = np.sort(w[symmetry_allowed(mh, V)])
+    allowed = np.sort(w[_weights(mh, V) > 0.5])          # eigenvectors IN the sector
     ref = _fci(atom, "Ag")
     assert len(allowed) == len(ref), (len(allowed), len(ref))
     assert np.abs(allowed - ref).max() < 1e-8
@@ -113,7 +112,7 @@ CONTROLS = {
 def test_G3_decision_equals_population_cut_on_ordinary_systems(name):
     mh, w, V, pops = _system(**CONTROLS[name])
     for tol in (ODMD_TOL, REACHABLE_TOL_CERTIFIED):
-        assert np.array_equal(reachable_mask(mh, V, pops, tol), pops > tol), (name, tol)
+        assert np.array_equal(reachable_mask(mh, w, V, pops, tol), pops > tol), (name, tol)
 
 
 # --- G4: the bound is load-bearing ----------------------------------------------------------------
@@ -136,7 +135,7 @@ def test_G4_broken_rhf_bit_is_excluded_and_nothing_is_vetoed(a):
     mh, w, V, pops = _system(_sq(a))
     assert max(beta for _, beta in orbital_parity_bounds(mh)) >= 1.0
     for tol in (ODMD_TOL, REACHABLE_TOL_CERTIFIED):
-        assert np.array_equal(reachable_mask(mh, V, pops, tol), pops > tol), tol
+        assert np.array_equal(reachable_mask(mh, w, V, pops, tol), pops > tol), tol
 
 
 def test_G4_naive_labels_would_veto_a_physical_level():
@@ -168,7 +167,7 @@ def test_G5_integrals_path_uses_only_particle_sectors():
     w, V = np.linalg.eigh(h)
     pops = (V.T @ np.asarray(mh.hf_state().data).real) ** 2
     for tol in (ODMD_TOL, REACHABLE_TOL_CERTIFIED):
-        assert np.array_equal(reachable_mask(mh, V, pops, tol), pops > tol)
+        assert np.array_equal(reachable_mask(mh, w, V, pops, tol), pops > tol)
 
 
 def test_G5_stale_build_args_disable_spatial_bits_but_a_shift_does_not():
@@ -206,7 +205,7 @@ def test_G7_threshold_sites_use_the_decision(a, conv_tol, tol):
     from trotter_resolution_floor import _centered
 
     mh, w, V, pops = _system(_sq(a), conv_tol)
-    keep = reachable_mask(mh, V, pops, ODMD_TOL)
+    keep = reachable_mask(mh, w, V, pops, ODMD_TOL)
     reach = w[keep]
     mu, tau = 0.5 * (reach.max() + reach.min()), np.pi / (reach.max() - reach.min())
     old = w[pops > ODMD_TOL]
@@ -221,9 +220,27 @@ def test_G7_threshold_sites_use_the_decision(a, conv_tol, tol):
         assert m == pytest.approx(mu, abs=1e-10) and t == pytest.approx(tau, rel=1e-10), name
 
     e_cert, v_cert = reachable_eigenpairs(mh)              # certified arc, tol 1e-10
-    lowest = w[reachable_mask(mh, V, pops, REACHABLE_TOL_CERTIFIED)].min()
+    lowest = w[reachable_mask(mh, w, V, pops, REACHABLE_TOL_CERTIFIED)].min()
     assert e_cert[0] == pytest.approx(lowest, abs=1e-10)
     ov = float(np.sqrt(pops[np.flatnonzero(keep)[0]]))     # HF overlap of the Ag ground state
     assert exact_reachable_overlap(mh) == pytest.approx(ov, rel=1e-8)
     assert exact_hf_subspace_overlap(mh, 1) == pytest.approx(ov, rel=1e-8)
     assert ov > 0.5                                         # a physical overlap, not residue
+
+
+# --- G8: open shells -- exactly degenerate M_s pairs (found in code review) -----------------------
+
+OPEN_SHELL = {"H4-triplet": dict(atom=LIN_H4, spin=2),
+              "OH-doublet": dict(atom="O 0 0 0; H 0 0 0.97", spin=1)}
+
+
+@pytest.mark.parametrize("name", OPEN_SHELL)
+def test_G8_open_shell_degenerate_pairs_are_decided_per_eigenspace(name):
+    """eigh mixes the M_s = +S/-S copies (different (N_a, N_b) sectors, same energy). Deciding per
+    cluster of degenerate eigenvalues keeps every populated level; the per-vector majority test
+    (this module's first version) did not -- H4 triplet: 2 levels with p > 1e-3 dropped."""
+    mh, w, V, pops = _system(**OPEN_SHELL[name])
+    for tol in (ODMD_TOL, REACHABLE_TOL_CERTIFIED):
+        assert np.array_equal(reachable_mask(mh, w, V, pops, tol), pops > tol), (name, tol)
+    if name == "H4-triplet":   # the per-vector rule really fails here -- the gate is not vacuous
+        assert ((pops > 1e-3) & (_weights(mh, V) < 0.5)).any()

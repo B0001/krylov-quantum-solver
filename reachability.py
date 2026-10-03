@@ -26,9 +26,10 @@ encodes (specs/SPEC_symmetry_reachability.md, gated 9/9 on the square-H4 family)
 The filter is therefore available exactly when it is needed.
 
 PER-EIGENSTATE DECISION (specs/SPEC_eigenstate_reachability.md, chem-obf). ``reachable_mask`` keeps
-eigenvector k iff the majority of its weight lies in HF's exact symmetry sector -- (N_alpha, N_beta)
-plus every point-group parity whose Z-string provably stays within 1/2 of the exact operator in
-``mh``'s own MO basis -- AND its HF population clears the site's ``tol``. The sector needs geometry:
+eigenvector k iff HF's component in k's (degenerate) eigenspace lies mostly in HF's exact symmetry
+sector -- (N_alpha, N_beta) plus every point-group parity whose Z-string provably stays within 1/2
+of the exact operator in ``mh``'s own MO basis -- AND its HF population clears the site's ``tol``.
+The sector needs geometry:
 ``MolecularHamiltonian.build_args``, verified by rebuilding the operator. Without it the decision is
 the old population cut. ``reachable_eigenpairs`` and the ODMD/MSD/Trotter centered frames run on it.
 """
@@ -244,19 +245,36 @@ def hf_symmetry_sector(mh) -> Optional[np.ndarray]:
     return sector
 
 
-def symmetry_allowed(mh, vecs) -> np.ndarray:
-    """Per eigenvector (column of ``vecs``): does the majority of its weight lie in HF's symmetry
-    sector? Exact symmetry makes that weight 0 or 1; 1/2 is its rounding, not a tuned constant.
+# Eigenvalues closer than this are one eigenspace. eigh splits exactly degenerate levels (open-shell
+# M_s pairs, Pi/E pairs) by ~1e-14 here; the witnesses' symmetry gaps are ~0.1 Ha. Numerical, and
+# fail-safe: a wider cluster only falls back toward the population cut, it never drops a level.
+_DEGENERATE_ATOL = 1e-9
+
+
+def symmetry_allowed(mh, w, vecs) -> np.ndarray:
+    """Per eigenvector: does HF's component in its eigenspace lie mostly in HF's symmetry sector?
+
+    Decided per cluster C of numerically degenerate eigenvalues (``w`` ascending) on the
+    basis-independent projection phi_C = V_C V_C^dagger |HF>: allowed iff ||P_sector phi_C||^2 >
+    ||phi_C||^2 / 2 -- exactly 1 or 0 under exact symmetry, so 1/2 is its rounding, not a tuned
+    constant. Per vector this is the majority test; per cluster it survives ``eigh`` mixing exactly
+    degenerate levels across sectors (open-shell M_s pairs), which a per-vector test does not.
     All True when no sector can be formed (the old behaviour)."""
     sector = hf_symmetry_sector(mh)
+    allowed = np.ones(vecs.shape[1], dtype=bool)
     if sector is None:
-        return np.ones(vecs.shape[1], dtype=bool)
-    return (np.abs(vecs[sector]) ** 2).sum(axis=0) > 0.5
+        return allowed
+    hf = int(np.argmax(np.abs(np.asarray(mh.hf_state().data))))
+    for idx in np.split(np.arange(len(w)), np.flatnonzero(np.diff(w) > _DEGENERATE_ATOL) + 1):
+        c = vecs[hf, idx].conj()                         # <psi_k|HF>, k in the cluster
+        inside = vecs[np.ix_(sector, idx)] @ c           # P_sector phi_C
+        allowed[idx] = np.vdot(inside, inside).real > 0.5 * np.vdot(c, c).real
+    return allowed
 
 
-def reachable_mask(mh, vecs, pops, tol: float) -> np.ndarray:
+def reachable_mask(mh, w, vecs, pops, tol: float) -> np.ndarray:
     """THE HF-reachability decision: symmetry-allowed AND populated above the site's ``tol``."""
-    return symmetry_allowed(mh, vecs) & (np.asarray(pops) > tol)
+    return symmetry_allowed(mh, w, vecs) & (np.asarray(pops) > tol)
 
 
 def reachable_eigenpairs(mh, tol: float = REACHABLE_TOL_CERTIFIED):
@@ -271,7 +289,7 @@ def reachable_eigenpairs(mh, tol: float = REACHABLE_TOL_CERTIFIED):
     state QKSD actually converges to.
     """
     w, vecs, pops = _dense_hf_projection(mh)
-    keep = reachable_mask(mh, vecs, pops, tol)
+    keep = reachable_mask(mh, w, vecs, pops, tol)
     return w[keep], vecs[:, keep]
 
 

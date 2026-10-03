@@ -59,8 +59,14 @@ gate file re-derives every number it asserts):
    bit in the greedy set with **Σβ < 1** (smallest first). Σβ < 1 is not a tuned constant: the
    product projector then differs from the exact one by < 1/2 in norm, so the majority decision
    below cannot flip for any non-degenerate symmetry eigenstate.
-4. **Decision.** `allowed_k ⟺ Σ_{x∈σ} |V[x,k]|² > 1/2` (the rounding of a 0/1 quantity), and
-   `reachable_k ⟺ allowed_k ∧ pop_k > tol`. The site's own `tol` is kept for allowed levels: below
+4. **Decision.** Per cluster C of numerically degenerate eigenvalues (gap ≤ 1e-9 Ha; `eigh` splits
+   exact degeneracies by ~1e-14), on HF's basis-independent projection φ_C = V_C V_C†|HF⟩:
+   `allowed_C ⟺ ||P_σ φ_C||² > ||φ_C||²/2` (the rounding of a 0/1 quantity; for a non-degenerate
+   level it is the majority test on ψ_k's sector weight), and `reachable_k ⟺ allowed_C(k) ∧
+   pop_k > tol`. *Revised after code review:* the first version tested each eigenvector's own
+   sector weight, and `eigh` mixes exactly degenerate open-shell M_s = ±S pairs (different
+   (N_α, N_β) sectors) — it dropped populated levels (H₄ triplet: 2 with p > 1e-3; OH doublet
+   38 → 22 kept at 1e-8). Gated as G8. The site's own `tol` is kept for allowed levels: below
    it they are physically populated but faint (LiH has 4 such levels in (1e-10, 1e-8]); that
    remaining 1e-8/1e-10 difference is the sites' visibility choice, not the artifact.
 
@@ -73,8 +79,8 @@ of the qubit path — and the dense population spectrum for the "no change" cont
 MolecularHamiltonian.build_args : dict | None          # set by build_molecular_hamiltonian
 reachability.orbital_parity_bounds(mh) -> list[(odd: bool[n_orb], beta: float)] | None
 reachability.hf_symmetry_sector(mh)    -> bool[2**n] | None   # None: not a JW HF layout
-reachability.symmetry_allowed(mh, vecs) -> bool[n_eig]         # majority weight in the sector
-reachability.reachable_mask(mh, vecs, pops, tol) -> bool[n_eig]
+reachability.symmetry_allowed(mh, w, vecs) -> bool[n_eig]      # per degenerate cluster
+reachability.reachable_mask(mh, w, vecs, pops, tol) -> bool[n_eig]
 reachability.reachable_eigenpairs(mh, tol)   # DELIBERATE CHANGE: now applies reachable_mask
 ```
 `_dense_hf_projection`, `hf_population_spectrum` and the signatures above are unchanged.
@@ -106,6 +112,9 @@ reachability.reachable_eigenpairs(mh, tol)   # DELIBERATE CHANGE: now applies re
   and the centered frames of `odmd`, `msd`, `trotter_odmd`, `device_odmd`,
   `trotter_resolution_floor` are built from the decision's reachable set (μ, τ, overlaps), not the
   population cut's.
+- **G8 — open shells (added after code review).** H₄ triplet and OH doublet: the decision equals
+  the population cut at both tols; on the triplet the per-vector majority test would drop a level
+  with p > 1e-3 (so the gate is not vacuous).
 
 ## 6. Implementation plan (test-first)
 
@@ -136,9 +145,9 @@ The symmetry argument holds where a site thresholds HF populations **in the exac
 
 ## 8. Caveats and risks
 
-- **R1 — degenerate clusters.** The majority rule is per eigenvector. An HF-sector level exactly
-  degenerate with other-sector levels can be split by `eigh` so that no vector has weight > 1/2.
-  Not seen on any gated system (G6); spin multiplets do mix this way but carry zero HF population.
+- **R1 — degeneracy.** Handled per cluster (§3.4, G8). What remains: two levels of *different*
+  symmetry closer than 1e-9 Ha are one cluster and fall back to the population cut — fail-safe,
+  never seen on a gated system.
 - **R2 — residual symmetry outside PySCF's abelian frame.** At broken-RHF geometries a level can
   still carry convergence-dependent population (sq-H₄ 1.20: 1.5e-9 → 6.2e-9 between `conv_tol` 1e-9
   and 1e-6) that the D2h bits cannot see; there the 1e-8/1e-10 split still bites.
@@ -150,7 +159,7 @@ The symmetry argument holds where a site thresholds HF populations **in the exac
 
 ## 9. Results (macOS 27, Apple M3, 2 BLAS/OMP threads, 2026-10-02)
 
-- **This gate file:** 33 passed in 27 s (G1–G7).
+- **This gate file:** 35 passed in 46 s (G1–G8).
 - **Recorded numbers that moved:** none on the ordinary systems — G3 shows identical masks, and the
   rewired sites call the same `eigh` on the same matrix. The sq-H₄ witness numbers move by design
   (G1, G7). 43 affected gate files re-run before/after: **no new failure**; five files that crashed

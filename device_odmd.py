@@ -46,7 +46,7 @@ def centered_frame(mh: MolecularHamiltonian):
     """
     # shared dense eigh carries the macOS Accelerate ZHEEVD -> ZHEEVR fallback (chem-a0y, chem-aj1)
     w_eig, V, pops = _dense_hf_projection(mh)
-    reach = w_eig[reachable_mask(mh, V, pops, 1e-8)].real    # symmetry-aware (chem-obf)
+    reach = w_eig[reachable_mask(mh, w_eig, V, pops, 1e-8)].real    # symmetry-aware (chem-obf)
     mu = float(0.5 * (reach.max() + reach.min()))
     tau = float(np.pi / (reach.max() - reach.min()))
     shifted = (mh.qubit_hamiltonian
