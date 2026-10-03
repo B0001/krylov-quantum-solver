@@ -152,8 +152,9 @@ neither of which flips G1-G4's verdict:
    lambda_A is unchanged" falsifier does NOT fire). Measured effect on the recorded findings: exact
    zero on every `finite_frac` (bead cause #1 above shows why: `operator_one_norms` never enters
    that calculation), and at most a **0.0003** absolute change in `coverage` across the full
-   G1-G4 grid (24 `(system, shots, z)` points; largest observed HeH+ z=1.0, shots=1e4:
-   0.8835 -> 0.8837) — noise-floor sized at 6000 Monte Carlo trials, not a qualitative move.
+   G1-G4 grid (24 `(system, shots, z)` points; largest observed HeH+ z=1.0, shots=1e6:
+   0.9987 -> 0.9990; the shots=1e4 point at the same z moves only 0.0002, 0.8835 -> 0.8837) —
+   noise-floor sized at 6000 Monte Carlo trials, not a qualitative move.
 
 **Net effect on findings:** none of G1-G4 change pass/fail; the §5 numbers above are updated to the
 current re-measured values so the spec stays honest about what the code produces today, with the
@@ -164,5 +165,6 @@ at z=3, both from cause #1 above, pre-dating this bead) — still strictly decre
 "a ceiling neither prior noise spec showed."
 
 Regenerating command for the full before/after grid (24 points, both `operator_one_norms` variants,
-`lambda_A`/`lambda_A2` deltas): `uv run python scratch_before_after_hbv.py` (untracked scratch
-script, left in the repo root for a reviewer to rerun; see `sandbox-handoffs/chem-hbv.md`).
+`lambda_A`/`lambda_A2` deltas), run from the repo root:
+`git show 5c5c6db:scratch_before_after_hbv.py | uv run python -` (the scratch script was committed
+in 5c5c6db and deleted from the tree by 597f343 / chem-0tb; see `sandbox-handoffs/chem-hbv.md`).

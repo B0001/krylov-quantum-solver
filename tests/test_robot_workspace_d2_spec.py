@@ -1,10 +1,23 @@
 """Spec gate for CADE Milestone D2 (specs/SPEC_robot_workspace_d2.md)."""
 
-import pytest
-from certkit.interval import Iv
+import importlib.util
+import os
 
-from robot.planner import TwoSidedClaim, plan_pipette_trajectory
-from robot.workspace import (
+import pytest
+
+if importlib.util.find_spec("certkit") is None:
+    if os.environ.get("CI"):
+        raise RuntimeError(
+            "certkit is not installed: the workspace D2 gate cannot run. "
+            'Install the pinned checker with `uv pip install -e ".[certkit]"`.'
+        )
+    pytest.skip('certkit extra not installed (uv pip install -e ".[certkit]")',
+                allow_module_level=True)
+
+from certkit.interval import Iv  # noqa: E402
+
+from robot.planner import TwoSidedClaim, plan_pipette_trajectory  # noqa: E402
+from robot.workspace import (  # noqa: E402
     Verdict,
     WorkspaceEnvelope,
     classify_point,

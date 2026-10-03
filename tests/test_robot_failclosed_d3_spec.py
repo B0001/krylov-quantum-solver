@@ -1,8 +1,22 @@
 """Spec gate for CADE Milestone D3 (specs/SPEC_robot_failclosed_d3.md)."""
 
-from certkit.interval import Iv
+import importlib.util
+import os
 
-from robot.failclosed import (
+import pytest
+
+if importlib.util.find_spec("certkit") is None:
+    if os.environ.get("CI"):
+        raise RuntimeError(
+            "certkit is not installed: the failclosed D3 gate cannot run. "
+            'Install the pinned checker with `uv pip install -e ".[certkit]"`.'
+        )
+    pytest.skip('certkit extra not installed (uv pip install -e ".[certkit]")',
+                allow_module_level=True)
+
+from certkit.interval import Iv  # noqa: E402
+
+from robot.failclosed import (  # noqa: E402
     SAFETY_FLOOR,
     DriftEvent,
     MonitorAction,
@@ -10,8 +24,8 @@ from robot.failclosed import (
     monitor_trajectory,
     run_failclosed_sweep,
 )
-from robot.planner import TwoSidedClaim, plan_pipette_trajectory
-from robot.workspace import WorkspaceEnvelope
+from robot.planner import TwoSidedClaim, plan_pipette_trajectory  # noqa: E402
+from robot.workspace import WorkspaceEnvelope  # noqa: E402
 
 ENVELOPE = WorkspaceEnvelope(x=Iv(-1.0, 1.0), y=Iv(-1.0, 1.0), z=Iv(-1.0, 1.0))
 ORIGIN = (0.0, 0.0, 0.0)

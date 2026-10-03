@@ -93,7 +93,10 @@ hypothesis whose death is informative is worth more here than a safe one.
   *Cost:* cheap. *Caveat:* this changes what "reachable" means everywhere in the arc, so it needs the
   blast-radius analysis the tolerance question never got.
 
-- [ ] **Does `SPEC_subspace_floor_resolvability`'s mechanism survive?** *(follow-up to the
+- [x] **Does `SPEC_subspace_floor_resolvability`'s mechanism survive?** *(ANSWERED below — see the
+  "The floor-guard mechanism survives" entry, which ran this check's conv_tol=1e-13 re-run on linear
+  H₆ at R = 1.0/1.1/1.2 Å (it reports neither the asymmetric-H₆ witness nor an irrep filter): the
+  mechanism is confirmed as originally written, PHYSICAL not a spurious SCF artifact.)* *(follow-up to the
   falsification above)* — *Claim:* PR #22 recorded the floor-guard blind spot as "a ~1e-4-amplitude
   reachable level near the cluster boundary". That is very likely the same symmetry-forbidden level
   seen through a looser SCF, i.e. a **spurious** level, not a physical one. *Check (killable):*
@@ -116,8 +119,27 @@ hypothesis whose death is informative is worth more here than a safe one.
   *Cost:* cheap. *Caveat:* whichever value wins, at least one recorded result moves; the spec must
   re-run the affected sweeps rather than assert the old numbers still hold.
 
-- [ ] **The identity fix has a THIRD call site — `operator_one_norms`, found while fixing the
-  second** *(verified: `certified_dipole_noise.py:48-53` does `np.abs(op.coeffs).sum()` on both
+- [x] **The identity fix has a THIRD call site — `operator_one_norms`, found while fixing the
+  second** — **CLOSED 2026-09-30 (chem-hbv): fixed, and the claimed finding (G3) survives verbatim;
+  only its recorded magnitude moved, and that move predates this bead.** `operator_one_norms` now takes
+  `include_identity: bool = False` and excludes the identity term by default via the same `_one_norm`
+  helper `hamiltonian_one_norms` uses; `include_identity=True` reproduces the old inflated numbers
+  for archaeology. **The bead's own falsifier did not fire:** the dipole operator's identity
+  coefficient is the nuclear dipole moment, generically nonzero here, so λ_A moved 3.2–3.8% and
+  λ_{A²} moved 7.9–22.7% (HeH+/LiH) — not a no-op. Effect on `SPEC_certified_dipole_noise`'s G1–G4:
+  **none flip.** `finite_frac` is untouched (0.0000 delta on every one of 24 `(system, shots, z)`
+  grid points) because the finite-bracket gate depends only on `hamiltonian_one_norms`, never on
+  `operator_one_norms`; `coverage` moves by at most 0.0003 absolute (noise-floor sized at 6000 MC
+  trials). The §5 "Measured" numbers *had already moved* before this bead touched anything, because
+  `SPEC_lambda_h2_bridge` changed `hamiltonian_one_norms`'s default earlier and never republished
+  this spec's numbers — that drift (0.728→0.884 / 0.554→0.819 on the G3 finite_frac pair) is
+  unrelated to this bead's fix and is disentangled from it in the revision note. Both call sites now
+  agree; nothing is stale. → [`SPEC_certified_dipole_noise.md`](SPEC_certified_dipole_noise.md) §10
+  (revision note with the two-cause breakdown and the before/after summary);
+  `tests/test_certified_dipole_noise_spec.py` (G1–G4, 4 passed); regenerate the 24-point grid from
+  the repo root with `git show 5c5c6db:scratch_before_after_hbv.py | uv run python -` (597f343 /
+  chem-0tb deleted the script from the tree).
+  *(original entry: verified: `certified_dipole_noise.py:48-53` does `np.abs(op.coeffs).sum()` on both
   λ_A and λ_{A²}, and its docstring says it mirrors `certified_noise.hamiltonian_one_norms` "same
   construction" — the function that was just corrected)* — *Claim:* the same zero-variance argument
   applies to a dipole operator's constant term, so `operator_one_norms` inflates λ_A the same way,
@@ -221,7 +243,12 @@ hypothesis whose death is informative is worth more here than a safe one.
   recorded. Note also the two certify *different* quantities (|⟨u|ψ₀⟩| vs ‖P_S u‖, and
   ‖P_S u‖ ≥ |⟨u|ψ₀⟩| always), so "chained d=1 beats block d=2" may be category-confused even once
   the tolerance is settled. *(original entry below)*
-- [ ] **The `krylov_refine` stub is not a marginal tightening — it may moot the block certificate**
+- [x] **The `krylov_refine` stub is not a marginal tightening — it may moot the block certificate**
+  *(SUPERSEDED — see the "CLOSED 2026-08-01 — the stub is implemented and it works in SELF mode" entry
+  above and [`SPEC_chained_overlap.md`](SPEC_chained_overlap.md), whose header states it "closes the
+  backlog hypothesis" this entry states; `krylov_refine.py` no longer exists at the top level and
+  `refine_via_lanczos` is implemented at
+  `hybrid_quantum_solver/certified_overlap/krylov_refine.py:51`, not a stub.)*
   *(verified: `krylov_refine.py:4` is a live `NotImplementedError` whose docstring promises exactly
   this)* — *Claim:* chaining through the Krylov ground Ritz vector via the angle triangle inequality,
   γ_chain = cos(θ_uv + arcsin(r_v/δ_v)), is valid, far tighter (v's residual ≪ HF's), and costs **zero
