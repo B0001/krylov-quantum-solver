@@ -34,6 +34,7 @@ from hybrid_quantum_solver.certified_overlap import (
 )
 from hybrid_quantum_solver.molecular_hamiltonian import MolecularHamiltonian
 from hybrid_quantum_solver.quantum_krylov_solver import QuantumKrylovSolver
+from reachability import reachable_eigenpairs
 
 # The self-mode Weinstein floor cannot verify its own premise below M = 6 (the gated
 # temple_bracket boundary). Inherited here as a hard raise, not re-derived.
@@ -133,22 +134,17 @@ def exact_hf_subspace_overlap(mh: MolecularHamiltonian, cluster_size: int,
                               tol: float = _REACHABLE_TOL) -> float:
     """REFERENCE ONLY (dense, O(2^n)): exact ||P_S u|| for the lowest-d REACHABLE eigenspace --
     the killable check. Reachable = nonzero HF amplitude (the QKSD sector). Never the live path."""
-    H = mh.qubit_hamiltonian.to_matrix()
-    w, V = np.linalg.eigh(H)
+    _, V = reachable_eigenpairs(mh, tol)      # symmetry-aware sector cut (chem-obf), ascending
     u = np.asarray(mh.hf_state().data, dtype=complex)
-    reach = np.where(np.abs(V.conj().T @ u) ** 2 > tol)[0]   # reachable indices, ascending energy
-    P_S = V[:, reach[:cluster_size]]
+    P_S = V[:, :cluster_size]
     return float(np.linalg.norm(P_S.conj().T @ u))
 
 
 def _reachable_e_d_total(mh: MolecularHamiltonian, cluster_size: int,
                          tol: float = _REACHABLE_TOL) -> float:
     """Oracle (d+1)-th reachable level as a TOTAL energy (dense; validation only)."""
-    H = mh.qubit_hamiltonian.to_matrix()
-    w, V = np.linalg.eigh(H)
-    u = np.asarray(mh.hf_state().data, dtype=complex)
-    reach = np.where(np.abs(V.conj().T @ u) ** 2 > tol)[0]
-    return float(w[reach[cluster_size]]) + mh.energy_offset
+    w, _ = reachable_eigenpairs(mh, tol)
+    return float(w[cluster_size]) + mh.energy_offset
 
 
 if __name__ == "__main__":

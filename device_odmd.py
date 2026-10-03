@@ -33,7 +33,7 @@ from qiskit.quantum_info import SparsePauliOp
 from hybrid_quantum_solver.hardware_krylov import HardwareKrylovSolver
 from hybrid_quantum_solver.molecular_hamiltonian import MolecularHamiltonian
 from odmd import noise_edge, odmd_spectrum
-from reachability import _dense_hf_projection
+from reachability import _dense_hf_projection, reachable_mask
 
 
 def centered_frame(mh: MolecularHamiltonian):
@@ -45,8 +45,8 @@ def centered_frame(mh: MolecularHamiltonian):
     diagonalization: validation scale only).
     """
     # shared dense eigh carries the macOS Accelerate ZHEEVD -> ZHEEVR fallback (chem-a0y, chem-aj1)
-    w_eig, _, pops = _dense_hf_projection(mh)
-    reach = w_eig[pops > 1e-8].real
+    w_eig, V, pops = _dense_hf_projection(mh)
+    reach = w_eig[reachable_mask(mh, V, pops, 1e-8)].real    # symmetry-aware (chem-obf)
     mu = float(0.5 * (reach.max() + reach.min()))
     tau = float(np.pi / (reach.max() - reach.min()))
     shifted = (mh.qubit_hamiltonian

@@ -38,6 +38,7 @@ from scipy.sparse.linalg import expm_multiply
 
 from hybrid_quantum_solver.molecular_hamiltonian import MolecularHamiltonian
 from hybrid_quantum_solver.quantum_krylov_solver import solve_generalized_eig
+from reachability import _dense_hf_projection, reachable_mask
 
 # Central finite-difference weights for the first derivative: f'(0) ~ sum_j w_j f(j*delta) / delta.
 _STENCILS = {
@@ -109,8 +110,8 @@ def build_msd_problem(mh: MolecularHamiltonian, n: int = 8, order: int = 8,
     """
     H_full = mh.qubit_hamiltonian.to_matrix(sparse=True).tocsc()
     psi0 = np.asarray(mh.hf_state().data, dtype=complex)
-    w_eig, V = np.linalg.eigh(mh.qubit_hamiltonian.to_matrix())
-    reach = w_eig[(np.abs(V.conj().T @ psi0) ** 2) > 1e-8].real
+    w_eig, V, pops = _dense_hf_projection(mh)       # shared eigh: macOS ZHEEVD fallback
+    reach = w_eig[reachable_mask(mh, V, pops, 1e-8)].real    # symmetry-aware (chem-obf)
     width = float(reach.max() - reach.min())
     mu = float(0.5 * (reach.max() + reach.min()))
     H_s = (H_full - mu * identity(H_full.shape[0], format="csc")).tocsc()
