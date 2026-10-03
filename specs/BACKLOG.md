@@ -66,19 +66,24 @@ hypothesis whose death is informative is worth more here than a safe one.
   → [`SPEC_symmetry_reachability.md`](SPEC_symmetry_reachability.md);
   `reachability.py`; `tests/test_symmetry_reachability_spec.py` (G1–G6, 14 passed).
 
-- [x] **CLOSED (chem-obf) — SURVIVES; premise corrected, caveat confirmed** [SPEC](SPEC_eigenstate_reachability.md).
-  SPEC_symmetry_reachability had only a per-*system* availability test, so a per-eigenstate
-  decision was built first: majority weight in HF's exact sector ((N_α, N_β) + every point-group
-  parity whose Z-string provably stays within 1/2 of the exact operator) AND the site's tol. Rewired
-  (tols unchanged): `reachable_eigenpairs` (→ certified_gaps, hf_overlap_certificate,
-  certified_dipole, certified_noise, excited_bounds), hf_overlap_subspace, odmd, msd, trotter_odmd,
-  device_odmd, trotter_resolution_floor. *Prediction confirmed:* no gated number moved —
-  identical masks on H₂, H₄, HeH⁺, LiH, LiH CAS(2,5), N₂ CAS(6,6) (G3); 43 affected gate files,
-  no new failure, 5 macOS ZHEEVD files fixed. Only the sq-H₄ residue witnesses move (the fix: Ag
-  ground selected, = symmetry-adapted FCI). *Caveat confirmed:* it does not transfer to Trotter
-  eigenbases (conserve Z-string parities, not N/S_z), odmd_spectral's kicked reference, or model
-  Hamiltonians — left on the population cut. Linux follow-up: reachability_tolerance G2/G5 pin the
-  residue.
+- [x] **CLOSED (chem-obf) — premise corrected; the veto KILLED for references, kept as a diagnostic**
+  [SPEC](SPEC_eigenstate_reachability.md). SPEC_symmetry_reachability had only a per-*system*
+  availability test, so a per-eigenstate decision was built first: majority weight in HF's exact
+  sector ((N_α, N_β) + every point-group parity whose Z-string provably stays within 1/2 of the
+  exact operator). PR #62 rewired the sites to *veto* what it rejects (`reachable_eigenpairs` →
+  certified_gaps, hf_overlap_certificate, certified_dipole, certified_noise, excited_bounds;
+  hf_overlap_subspace, odmd, msd, trotter_odmd, device_odmd, trotter_resolution_floor).
+  *Killed after merge (G9):* QKSD from |HF⟩ converges to the vetoed sq-H₄ residue level (within
+  1.1e-3 Ha of the B1g FCI energy for every M in 28–32, ~150 mHa below the Ag level the veto kept),
+  so a reference must keep it: `reachable_mask` is the population cut again and the decision only
+  warns (SCF residue → rebuild at `TIGHT_SCF_CONV_TOL`); it agrees with symmetric FCI on every
+  populated level (G2). *Prediction confirmed:* nothing flagged on H₂, H₄, HeH⁺, LiH, LiH CAS(2,5),
+  N₂ CAS(6,6) (G3). Kept: every site's `_dense_hf_projection` routing (5 macOS ZHEEVD gate files
+  fixed). Known blind spots of the diagnostic: active windows that split a degenerate shell (CH₄
+  CAS(2,2)), symmetry PySCF detects only within its tolerance, an unrecorded mapper. *Caveat
+  confirmed:* it does not transfer to Trotter eigenbases (conserve Z-string parities, not N/S_z),
+  odmd_spectral's kicked reference, or model Hamiltonians. Follow-up: fix the residue where it
+  belongs, a tight/symmetric SCF in the builder.
 
 - [ ] ~~**A symmetry/sector-aware reachability test**~~ *(superseded by the closed entry above;
   original text follows)* *(the fix the

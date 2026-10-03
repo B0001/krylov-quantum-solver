@@ -45,9 +45,12 @@ def _sq(a):                          # atom ORDER is load-bearing (SPEC_reachabi
 
 LIN_H4 = "H 0 0 0; H 0 0 1.0; H 0 0 2.0; H 0 0 3.0"
 H2 = "H 0 0 0; H 0 0 0.74"
-# (side, conv_tol). Both residue levels clear both site cuts (macOS: 2.66e-6 and 5.48e-8); a = 1.19
-# left the default conv_tol, where its 1.40e-8 cleared the 1e-8 cut by only 1.4x.
+# (side, conv_tol). a = 1.19 left the default conv_tol, where its 1.40e-8 residue cleared the 1e-8
+# cut by only 1.4x. At 1e-6 it is 5.48e-8 (macOS; 2.66e-6 at a = 1.10) -- still only 5.5x above 1e-8
+# on a platform-dependent number, so the 1e-8 checks use a = 1.10 only (code review; SPEC G1, G7).
 WITNESSES = [(1.10, 1e-6), (1.19, 1e-6)]
+WITNESS_CUTS = [(1.10, 1e-6, ODMD_TOL), (1.10, 1e-6, REACHABLE_TOL_CERTIFIED),
+                (1.19, 1e-6, REACHABLE_TOL_CERTIFIED)]
 
 
 @lru_cache(maxsize=None)
@@ -90,8 +93,7 @@ def _residue_warnings(mh, w, V, pops, tol):
 
 # --- G1: the witnesses -- identified, warned, kept ------------------------------------------------
 
-@pytest.mark.parametrize("tol", TOLS)
-@pytest.mark.parametrize("a, conv_tol", WITNESSES)
+@pytest.mark.parametrize("a, conv_tol, tol", WITNESS_CUTS)
 def test_G1_residue_level_identified_warned_and_kept(a, conv_tol, tol):
     mh, w, V, pops = _system(_sq(a), conv_tol)
     mask, rec = _residue_warnings(mh, w, V, pops, tol)
@@ -247,11 +249,14 @@ def test_G7_threshold_sites_use_the_population_cut(a, conv_tol):
     for name, (m, t) in frames.items():
         assert m == pytest.approx(mu, abs=1e-10) and t == pytest.approx(tau, rel=1e-10), name
 
+    def lowest_overlap(tol):                     # HF overlap of the lowest level above the cut
+        return float(np.sqrt(pops[np.flatnonzero(pops > tol)[0]]))
+
     e_b1g = _fci(_sq(a), "B1g")[0]
     assert reachable_eigenpairs(mh)[0][0] == pytest.approx(e_b1g, abs=1e-8)   # certified arc
-    ov = float(np.sqrt(pops[np.argmin(np.abs(w - e_b1g))]))   # the residue level's HF overlap
-    assert exact_reachable_overlap(mh) == pytest.approx(ov, rel=1e-8)
-    assert exact_hf_subspace_overlap(mh, 1) == pytest.approx(ov, rel=1e-8)
+    assert exact_reachable_overlap(mh) == pytest.approx(
+        lowest_overlap(REACHABLE_TOL_CERTIFIED), rel=1e-8)                  # = the residue level
+    assert exact_hf_subspace_overlap(mh, 1) == pytest.approx(lowest_overlap(ODMD_TOL), rel=1e-8)
 
 
 # --- G8: open shells -- exactly degenerate M_s pairs (found in the first code review) -------------

@@ -134,12 +134,15 @@ reachability.reachable_eigenpairs(mh, tol)   # the population cut again (the pre
 §0 scout and before the revised gate file ran; thresholds kept from PR #62 wherever its claim
 survives. Witnesses: sq-H₄ a = 1.10 and 1.19, **both at `conv_tol=1e-6`**. (a = 1.19 moves off the
 builder default, where its 1.40e-8 residue cleared the 1e-8 site cut by only 1.4×; at 1e-6 the scout
-measured 5.48e-8, unchanged for `conv_tol` 1e-5…1e-8.)
+measured 5.48e-8, unchanged for `conv_tol` 1e-5…1e-8. *Revised after code review, before merge:*
+5.48e-8 is still only 5.5× above 1e-8 and macOS-measured, so the checks at the 1e-8 cut use
+a = 1.10 only — G1 gates a = 1.19 at 1e-10 (548×), and G7 compares each site with the lowest level
+above its own cut instead of naming B1g at 1e-8.)
 
-- **G1 — the witnesses: identified, warned, kept.** At tol ∈ {1e-8, 1e-10}: `reachable_mask ==
-  (pops > tol)`; the call emits a `RuntimeWarning` naming SCF residue; the lowest populated level
-  `symmetry_allowed` rejects is the B1g FCI ground state, and the lowest populated level it allows
-  is the Ag one (both |ΔE| < 1e-8 Ha).
+- **G1 — the witnesses: identified, warned, kept.** At tol ∈ {1e-8, 1e-10} (a = 1.19: 1e-10 only,
+  see above): `reachable_mask == (pops > tol)`; the call emits a `RuntimeWarning` naming SCF
+  residue; the lowest populated level `symmetry_allowed` rejects is the B1g FCI ground state, and
+  the lowest populated level it allows is the Ag one (both |ΔE| < 1e-8 Ha).
 - **G2 — brute force vs an independent reference, every populated level.** sq-H₄ a ∈ {1.05, 1.10,
   1.19, 1.35} × `conv_tol` ∈ {1e-6, 1e-9}, linear H₄ and H₂: the eigenvectors in HF's sector
   (per-vector weight > 1/2) reproduce PySCF's D2h Ag FCI spectrum (same count, max |ΔE| < 1e-8 Ha),
@@ -167,7 +170,7 @@ measured 5.48e-8, unchanged for `conv_tol` 1e-5…1e-8.)
   `trotter_odmd`, `device_odmd`, `trotter_resolution_floor` equal the 1e-8 population-cut frame
   (μ abs 1e-10, τ rel 1e-10); `reachable_eigenpairs(mh)[0][0]` is the B1g FCI energy (1e-8); and
   `hf_overlap_certificate.exact_reachable_overlap` and `hf_overlap_subspace.exact_hf_subspace_overlap
-  (mh, 1)` both equal √pop of that level (rel 1e-8).
+  (mh, 1)` equal √pop of the lowest level above their own cuts, 1e-10 and 1e-8 (rel 1e-8).
 - **G8 — open shells, basis invariance.** H₄ triplet and OH doublet: `symmetry_allowed` is True on
   every populated level at both tols; on the triplet it stays so in a deliberately M_s-mixed
   degenerate eigenbasis, in which the per-vector rule flags a level with p > 1e-3 (non-vacuous).
@@ -247,7 +250,26 @@ The diagnostic can warn wrongly or stay silent; since the revision it never chan
 
 ## 9. Results (macOS 27, Apple M3, 2 BLAS/OMP threads)
 
-**Revision (2026-10-03):** *(to be filled in from the gate run)*
+**Revision (2026-10-03):**
+
+- **This gate file:** 45 passed in 35 s (G1–G10; 46 before the code-review change to G1/G7 in §5).
+- **G9, the kill:** max over M = 28…32 of E(M) − E_B1g = 3.0e-6 / 1.1e-3 / 1.1e-3 Ha (1.10 at
+  1e-6, 1.19 at 1e-6, 1.19 at the default) — the solver sits on B1g, ~0.15 Ha below Ag. Control at
+  `TIGHT_SCF_CONV_TOL`: min over M ≤ 32 of E(M) − E_Ag = −4.6e-14 / −8.0e-15 (stays on Ag).
+- **Mutation check** (temporary pytest plugin, not committed): `symmetry_allowed` → all False fails
+  32/45, including every G2 (10/10) and G6 (6/6) case — PR #62's G2 and G6 passed it (16/16, as
+  the review said: they never called the decision). → all True fails 11/45 (G1 3/3, G2 on the 6
+  residue cases, G6 on both witnesses).
+- **24 affected gate files** (one process each, `GATE_NO_CACHE=1`), origin/main fabaa7d → this
+  revision: `test_scf_conv_tol_spec` 12/14 → **14/14** (its G2 [H4 square 1.35] and [1.19] pin
+  the default-`conv_tol` residue as the reachable reference; PR #62 broke them). Apart from this
+  gate file (35 → 46 tests at that run), every other file unchanged, including the five macOS ZHEEVD fixes (`adaptive_shots` 5/5, `centered_pds` 6/6,
+  `msd_sampling` 4/4, `odmd` 4/4, `odmd_uq` 4/4). Still failing with the same test IDs before and
+  after, all raw-`eigh` ZHEEVD/`LinAlgError` on macOS: `test_chained_overlap_spec` (9),
+  `test_odmd_excited_spec` (1), `test_subspace_floor_resolvability_spec` (13 errors).
+  `test_reachability_tolerance_spec`: 9 passed, 3 skipped (macOS) both times.
+- **Recorded numbers that moved:** at the residue witnesses, the references are the population
+  cut's again (the pre-PR-#62 values); nothing moved on the ordinary systems (G3).
 
 **PR #62 (2026-10-02; superseded):**
 
@@ -265,7 +287,7 @@ The diagnostic can warn wrongly or stay silent; since the revision it never chan
   coefficient (LiH), far inside the 1e-12 rebuild check.
 - **Cross-PR effect missed (review):** `test_scf_conv_tol_spec` G2 [H4 square 1.35] and [1.19]
   pin the default-`conv_tol` residue as the reachable reference (overlap < 1e-3); with the veto it
-  became 0.613 / 0.652 and both failed on main.
+  became 0.613 / 0.652 and both failed on main (reproduced on this host's origin/main run).
 
 ## 10. Deliverables
 
