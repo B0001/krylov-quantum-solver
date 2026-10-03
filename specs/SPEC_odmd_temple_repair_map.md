@@ -1,8 +1,11 @@
 # SPEC: Where ODMD repairs — and where it silently breaks — the Temple bracket's oracle-free premise
 
-**Status:** DRAFT — gates pre-registered (2026-10-02) before the gated run. Backlog hypothesis:
-specs/BACKLOG.md "Method rungs", *"A non-variational estimator cannot supply the Temple premise —
-ODMD repairs it at shallow M, then silently breaks it"* (chem-z3h).
+**Status:** IMPLEMENTED — gates pre-registered 2026-10-02 (commit 8eb7978) before the gated run.
+G-a and G-c pass as pre-registered; two G-b sub-predictions were **KILLED** by the run and revised
+to pin what was measured — (b2) escapes are not confined to K ≤ 8, (b4) the flag's coverage is
+not set by M (§5 notes, §10). Backlog hypothesis: specs/BACKLOG.md "Method rungs", *"A
+non-variational estimator cannot supply the Temple premise — ODMD repairs it at shallow M, then
+silently breaks it"* (chem-z3h).
 
 ---
 
@@ -109,12 +112,22 @@ K ∈ {4, 5, 6, 7, 8, 10, 12, …, 28}. Noiseless.
   - (b2) On each of `h4`, `n2`, `lih` the map records ≥ 1 containment escape, its worst escape
     > 1e-6 Ha (1000× TOL — not float noise); every escape on the grid sits at K ≤ 8; the largest
     escape over all systems is > 1 mHa.
+    *Revised after the gated run:* the K ≤ 8 clause is **KILLED** by full-space LiH, which escapes
+    at M = 6, K ∈ {12, 14, 16} (+0.106 / +0.118 / +0.031 mHa) — ODMD still overshoots E₁ there by
+    250–430 mHa (27 reachable levels in a 133 mHa gap: its 2nd DMD mode is unresolved through
+    K = 18). The gate now pins both halves: H₄, N₂ and LiH CAS(2,5) escape only at K ≤ 8;
+    full-space LiH escapes at some K > 8.
   - (b3) Premise violation ≠ broken bracket: on `h4` and `n2` there are *degraded* cells (premise
     violated, E₀ still contained) — so INVALID must be decided by containment, not by the premise.
   - (b4) The oracle-free flag: (i) **sound** — on every cell of all five systems, `premise_refuted`
     ⇒ ε > E₁ + TOL, and it never fires in self mode; (ii) it fires on every escape with M ≥ 4;
     (iii) it fires on no escape at M = 2 — the recorded coverage gap (θ₁ of a 2-dim subspace sits
     above the overshoot).
+    *Revised after the gated run:* (ii) and (iii) are **KILLED both ways** — the flag misses
+    full-space LiH's escapes at (M, K) = (4, 4), (4, 5), (6, 16) and catches LiH CAS(2,5)'s at
+    (2, 4), (2, 5). Coverage is decided by how far ε lands above the *Ritz* E₁, ε − θ₁(M), not by
+    M. The gate now pins (i) soundness and that on every system with escapes the flag catches
+    some and misses some (37 of 45 caught, §10).
 - **G-c — the free region does not repair.** On `h4` and `n2` at M = 4 (the self-mode failure
   depth): the only free ODMD depth (K = 4) escapes, while the self-mode bracket at M = 4 still
   contains E₀ — the free substitution makes the certificate *worse*; and the smallest repairing K
@@ -157,4 +170,34 @@ K ∈ {4, 5, 6, 7, 8, 10, 12, …, 28}. Noiseless.
 
 ## 10. Results (gated run)
 
-*Filled in from the gated run.*
+`uv run python odmd_temple_repair_map.py` (Apple M3, 2 BLAS threads, 118 s wall; the gate file
+takes ~135 s). Energies in mHa; cells are (M, K); "caught" = escapes with `premise_refuted`.
+
+| system | reach. levels / gap | self ε−E₁ @M=4 | ODMD overshoot K | escapes (M, K) | worst escape | caught | repair K @M=4 |
+|---|---|---|---|---|---|---|---|
+| h2 | 2 / 1620 | −3e-5 (exhausted) | — | — | — | 0/0 | n/a |
+| h4 | 12 / 625 | **+14.77** | 4, 6–8, 10–14, 28 (K=5: no fit) | (2,4) (4,4) (6,4) | +0.147 (2,4) | 2/3 | 16–26 |
+| lih_cas | 7 / 133 | −110.42 | 4–8, 10–18 | K = 4–7 at every M (16) | +0.589 (2,4) | 14/16 | n/a |
+| lih | 27 / 133 | **+465.75** | 4–8, 10–18, 26 | M=4: K 4–8; M=6: K 4–8, 12, 14, 16; M=8: K 4–8 (18) | +0.203 (6,7) | 15/18 | 20–24, 28 |
+| n2 | 18 / 708 | **+22.19** | 4–8, 10, 18–28 | K = 4, 5 at every M (8) | **+1.259** (2,4) | 6/8 | 12–16 |
+
+- **G-a — the claim "violated on all three" is killed:** violated on H₄, N₂, full-space LiH; not
+  on LiH CAS(2,5) (−110 mHa); vacuous on H₂ (2 reachable levels, exhausted by M = 2).
+- **The free diagonal makes things worse (G-c).** At K = M = 4 self mode overshoots E₁ by
+  +14.77 / +22.19 mHa (H₄ / N₂) yet its bracket still contains E₀ (by 0.446 / 1.640 mHa); the free
+  ODMD estimate overshoots by +950.16 / +1529.71 mHa and the bracket escapes (+0.070 / +0.245 mHa).
+  Repair at M = 4 first appears at K = 16 (H₄), 12 (N₂), 20 (full-space LiH): 8–16 overlaps
+  beyond the 4 the solve measured.
+- **Not monotone in K, as the backlog caveat predicted** — but on H₄/N₂ it degrades rather than
+  breaks: H₄ is repaired at K = 16–26 and violated again at K = 28 (+0.74 mHa); N₂ repaired at
+  K = 12–16 (ε 118–332 mHa *below* E₁ — valid but looser), violated again at K = 18–28
+  (+14.8…+35.4 mHa); no escape at any of those cells. Full-space LiH does break at deep K (M = 6,
+  K = 12–16). On LiH CAS(2,5), where self mode needed no repair, the substitution only does harm.
+- **The oracle-free flag:** sound on every cell of all five systems (never fires without a real
+  overshoot; never in self mode), and catches 37 of 45 escapes. The 8 misses: H₄ (2,4); N₂ (2,4),
+  (2,5); LiH CAS(2,5) (2,6), (2,7); LiH (4,4), (4,5), (6,16). On H₄ and N₂ the worst escape on
+  the grid is a miss — so a silent flag never certifies a bracket; full detection still needs the
+  oracle (consistent with `SPEC_odmd_uq` G4: nothing single-signal sees model bias).
+- **Scout numbers that did not reproduce:** the backlog's H₄ ε = −1.59181 / E₁ = −1.649658 /
+  K=20 overshoot of 0.176 mHa. At the gated 0.9 Å chain E₁ = −1.555053 Ha and K = 20 sits
+  3.81 mHa *below* E₁ at every M; the non-monotonicity shows up at K = 28 instead.

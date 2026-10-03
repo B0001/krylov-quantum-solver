@@ -314,19 +314,21 @@ hypothesis whose death is informative is worth more here than a safe one.
   number itself (>1e14) as the falsifiable reason. → [`SPEC_pds_excited_roots.md`](SPEC_pds_excited_roots.md);
   `tests/test_pds_excited_roots_spec.py`.
 
-- [ ] **A non-variational estimator cannot supply the Temple premise — ODMD repairs it at shallow M,
-  then silently breaks it** — *Claim:* `SPEC_temple_bracket`'s oracle-free ε = θ₁ − σ₁ fails at M ≤ 4
-  and `certified_gaps` inherits that boundary. ODMD's E₁ comes from the first row of S the Krylov solve
-  already measures — no extra measurement — and repairs the premise there. But ODMD is explicitly
-  non-variational, so **no depth guarantees ε ≤ E₁**. *Check (killable):* G-a the repair is vacuous if
-  self-mode is not actually violated at M=4 on all three systems; G-b there exists a K at which ODMD
-  overshoots and the bracket is recorded **invalid**, not smoothed over. *(scout probe, H₄: self-mode
-  M=4 ε = −1.59181 vs true E₁ = −1.649658 → violated; ODMD K=16 → −1.653511, premise OK, bracket
-  1.02 mHa; **K=20 → −1.649481, i.e. 0.176 mHa ABOVE E₁ → violated.** Deeper signal makes the
-  certificate worse.)* *Cost:* medium. *Caveat:* **the headline claim is false by construction and the
-  K=20 overshoot proves it empirically** — the deliverable is a measured map of where the substitution
-  helps and where it silently breaks, not a certificate. Pairs with `SPEC_odmd_uq`'s recorded blind
-  spot (single-signal resampling cannot see model bias, so it cannot flag the overshoot either).
+- [x] **CLOSED (chem-z3h) — the repair is not free and the break is real: ODMD's E₁ breaks the
+  Temple bracket exactly where it costs nothing (K ≤ M), repairs it only with extra signal, and an
+  oracle-free flag catches most but not all of the breaks.** [SPEC](SPEC_odmd_temple_repair_map.md),
+  `odmd_temple_repair_map.py`, `tests/test_odmd_temple_repair_map_spec.py` (4/4). *G-a, claim
+  killed:* self mode at M=4 violates the premise on H₄ (+14.77 mHa), N₂ CAS(6,6) (+22.19) and
+  full-space LiH (+465.75), but not on LiH CAS(2,5) (−110.42) and vacuously not on H₂ (2-level
+  sector) — 2 of 3 under either three-system reading. *G-b/G-c:* on the free diagonal K=M=4 ODMD
+  overshoots E₁ by +950 / +1530 mHa (H₄/N₂) and the bracket escapes (+0.070 / +0.245 mHa) while
+  self mode's still contains E₀; repair at M=4 needs K=16 (H₄), 12 (N₂), 20 (LiH). 45 escapes on
+  the 5-system grid (M∈{2,4,6,8}, K∈{4…28}), worst +1.259 mHa (N₂ M=2 K=4); not confined to
+  shallow K (full-space LiH escapes at M=6, K=12–16 — pre-registered "K ≤ 8" killed). Premise
+  violation ≠ broken bracket (H₄ K=28, N₂ K=18–28 degrade but hold). New
+  `EnergyBracket.premise_refuted` (ε > θ₁ ≥ E₁): sound on every cell, catches 37/45 escapes;
+  misses include the worst one on H₄ and N₂ (pre-registered "fires iff M ≥ 4" killed both ways).
+  The scout's H₄ numbers (K=20 overshoot 0.176 mHa) do not reproduce at the 0.9 Å chain.
 
 - [x] **CLOSED (chem-loe) — shadows beat the λ² model's variance on both moments but do NOT buy
   Temple coverage, and a third, unpredicted finding: the HKP `shadow_norm` bound itself breaks on

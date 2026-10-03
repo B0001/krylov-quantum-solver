@@ -35,13 +35,16 @@ def test_Ga_self_mode_violation_at_m4_is_not_universal():
 
 def test_Gb_overshoot_located_and_recorded_invalid():
     """(b1) an overshooting K exists, >100 mHa at K=4 on H4/N2; (b2) genuine escapes (>1e-6 Ha),
-    all at K <= 8, worst >1 mHa; (b3) premise violation without escape exists -- so INVALID is
-    decided by containment, not by the premise."""
+    worst >1 mHa; (b3) premise violation without escape exists -- so INVALID is decided by
+    containment, not by the premise. (b2)'s pre-registered "every escape at K <= 8" was KILLED by
+    full-space LiH (M=6, K=12-16; spec section 5): pinned both ways so neither half moves silently."""
     for key in ("h4", "n2", "lih"):
         mp, s = _map(key)
         assert s["overshoot_k"], key
         assert s["escapes"] and s["worst_mha"] > 1e-3, (key, s["worst_mha"])
-        assert all(k <= 8 for _, k in s["escapes"]), (key, s["escapes"])
+    for key in ("h4", "n2", "lih_cas"):
+        assert all(k <= 8 for _, k in _map(key)[1]["escapes"]), key
+    assert any(k > 8 for _, k in _map("lih")[1]["escapes"]), _map("lih")[1]["escapes"]
     for key in ("h4", "n2"):
         mp, s = _map(key)
         assert (mp["odmd"][4] - mp["e1"]) * 1e3 > 100.0, (key, mp["odmd"][4] - mp["e1"])
@@ -51,14 +54,16 @@ def test_Gb_overshoot_located_and_recorded_invalid():
 
 def test_Gb_oracle_free_flag_sound_and_partial():
     """(b4) premise_refuted (eps > theta_1(M)) never fires unless eps > E_1 + TOL, never in self
-    mode; it fires on every escape with M >= 4 and on none at M = 2 (the coverage gap)."""
+    mode. The pre-registered "fires on every M >= 4 escape, on no M = 2 escape" was KILLED both
+    ways (spec section 5): coverage is set by eps - theta_1(M), not by M, and on every system with
+    escapes the flag both catches and misses some -- a silent flag never certifies the bracket."""
     for key in SYSTEMS:
         mp, s = _map(key)
         for cell, br in mp["cells"].items():
             assert not br.premise_refuted or br.eps > mp["e1"] + TOL, (key, cell)
         assert not any(br.premise_refuted for br in mp["self"].values()), key
-        for m, k in s["escapes"]:
-            assert mp["cells"][(m, k)].premise_refuted == (m >= 4), (key, m, k)
+        caught = [mp["cells"][c].premise_refuted for c in s["escapes"]]
+        assert not caught or (any(caught) and not all(caught)), (key, s["escapes"], caught)
 
 
 def test_Gc_free_region_does_not_repair():

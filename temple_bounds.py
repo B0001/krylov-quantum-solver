@@ -19,7 +19,9 @@ usage: Pollak & Martinazzo, JCTC 15, 1498 (2019); JCP 152, 244110 (2020).
 HONEST SCOPE (see specs/SPEC_temple_bracket.md): certification is sector-restricted (E_0/E_1 are
 the lowest reachable levels -- the same scope as QKSD itself). The Temple premise eps <= E_1 is
 rigorous only with an oracle gap; the oracle-free mode eps = theta_1 - sigma_1 cannot verify its
-own premise and is valid here only for M >= 6 (gated boundary). Exact statevector: the hardware
+own premise and is valid here only for M >= 6 (gated boundary). For an externally supplied eps,
+``EnergyBracket.premise_refuted`` (eps > theta_1 >= E_1) is an oracle-free but one-sided check
+(specs/SPEC_odmd_temple_repair_map.md). Exact statevector: the hardware
 shot cost of <H^2> (a ~lambda^2-sized Pauli expansion) is not modeled. A lower bound of -inf
 (eps <= theta_0) is valid but vacuous -- check ``width`` is finite before quoting.
 """
@@ -45,6 +47,15 @@ class EnergyBracket:
     variance: float         # <H^2> - <H>^2 of the ground Ritz state (electronic frame, Ha^2)
     eps: float              # gap input fed to Temple (total energy)
     eps_source: str         # "oracle" (caller-supplied E_1) | "self" (theta_1 - sigma_1)
+    theta1: float = np.inf  # 2nd Ritz value: a variational UPPER bound on E_1 (inf if rank-1)
+
+    @property
+    def premise_refuted(self) -> bool:
+        """Oracle-free PROOF that Temple's premise eps <= E_1 failed, so ``lower`` certifies
+        nothing: eps > theta_1 >= E_1 (1e-9 Ha float margin, G1's tolerance). One-sided -- an eps
+        in (E_1, theta_1] passes undetected, and self mode (eps = theta_1 - sigma_1) can never trip
+        it. Coverage measured in specs/SPEC_odmd_temple_repair_map.md."""
+        return self.eps > self.theta1 + 1e-9
 
 
 def mean_and_variance(H, psi):
@@ -91,7 +102,8 @@ def krylov_bracket(mh: MolecularHamiltonian, m: int, eps: Optional[float] = None
                          weinstein_lower=th0 - np.sqrt(var0) + offset,
                          width=upper - lower, variance=var0,
                          eps=eps_e + offset if np.isfinite(eps_e) else -np.inf,
-                         eps_source=eps_source)
+                         eps_source=eps_source,
+                         theta1=energies[1] if len(energies) > 1 else np.inf)
 
 
 def bracket_ladder(mh: MolecularHamiltonian, dims: Sequence[int], eps: Optional[float] = None,

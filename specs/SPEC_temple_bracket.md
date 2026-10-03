@@ -53,6 +53,7 @@ each gives `σᵢ² = ⟨Ψᵢ|H²|Ψᵢ⟩ − θᵢ²`. Then
 ```
 temple_bounds.EnergyBracket           # dataclass: m, upper, lower, weinstein_lower, width,
                                       #   variance, eps, eps_source  (total energies, Ha)
+                                      #   + theta1, premise_refuted (chem-z3h, see G4 note)
 temple_bounds.krylov_bracket(mh, m, eps=None, solver=None) -> EnergyBracket
     # eps: exact E1 as a TOTAL energy (oracle mode) | None -> self-consistent mode
     # solver: pass a shared QuantumKrylovSolver to reuse the cached Krylov basis
@@ -78,6 +79,11 @@ M ∈ {2, 4, 6, 8, 12, 16, 20, 24}. Noiseless (the claim is about rigor, not sam
   `lower ≤ E_FCI` holds for every system at every M ≥ 6, and width(M=24) < 1e-4 Ha on all four.
   (b) At M = 4 the premise fails on H4 and N2 (ε > exact E₁ — the Krylov space has not resolved
   the excited state yet), so small-M self-certification is *not* rigorous: the recorded finding.
+  *Note (chem-z3h, [`SPEC_odmd_temple_repair_map`](SPEC_odmd_temple_repair_map.md)):* (b) pins H4
+  and N2 only — the premise also fails at M = 4 on this spec's full-space LiH (+465.7 mHa), not on
+  LiH CAS(2,5) (−110.4 mHa), and H2 is vacuous (sector exhausted). Substituting ODMD's E₁ does
+  not repair it for free; see that spec's K-vs-validity map. For an externally supplied ε,
+  `EnergyBracket.premise_refuted` (ε > θ₁ ≥ E₁) is a sound but one-sided oracle-free check.
 
 ## 6. Implementation plan (test-first)
 
