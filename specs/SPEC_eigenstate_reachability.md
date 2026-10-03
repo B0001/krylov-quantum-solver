@@ -148,7 +148,22 @@ The symmetry argument holds where a site thresholds HF populations **in the exac
   `test_reachability_tolerance_spec` G2 and G5 (`constant_governs_the_certified_reference`), which
   pin the *bug*, will fail on Linux. That file is owned elsewhere; recorded as a follow-up.
 
-## 9. Deliverables
+## 9. Results (macOS 27, Apple M3, 2 BLAS/OMP threads, 2026-10-02)
+
+- **This gate file:** 33 passed in 27 s (G1–G7).
+- **Recorded numbers that moved:** none on the ordinary systems — G3 shows identical masks, and the
+  rewired sites call the same `eigh` on the same matrix. The sq-H₄ witness numbers move by design
+  (G1, G7). 43 affected gate files re-run before/after: **no new failure**; five files that crashed
+  on macOS's ZHEEVD now pass because their dense `eigh` goes through `_dense_hf_projection`:
+  `adaptive_shots` 1/5 → 5/5, `centered_pds` 1/6 → 6/6 (chem-aj1), `msd_sampling` 1/4 → 4/4,
+  `odmd` 0/4 → 4/4, `odmd_uq` 0/4 → 4/4. Still failing, unchanged and outside this change: raw
+  `np.linalg.eigh` inside `test_chained_overlap_spec` (10), `test_odmd_excited_spec` (1),
+  `test_subspace_floor_resolvability_spec` (13 errors), and `test_reachability_tolerance_spec`
+  G1–G3 (no residue on macOS at the default `conv_tol`).
+- **Unit-1 interplay:** `map_canonical` (chem-8tl) and the plain JW map differ by ≤ 1.8e-15 per
+  coefficient (LiH), far inside the 1e-12 rebuild check.
+
+## 10. Deliverables
 
 - `reachability.py` — the decision; `molecular_hamiltonian.py` — `build_args` only.
 - Rewired sites listed in §6.3; `tests/test_eigenstate_reachability_spec.py` — G1–G7.
