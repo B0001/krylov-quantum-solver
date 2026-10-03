@@ -357,6 +357,7 @@ hypothesis whose death is informative is worth more here than a safe one.
 
 - [x] **CLOSED 2026-09-28→2026-09-30 (chem-jiy) — the phase-correction hypothesis is KILLED, but
   for a different reason than expected: the θ_W it was built on was never in the primary source.**
+  [SPEC](SPEC_nb3x8_magnetometry.md) G5, z_eff 16.06 (bound [1, 12]), verified miss 3.75×.
   *Original claim:* Sheckelton's θ_W = −13.1 K is fitted above 90 K, in the **undimerized
   high-temperature** phase, but `nb3x8_magnetometry.py:42` imported only `NB3X8_LT_BULK` — so this
   repo's own published G3(b) finding compared a low-temperature J to a high-temperature measurement.
@@ -410,7 +411,8 @@ hypothesis whose death is informative is worth more here than a safe one.
   §7 (follow-up closed as a negative result, not deferred).
 
 - [x] **CLOSED 2026-09-30 (chem-a04) — re-verified, both kill conditions survive; the scale-agreement
-  caveat still applies up front.** *Original claim:* `odmd_optical.dimer_optical_gap` on LT cRPA
+  caveat still applies up front.** [SPEC](SPEC_odmd_optical.md), LT Cl +1.59%, family spread 44.3%,
+  `coordination_gap` z=3 872.9 meV. *Original claim:* `odmd_optical.dimer_optical_gap` on LT cRPA
   parameters gives 1117.5 meV vs a measured ≈1.10 eV at 100 K, a 1.6% parameter-free agreement, with
   two falsifiable consequences — the family trend (model spread Cl→I 44% vs measured ~12%) and the
   phase test (measurement collapses to ≈0.63 eV at 300 K while the model's HT parameters give
@@ -444,7 +446,8 @@ hypothesis whose death is informative is worth more here than a safe one.
   z=3 872.93 meV; ~65–90 s). Full reproduction commands and output: `sandbox-handoffs/chem-a04.md`.
 
 - [x] **CLOSED 2026-09-30 (chem-1gr) — Magnetocaloric S(T,B): the named follow-up, closed as a
-  quantified negative, on both counts.** `SPEC_nb3x8_thermo` §7 and `SPEC_nb3x8_metamagnetism` §7
+  quantified negative, on both counts.** [SPEC](SPEC_nb3x8_magnetocaloric.md) G1–G4, Maxwell 1.9e-7,
+  max |ΔS_M| 1.72 / 0.53 / 0.12 % of R ln2 (Cl / Br / I). `SPEC_nb3x8_thermo` §7 and `SPEC_nb3x8_metamagnetism` §7
   both named this; one composition closes both (feed `field_spectrum` into `entropy`'s Boltzmann
   trace — `SPEC_nb3x8_magnetocaloric`, `nb3x8_magnetocaloric.py`). Two claims, both survived: (i)
   MACHINERY — the Maxwell relation (∂S/∂B)_T = (∂M/∂T)_B, computed from two independently-derived
