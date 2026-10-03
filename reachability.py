@@ -1,40 +1,34 @@
 #!/usr/bin/env python3
 """
-reachability.py -- deciding which eigenstates a Hartree-Fock reference can actually reach.
+reachability.py -- which eigenstates a Hartree-Fock reference reaches, plus a symmetry diagnostic.
 
-The certified arc and the ODMD/MSD family both define the "HF-reachable" sector by thresholding
-the HF population, ``|<HF|psi_k>|^2 > tol``. specs/SPEC_reachability_tolerance.md showed that this
-is broken: on square H4 the level admitted at tol=1e-10 is symmetry-FORBIDDEN to the HF determinant
-(FCI coefficient exactly zero) and its apparent amplitude is pure SCF convergence residue -- it
-moves 19 orders of magnitude with ``PySCFDriver(conv_tol)``. No fixed constant fixes this: at
-a = 1.190 A the same residue reaches 1.4e-8, above the looser threshold too.
+The certified arc and the ODMD/MSD family define the "HF-reachable" sector by thresholding the HF
+population, ``|<HF|psi_k>|^2 > tol``. specs/SPEC_reachability_tolerance.md showed what that admits
+on square H4: a level symmetry-FORBIDDEN to the exact HF determinant (FCI coefficient exactly
+zero), whose apparent amplitude is pure SCF convergence residue -- it moves 19 orders of magnitude
+with ``PySCFDriver(conv_tol)``, and at a = 1.190 A it reaches 1.4e-8, above the looser cut too.
 
-The principled replacement is to ask which SPATIAL IRREP each eigenstate belongs to and keep only
-those matching the HF determinant -- no amplitude threshold at all. The obvious objection is that
-RHF breaks symmetry on exactly the strongly-correlated systems this matters for, and a
-symmetry-broken determinant has no irrep to match.
+Vetoing that level is nevertheless WRONG for a reference (specs/SPEC_eigenstate_reachability.md,
+G9, which killed chem-obf's first version): the qubit Hamiltonian is built from the loose SCF's
+orbitals, in which |HF> really does carry the residue, and QKSD from |HF> converges to that level,
+~150 mHa below the symmetric ground state. A reference must describe what the data targets, so
+``reachable_mask`` IS the population cut. The residue's remedy is the SCF: rebuild with
+``conv_tol=TIGHT_SCF_CONV_TOL``.
 
-That objection turns out to be self-consistent rather than fatal, which is the finding this module
-encodes (specs/SPEC_symmetry_reachability.md, gated 9/9 on the square-H4 family):
+What survives is a best-effort DIAGNOSTIC. ``symmetry_allowed`` asks per eigenstate whether HF's
+component in its eigenspace lies mostly in HF's exact symmetry sector -- (N_alpha, N_beta) plus
+every point-group parity whose Z-string provably stays within 1/2 of the exact operator in ``mh``'s
+own MO basis, which needs geometry (``MolecularHamiltonian.build_args``, verified by rebuilding the
+operator). ``reachable_mask`` warns when the cut admits a level it judges forbidden; the diagnostic
+never changes the mask and never raises. Its known blind spots: the spec's section 8.
 
-    symmetric SCF   ->  the artifact is present (a forbidden level carries SCF residue)
-                        AND the irrep labelling succeeds, so the filter can remove it.
-    broken-sym SCF  ->  the reference is genuinely lower in energy and genuinely overlaps that
-                        level (population ~0.45, not ~1e-10), so there is no artifact to remove
-                        AND the irrep labelling correctly refuses.
-
-The filter is therefore available exactly when it is needed.
-
-PER-EIGENSTATE DECISION (specs/SPEC_eigenstate_reachability.md, chem-obf). ``reachable_mask`` keeps
-eigenvector k iff HF's component in k's (degenerate) eigenspace lies mostly in HF's exact symmetry
-sector -- (N_alpha, N_beta) plus every point-group parity whose Z-string provably stays within 1/2
-of the exact operator in ``mh``'s own MO basis -- AND its HF population clears the site's ``tol``.
-The sector needs geometry:
-``MolecularHamiltonian.build_args``, verified by rebuilding the operator. Without it the decision is
-the old population cut. ``reachable_eigenpairs`` and the ODMD/MSD/Trotter centered frames run on it.
+The per-SYSTEM question (specs/SPEC_symmetry_reachability.md, ``symmetry_filter_available``): with
+a symmetric SCF the residue is present AND the irrep labelling succeeds; with a broken-symmetry SCF
+the reference genuinely overlaps that level (population ~0.45, not ~1e-10) AND labelling refuses.
 """
 from __future__ import annotations
 
+import warnings
 from typing import Optional, Tuple
 
 import numpy as np
@@ -57,9 +51,8 @@ TIGHT_SCF_CONV_TOL = 1e-13
 # SPEC_hf_overlap_subspace's headline are certifying different targets there. Named here so the
 # divergence is visible and gated (tests/test_reachability_tolerance_spec.py); unifying it decides
 # which of two recorded findings is right and is deliberately left to a follow-up.
-# See specs/SPEC_reachability_tolerance.md. Since chem-obf the sites cut through ``reachable_mask``,
-# which vetoes that symmetry-forbidden level at either tol; what the split still decides is only
-# which faint symmetry-ALLOWED levels count (LiH: 4 in (1e-10, 1e-8]). SPEC_eigenstate_reachability.
+# See specs/SPEC_reachability_tolerance.md. The sites cut through ``reachable_mask`` (this cut plus
+# a residue warning); SPEC_eigenstate_reachability G9 is why a symmetry veto cannot settle it.
 REACHABLE_TOL_CERTIFIED = 1e-10
 
 
@@ -169,7 +162,8 @@ def _driver_orbitals(mh):
     n_e, n_o = args["active_electrons"], args["active_orbitals"]
     if n_e is not None:
         problem = ActiveSpaceTransformer(n_e, n_o).transform(problem)
-        first = (drv._mol.nelectron - n_e) // 2          # the transformer's own active window
+        # the transformer's own active window; a tuple (n_alpha, n_beta) is summed, as it does
+        first = (drv._mol.nelectron - int(np.sum(n_e))) // 2
         mo = mo[:, first:first + n_o]
     if mh.qubit_hamiltonian.num_qubits != 2 * mo.shape[1]:
         return None
@@ -189,7 +183,9 @@ def orbital_parity_bounds(mh):
     exact symmetry operation g_b written in ``mh``'s own MO basis. ``beta`` bounds
     ||Z-string - exact operator|| on N-electron states: the sum of the N largest spin-orbital
     |1 - lambda| over the eigenvalues of D_b R_b (specs/SPEC_eigenstate_reachability.md section 3).
-    Rigorous for the full orbital space, where D_b R_b is orthogonal; heuristic for active spaces.
+    Rigorous for the full orbital space, where D_b R_b is orthogonal; heuristic for active spaces
+    (and wrong when the window splits a degenerate shell). May raise where PySCF only half-detects
+    the symmetry; ``reachable_mask`` treats any failure here as "no diagnostic".
     """
     found = _driver_orbitals(mh)
     if found is None:
@@ -222,7 +218,8 @@ def hf_symmetry_sector(mh) -> Optional[np.ndarray]:
     point-group bit of the greedy smallest-beta set with sum(beta) < 1, which keeps the product
     projector within 1/2 of the exact one so the majority test in ``symmetry_allowed`` cannot flip
     for a non-degenerate symmetry eigenstate. None when |HF> is not a Jordan-Wigner HF bitstring
-    (other mapper, tapered operator): no sector is formed and callers keep the population cut.
+    (other mapper, tapered operator): no sector, so no diagnostic. The layout check sees only the HF
+    index, which an interleaved-mapper operator can share (a known limitation of the diagnostic).
     """
     cached = mh.__dict__.get("_hf_sector")
     if cached is not None and cached[0] is mh.qubit_hamiltonian:
@@ -246,8 +243,9 @@ def hf_symmetry_sector(mh) -> Optional[np.ndarray]:
 
 
 # Eigenvalues closer than this are one eigenspace. eigh splits exactly degenerate levels (open-shell
-# M_s pairs, Pi/E pairs) by ~1e-14 here; the witnesses' symmetry gaps are ~0.1 Ha. Numerical, and
-# fail-safe: a wider cluster only falls back toward the population cut, it never drops a level.
+# M_s pairs, Pi/E pairs) by ~1e-14 here; the witnesses' symmetry gaps are ~0.1 Ha. Numerical. A
+# cluster shares one majority verdict, so levels of different symmetry closer than this can get a
+# wrong one -- a missed or spurious diagnostic warning; the reachable mask never depends on it.
 _DEGENERATE_ATOL = 1e-9
 
 
@@ -259,7 +257,8 @@ def symmetry_allowed(mh, w, vecs) -> np.ndarray:
     ||phi_C||^2 / 2 -- exactly 1 or 0 under exact symmetry, so 1/2 is its rounding, not a tuned
     constant. Per vector this is the majority test; per cluster it survives ``eigh`` mixing exactly
     degenerate levels across sectors (open-shell M_s pairs), which a per-vector test does not.
-    All True when no sector can be formed (the old behaviour)."""
+    Meaningful only where HF's projection is above roundoff (populated levels). All True when no
+    sector can be formed. A DIAGNOSTIC: no reference depends on it (see ``reachable_mask``)."""
     sector = hf_symmetry_sector(mh)
     allowed = np.ones(vecs.shape[1], dtype=bool)
     if sector is None:
@@ -273,16 +272,35 @@ def symmetry_allowed(mh, w, vecs) -> np.ndarray:
 
 
 def reachable_mask(mh, w, vecs, pops, tol: float) -> np.ndarray:
-    """THE HF-reachability decision: symmetry-allowed AND populated above the site's ``tol``."""
-    return symmetry_allowed(mh, w, vecs) & (np.asarray(pops) > tol)
+    """THE HF-reachability decision: ``|<HF|psi_k>|^2 > tol`` -- residue levels included, because
+    QKSD from |HF> can converge to them (and does to the lowest: SPEC_eigenstate_reachability G9).
+    The symmetry decision runs only as a diagnostic: it warns when the cut admits a level it judges
+    forbidden, and never changes the mask."""
+    pops = np.asarray(pops)
+    keep = pops > tol
+    try:
+        flagged = np.flatnonzero(keep & ~symmetry_allowed(mh, w, vecs))
+    except Exception:
+        # ponytail: broad catch is fine -- diagnostic only, the reference path never depends on it
+        # (PySCF raises on geometries it half-detects as symmetric; that just means no diagnostic).
+        flagged = ()
+    if len(flagged):
+        levels = ", ".join(f"E = {float(np.real(w[k])):.6f} Ha (electronic) at "
+                           f"|<HF|psi>|^2 = {float(pops[k]):.2e}" for k in flagged)
+        warnings.warn(f"HF-reachable level(s) {levels} look symmetry-forbidden to |HF>: that "
+                      f"population is SCF residue. The reference keeps them because QKSD from |HF> "
+                      f"can converge to them; rebuild with conv_tol=TIGHT_SCF_CONV_TOL "
+                      f"({TIGHT_SCF_CONV_TOL:g}) to remove the residue.",
+                      RuntimeWarning, stacklevel=2)
+    return keep
 
 
 def reachable_eigenpairs(mh, tol: float = REACHABLE_TOL_CERTIFIED):
     """(energies, eigenvectors) of the HF-reachable sector, ascending -- dense, O(2^n).
 
-    THE one implementation of the reachable sector the certified arc runs on: ``reachable_mask``
-    (symmetry-allowed AND ``|<HF|psi_k>|^2 > tol``; just the population cut when ``mh`` carries no
-    verifiable geometry). Energies are in the ELECTRONIC frame (add ``mh.energy_offset`` for
+    THE one implementation of the reachable sector the certified arc runs on: ``reachable_mask``,
+    i.e. ``|<HF|psi_k>|^2 > tol`` with a warning on SCF-residue levels (kept: QKSD from |HF> can
+    converge to them). Energies are in the ELECTRONIC frame (add ``mh.energy_offset`` for
     totals). REFERENCE ONLY -- it diagonalizes H exactly, so it is a validation oracle, never a live
     path. Note the sector cut is what keeps a CHARGED species honest (HeH+): the global lowest
     eigenvector sits in a different particle-number sector, and only the reachable cut selects the
