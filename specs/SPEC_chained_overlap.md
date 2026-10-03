@@ -33,7 +33,12 @@ E₁ floor instead of an oracle.**
 ## 2. Background and honest framing
 
 Measured on a symmetry-clean set (**5 systems × M ∈ {6,8,12} = 15 cells**), all references built at
-`conv_tol=1e-13` so the SCF-residue artifact of `SPEC_reachability_tolerance` is absent. (An earlier
+the builder's **default** `conv_tol` (1e-9); the SCF-residue artifact of `SPEC_reachability_tolerance`
+is avoided by *excluding* the geometries that carry it, not by tightening the SCF. (**Correction
+2026-10-02, chem-ayr:** this paragraph and the gate's docstring used to say `conv_tol=1e-13`; the code
+never did that. [`SPEC_scf_conv_tol`](SPEC_scf_conv_tol.md) G1 measures that the four ≤ 8-qubit
+members do not move when tightened to 1e-13 — |ΔE₀| ≤ 3.4e-14 Ha, |Δ overlap| ≤ 6.8e-9 — so no
+number here changes; linear H₆ was not re-measured.) (An earlier
 draft quoted 7 systems / 21 cells. That set included square H₄ at a = 1.10 and 1.35 — the two
 geometries this spec itself excludes as having no well-defined target, see R3. The counts below are
 the post-exclusion re-run; the *mechanism* numbers were unaffected by the correction.)
@@ -145,6 +150,13 @@ certified_overlap.krylov_refine.SATURATION_SLACK = 1e-14
   matter to G1 had those geometries been gated. R3's "no well-defined target" and this are therefore
   the same underlying issue seen twice, and the exclusion is load-bearing for R2b, not only for R3.
   G7 pins both halves; the excluded geometries serve as its positive control.
+  **Platform note (2026-10-02, chem-7rb).** The a = 1.10 leakage (1.7e-6) is a Linux-freeze number: at
+  the default `conv_tol` the a = 1.10 forbidden-level residue is 5.07e-10 there but ~1e-29 on
+  macOS 27 (Apple M3), where the same measurement gives leakage 8.9e-15 — below `LEAK_TOL`, so the
+  positive control does not fire. `test_G7_excluded_geometries_are_the_positive_control[1.1]` is
+  therefore `skipif(sys.platform != "linux")` with these numbers in its reason; a = 1.35 reproduces on
+  macOS (1.6e-6) and remains the positive control on every platform. Cause and the other gates
+  affected: [`SPEC_reachability_tolerance`](SPEC_reachability_tolerance.md) §10.
 - **R3 — one clean set.** 5 systems; square H₄ is included only at a = 1.05, because a = 1.10 / 1.35
   have no well-defined target (`SPEC_symmetry_reachability`) — and, per R2b, are also where the
   neglected leakage term is largest. Two independent reasons to exclude them, one gated set.

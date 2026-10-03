@@ -9,6 +9,8 @@ headline are certifying different targets.
 Found while verifying the krylov_refine chained-overlap bound: the bound appeared to violate its
 reference, and the cause was the reference, not the bound.
 """
+import sys
+
 import numpy as np
 import pytest
 
@@ -22,6 +24,23 @@ def _square_h4(a):
 
 WITNESS_A = 1.1                    # the geometry where the thresholds diverge
 AGREE_A = (1.0, 1.2, 1.3, 1.4)     # where they do not -- the boundary
+
+# G1-G3 pin a platform-specific SCF STOPPING POINT -- the residue that G6 shows is unphysical -- so
+# they are Linux-reference-only. Measured on macOS 27 (Apple M3, scipy 1.15.3/Accelerate, 2026-10-02),
+# a=1.1, default conv_tol=1e-9: the lowest level's HF population is ~1e-29 (machine zero; the Linux
+# freeze has 5.07e-10), so both thresholds select the Ag level (overlap 0.667), G1/G2 see a == b, and
+# G3's (1e-10, 1e-8) window is empty. No conv_tol reproduces it there: p0 = 2.7e-6 (1e-6), 1.3e-6
+# (1e-7), 8.7e-8 (1e-8), then ~1e-29 for every conv_tol <= 1e-9. The SCF is on the symmetric branch
+# (scf_symmetry_status = (False, -5e-15)), so this is not a symmetry-broken solve. G6-G8 carry the
+# platform-independent claim and pass everywhere. specs/SPEC_reachability_tolerance.md section 10.
+_LINUX_REFERENCE_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="pins a platform-specific SCF stopping point: at a=1.1, conv_tol=1e-9 the lowest-level HF "
+           "population is ~1e-29 on macOS 27 (Linux freeze 5.07e-10), both thresholds pick the Ag "
+           "level (0.667), and no conv_tol in 1e-6..1e-13 lands in (1e-10, 1e-8) there "
+           "(2.7e-6, 1.3e-6, 8.7e-8, then ~1e-29). G6-G8 carry the platform-independent claim. "
+           "specs/SPEC_reachability_tolerance.md section 10.",
+)
 
 
 def _amp2_and_spectrum(a):
@@ -39,6 +58,7 @@ def _lowest_reachable_index(w, amp2, tol):
 
 # --- G1: the witness (DEFINITION OF DONE) ---------------------------------------------------------
 
+@_LINUX_REFERENCE_ONLY
 def test_G1_two_thresholds_select_different_ground_states():
     w, amp2, _ = _amp2_and_spectrum(WITNESS_A)
     i10 = _lowest_reachable_index(w, amp2, 1e-10)
@@ -57,6 +77,7 @@ def test_G1_two_thresholds_select_different_ground_states():
 
 # --- G2: the two SHIPPED modules disagree, measured through their public references ---------------
 
+@_LINUX_REFERENCE_ONLY
 def test_G2_the_two_specs_d1_references_disagree():
     """`exact_reachable_overlap` (SPEC_hf_overlap_certificate, 1e-10) vs
     `exact_hf_subspace_overlap(..., 1)` (SPEC_hf_overlap_subspace, 1e-8) -- the d=1 references of
@@ -70,6 +91,7 @@ def test_G2_the_two_specs_d1_references_disagree():
 
 # --- G3: the offending level really is between the thresholds -------------------------------------
 
+@_LINUX_REFERENCE_ONLY
 def test_G3_a_level_sits_between_the_two_thresholds():
     _, amp2, _ = _amp2_and_spectrum(WITNESS_A)
     between = np.where((amp2 > 1e-10) & (amp2 < 1e-8))[0]

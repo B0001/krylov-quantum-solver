@@ -5,9 +5,15 @@ Davis-Kahan bound through the Krylov ground Ritz vector, so the certificate uses
 than the (much larger) HF residual that makes the direct SPEC-21 bound go vacuous on exactly the
 multireference systems it is wanted for.
 
-All references are built at conv_tol=1e-13: at the driver default an SCF residue contaminates the
-reachable sector (specs/SPEC_reachability_tolerance.md) and the certified target is not well defined.
+All references are built at the builder's default conv_tol (1e-9) -- NOT 1e-13, which an earlier
+version of this docstring claimed. The gated systems are insensitive to that choice
+(specs/SPEC_scf_conv_tol.md G1: on the <= 8-qubit members |dE0| <= 3.4e-14 Ha and |d overlap| <=
+6.8e-9 between 1e-9 and 1e-13; linear H6 was not re-measured). a=1.10/1.35 are excluded because at
+the default an SCF residue contaminates the reachable sector (specs/SPEC_reachability_tolerance.md)
+and the certified target is not well defined.
 """
+import sys
+
 import numpy as np
 import pytest
 
@@ -28,12 +34,14 @@ H4_LINEAR = "H 0 0 0; H 0 0 1.0; H 0 0 2.0; H 0 0 3.0"
 H4_SQUARE_105 = "H 0 0 0; H 1.05 0 0; H 1.05 1.05 0; H 0 1.05 0"
 H6_LINEAR = "H 0 0 0; H 0 0 1.0; H 0 0 2.0; H 0 0 3.0; H 0 0 4.0; H 0 0 5.0"
 
-# NOTE a=1.10 and a=1.35 are deliberately EXCLUDED. They are symmetric-SCF geometries, but
-# `build_molecular_hamiltonian` hardcodes PySCFDriver with no conv_tol, so it can only produce the
-# driver default (1e-9) -- at which those two carry the SCF-residue artifact
-# (specs/SPEC_reachability_tolerance.md) and the "exact reachable overlap" reference is the residue,
-# not the physical overlap. a=1.05 is clean at the default. Filed as a backlog entry: the public
-# builder cannot express a tight-SCF reference at all.
+# NOTE a=1.10 and a=1.35 are deliberately EXCLUDED. They are symmetric-SCF geometries and every
+# reference in this file is built at the builder's default conv_tol (1e-9). At the default a=1.35
+# carries the SCF-residue artifact (specs/SPEC_reachability_tolerance.md): its "exact reachable
+# overlap" is the residue (7.8e-5), not the physical overlap (0.613 at conv_tol=1e-13). a=1.10
+# carries it on the Linux freeze (residue 5.07e-10) but not on macOS (~1e-29); see G7 below.
+# a=1.05 is clean at the default. The builder DOES accept conv_tol (an earlier version of this note
+# said it could not), so re-admitting a=1.35 at TIGHT_SCF_CONV_TOL is possible -- a follow-up,
+# specs/SPEC_scf_conv_tol.md section 7.
 
 DIRECT_SURVIVES = (H2_EQ, H2_STRETCHED, H4_LINEAR)
 DIRECT_VACUOUS = (H4_SQUARE_105, H6_LINEAR)
@@ -205,7 +213,20 @@ def test_G7_unreachable_leakage_is_negligible_on_the_gated_set(atom):
     assert leak < LEAK_TOL, (atom, leak)
 
 
-@pytest.mark.parametrize("a", (1.10, 1.35))
+# a=1.10 pins a platform-specific SCF stopping point, so it is Linux-reference-only. Measured on
+# macOS 27 (Apple M3, scipy 1.15.3/Accelerate), default conv_tol=1e-9: the a=1.10 forbidden-level
+# residue is ~1e-29 (Linux freeze: 5.07e-10), so the Ritz leakage is 8.9e-15 < LEAK_TOL and the
+# positive control cannot fire; a=1.35 still does (1.6e-6). That is the finding, not a failure to fix:
+# specs/SPEC_reachability_tolerance.md section 10. The a=1.35 case carries the claim everywhere.
+_A110_LINUX_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="a=1.10 residue is platform-dependent: 5.07e-10 on the Linux freeze, ~1e-29 on macOS 27 "
+           "(leakage 8.9e-15 < LEAK_TOL=1e-12 there); a=1.35 still fires (1.6e-6) on every platform. "
+           "specs/SPEC_reachability_tolerance.md section 10.",
+)
+
+
+@pytest.mark.parametrize("a", (pytest.param(1.10, marks=_A110_LINUX_ONLY), 1.35))
 def test_G7_excluded_geometries_are_the_positive_control(a):
     """The exclusion is load-bearing for R2b, not only for R3. These geometries must BREACH the
     threshold -- if they passed it, excluding them would be unnecessary and R2b overstated."""
