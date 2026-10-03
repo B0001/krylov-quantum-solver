@@ -437,48 +437,71 @@ hypothesis whose death is informative is worth more here than a safe one.
 
 ### Fault-tolerant stack
 
-- [ ] **QPE's precision constant is not a measurement — it is π·sin θ₀, and it is portable** —
+- [x] **CLOSED (chem-0ke) — QPE's precision constant is π·sin θ₀: CONFIRMED (pre-registered, never
+  exceeded, tight to ≤5% on all three systems); "portable" holds only as a large-t envelope.**
+  [SPEC](SPEC_qpe_precision_bound.md), `tests/test_qpe_precision_bound_spec.py` (7/7 green).
   *Claim:* `SPEC_qpe_readout_laws` recorded max ratio 2.175 on H₂ CAS(2,2) and explicitly disclaimed
   derivation. It is derivable: `run_qpe` decodes E = λ·cos(2πφ), so the arccos Jacobian plus a
   half-bin dyadic error gives a **bound π·sin θ₀ with θ₀ = arccos(E₀/λ)** — per-system predictable,
   and it explains the staircase (the ratio oscillates as t slides the phase across bin boundaries; the
   envelope is π·sin θ₀). Closes the spec's "beyond H₂ CAS(2,2)" gap and its "constants are
-  measurements, not derived" caveat at once. *Check (killable):* **predict π·sin θ₀ before running**,
-  then sweep t = 4…14 on H₂/LiH CAS(2,2) + N₂ CAS(3,4); dies if measured max ratio *exceeds* the bound
-  anywhere, or if it is loose by >20% on every system (real bound, wrong mechanism). *(scout probe:
-  2.285 vs 2.175, 2.351 vs 2.285, 2.391 vs 2.364 — never exceeded, tightening with sweep length.)*
-  *Cost:* cheap; ≤6 qubits (`pauli_decompose` is exponential). *Caveat:* an upper envelope, so a short
-  t-sweep can sit well under it and look like a miss — sweep enough t to hit near-worst-case alignment.
+  measurements, not derived" caveat at once. *Check (killable):* **predict π·sin θ₀ before running**
+  (`scripts/spec_qpe_precision_bound.py`), then sweep t = 4…14 on H₂/LiH CAS(2,2) + N₂ CAS(3,4); dies
+  if measured max ratio *exceeds* the bound anywhere, or if it is loose by >20% on every system (real
+  bound, wrong mechanism). **CONFIRMED, pre-registered (not fitted after):** predicted bounds
+  2.285077 (H₂), 2.351497 (LiH), 2.396444 (N₂); measured max ratios over t=4..14 came in at 2.175167
+  (H₂, 95.2% of bound), 2.284570 (LiH, 97.2%), 2.303179 (N₂, 96.1%) — never exceeded on any system,
+  and tight to within 5% on all three (comfortably past the ≤20%-on-at-least-one-system bar). Note the
+  earlier scout-probe numbers logged in this entry's history ("2.285 vs 2.175, 2.351 vs 2.285, 2.391
+  vs 2.364") are close to but not identical with this closure's pre-registered `π·sin θ₀` values —
+  they predate the pre-registration discipline applied here and were not reproduced as part of this
+  closure; treat this entry's own numbers above as the checked ones. **Landing finding (not gated):**
+  on chem-177's recentered walk, H₂ at t=4 reaches 2.6966 > π·sin θ₀' = 2.6212. That is under the
+  exact nearest-bin bound 2.7739, so the first-order envelope is not a strict bound at small t
+  (SPEC §10).
+  *Cost:* cheap; ≤6 qubits (`pauli_decompose` is exponential). *Caveat:* an upper envelope (first-order
+  geometric argument, not a worst-case proof), tested on 3 systems, all STO-3G, all ≤6 qubits, all near
+  equilibrium geometry — generalization beyond that is not tested (`SPEC_qpe_precision_bound` R1-R3).
 
-- [ ] **The identity term inflates the FT λ too — the third strike in an arc that has self-corrected
-  twice** — *Claim:* `SPEC_shift_both_sides` and `SPEC_lambda_meas_identity` caught the identity term
-  corrupting the *near-term* 1-norm; it is untouched on the **FT side** — `build_walk_operator` loads
-  every `pauli_decompose` term into PREPARE, identity included, so λ_1norm carries 30–49% dead constant
-  mass *(scout probe: |c_I|/λ = 30.1% H₂, 44.2% LiH, 49.3% N₂(3,4), 45.6% H₂O(3,4))*. A constant is
-  free — subtract it, add it back classically. Combined with the entry above, the honest driver is
-  λ_eff = √(λ² − E₀²), with an optimal shift c*. *Check (killable):* the real falsifier is (c) — feed
-  the re-centered Hamiltonian through `run_qpe` and confirm the realized error at fixed t drops by the
-  predicted factor; dies if it does not. *Cost:* cheap. *Caveat:* spectral centering is **standard
-  practice** in the qubitization literature — this is a reproduction applied as an audit of this repo's
-  own path, label it as such. The scout also found `df_lambda` losing to identity-excluded naive λ on
-  all four systems, apparently flipping `SPEC_scdf_lambda` G1(b) — but DF's rotated-number-operator LCU
-  absorbs constant mass implicitly, so the two λ's may simply **not be comparable**, and "G1(b) is a
-  vacuous check" is the likelier (and still valuable) finding.
+- [x] **CLOSED (chem-177) — the identity term inflates the FT λ too (the third strike): the drop is
+  free and exact, the budget claim SURVIVES at the envelope level, and the fixed-t closed form is
+  KILLED.** [SPEC](SPEC_ft_identity_shift.md), `tests/test_ft_identity_shift_spec.py` (G1–G5, 19/19
+  green). Findings: (1) identity fraction reconfirmed material — |c_I|/λ = 30.1%
+  H₂, 44.2% LiH, 48.5% N₂(3,4) (D2h-pinned), 45.6% H₂O(3,4) (G1); (2) the drop is free and exact — a
+  fresh walk operator built from the identity-free terms plus a classical `+c_I` correction
+  reproduces the full original spectrum to <1e-8 Ha on H₂/LiH (G2); (3) the real falsifier survives
+  **at the envelope level, not the point-estimate level** — the bead's proposed `λ_eff = √(λ²−E₀²)`
+  closed form for a literal *fixed-t* point-estimate ratio is **killed** (the ratio swings 18–279×
+  across t=4..20 on every system — the dyadic staircase the π·sin θ₀ entry above bounds), while
+  λ'/λ = 0.51–0.70 cuts the walk-step budget ∝ λ/ε by 1.43–1.94× and the phase-bit count at ε=1e-3
+  by 0–1 bit (13→13, 13→12, 15→14, 15→14 under the *empirical* `3λ/2^t` envelope of
+  `SPEC_qpe_readout_laws` G2; the decode's hard ceiling is π), confirmed by running `run_qpe` end to
+  end at each variant's own budget (G3); (4) `df_lambda` vs
+  identity-excluded naive λ resolved as **NOT-COMPARABLE-AND-VACUOUS, not a flip**: `SPEC_scdf_lambda`
+  G1(b) (identity-*included* comparison) still holds on every system, and `df_lambda` is a provably
+  pure function of `(h1, eri)` with no lever for identity-exclusion at all, so the identity-excluded
+  comparison it loses to is a category error, not a corrected bound (G5).
 
-- [ ] **The 62× THC λ penalty may be a collocation artifact — and the fix already lives in the repo**
-  — *Claim:* `SPEC_thc_lambda` locks λ_THC ≈ 62× λ_DF as a deliberate finding and puts optimized
-  collocation out of scope as "research-grade". But `lambda_ladder.fit_thc` **is** a nonlinear
-  Levenberg–Marquardt THC fit that predates that spec — it has simply never been scored with the native
-  `thc_lambda`, only with brute-force Pauli λ, which caps it at ≲4 orbitals and conflates two 1-norm
-  conventions. *Check (killable):* at matched rank and matched reconstruction error (<1e-6), compare
-  random vs structured vs nonlinear collocation against `df_lambda`; dies if nonlinear is not ≥5× below
-  random (the penalty is deeper than "unoptimized points"). Opposite kill: if it *beats* `df_lambda`,
-  G4 must be revised — which that spec explicitly invites. *Cost:* medium (~600 LM parameters at
-  norb=7; cap the CI gate at norb ≤ 6). *Caveat:* **I half-expect the ≥5× half to be killed** —
-  `fit_thc` minimizes *reconstruction error*, not λ, so it is λ-blind and may land anywhere. That is
-  arguably the sharper finding either way: an error-optimal THC is not a λ-optimal THC, and the
-  literature's ISDF advantage comes from choosing points for physical locality. `fit_thc` is stochastic
-  — pin the seed, never claim global optimality.
+- [x] **CLOSED (chem-5oj) — the 62× THC λ penalty is NOT a clean collocation artifact: fit_thc is
+  λ-small but not λ-controlled; neither kill fires cleanly.** [SPEC](SPEC_thc_collocation.md),
+  `tests/test_thc_collocation_spec.py` (4/4 green). `lambda_ladder.fit_thc`'s nonlinear
+  Levenberg–Marquardt THC was scored with the native `thc_lambda` for the first time (previously
+  only brute-force Pauli λ, ≲4 orbitals). Kill A ("penalty runs
+  deeper than unoptimized points") does NOT fire — nonlinear collocation lands ≈60–69× below random
+  collocation at every seed and both system sizes checked (LiH norb=6: seeds 0–4, ratios
+  0.0144–0.0166; H₂O norb=7: ratio 0.0158). Kill B ("beats `df_lambda`, G4 must be revised") DOES
+  fire, but only at 4/5 pinned seeds (norb=6) — seed=1 does not beat it (λ=16.66 > df_lambda=15.48)
+  — and every "beats `df_lambda`" instance pairs with a reconstruction error 4–5 orders of magnitude
+  above the `<1e-6` precondition the comparison needs (12-seed × 8000-eval sweep: 3.8e-3–2.0e-2 in
+  the sandbox, 3.6e-3–2.3e-2 on macOS — LM fits are not bit-reproducible across BLAS; norb=7 point:
+  ≈9e-2). **Reading:** `fit_thc` is λ-small
+  relative to random but not λ-controlled — its apparent wins over `df_lambda` come from fitting a
+  *different, wrong* Hamiltonian (poor reconstruction), not a validated small-λ reconstruction of
+  the real one, exactly the "error-optimal ≠ λ-optimal" caveat this entry's own text anticipated.
+  `SPEC_thc_lambda` G4 is **not** revised (it is about the *exact* random-collocation THC, which is
+  unchanged and re-confirmed 62–65× above `df_lambda` here). The genuine λ advantage still needs
+  ISDF/optimized collocation that preserves reconstruction fidelity — still out of scope.
+  Corroboration sweep: `scripts/thc_collocation_sweep.py` (542 s on an M3).
 
 - [x] **The bridge prices only ⟨H⟩, but the method it represents needs ⟨H²⟩ — and one call site never
   got the identity fix** — **DONE, and the size law was KILLED.** The defect is real: identity

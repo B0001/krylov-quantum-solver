@@ -23,7 +23,7 @@ import sys
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from qubitization_blueprint import build_qubit_hamiltonian, pauli_decompose
+from qubitization_blueprint import build_qubit_hamiltonian, pauli_decompose, split_identity
 
 
 def qpe_distribution(phases, weights, t_bits):
@@ -49,19 +49,31 @@ def hartree_fock_vector(norb, n_occ_spinorbitals, n_qubits):
     return v
 
 
-def run_qpe(h1, eri, norb, e_core, trial_vec, t_bits):
+def run_qpe(h1, eri, norb, e_core, trial_vec, t_bits, recenter=False):
     """Estimate the ground energy via QPE on the walk operator for a given trial state.
+
+    ``recenter=True`` drops the identity Pauli term from the PREPARE load (SPEC_ft_identity_shift:
+    it is a constant of every eigenvalue and costs no ancilla amplitude) and adds it back
+    classically -- lambda then reports the reduced, identity-free 1-norm that actually drives the
+    walk-step budget, while the returned energy is unaffected (the shift is exact).
 
     Returns (E_total_est, lambda, success_prob, ground_overlap).
     """
     H, n = build_qubit_hamiltonian(h1, eri, norb)
     Ek, Vk = np.linalg.eigh(H)
-    lam = sum(abs(c) for _, c in pauli_decompose(H, n))
-    phases = np.arccos(np.clip(Ek / lam, -1, 1)) / (2 * np.pi)   # theta_k/(2pi) in [0, 0.5]
+    terms = pauli_decompose(H, n)
+    if recenter:
+        non_identity, c_identity = split_identity(terms)
+        lam = sum(abs(c) for _, c in non_identity)
+    else:
+        c_identity = 0.0
+        lam = sum(abs(c) for _, c in terms)
+    Ek_shifted = Ek - c_identity
+    phases = np.arccos(np.clip(Ek_shifted / lam, -1, 1)) / (2 * np.pi)   # theta_k/(2pi) in [0, 0.5]
     weights = np.abs(Vk.conj().T @ trial_vec) ** 2
     P = qpe_distribution(phases, weights, t_bits)
     y = int(np.argmax(P))
-    E_est = lam * np.cos(2 * np.pi * y / 2 ** t_bits)
+    E_est = lam * np.cos(2 * np.pi * y / 2 ** t_bits) + c_identity
     gbin = int(round(phases[0] * 2 ** t_bits))
     win = [b % 2 ** t_bits for b in range(gbin - 1, gbin + 2)]
     return E_est + e_core, lam, float(P[win].sum()), float(weights[0])

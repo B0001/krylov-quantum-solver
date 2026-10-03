@@ -88,6 +88,20 @@ def pauli_decompose(H, n, tol=1e-10):
     return terms
 
 
+def split_identity(terms):
+    """Split ``terms`` into (non_identity_terms, c_identity).
+
+    The identity Pauli string ("I"*n) is a constant shift of every eigenvalue -- it costs no
+    PREPARE amplitude (SPEC_ft_identity_shift): a block encoding never needs to load it, and it
+    is free to add back classically after readout. Returns ``c_identity = 0.0`` if no identity
+    term is present. See also ``shift_both_sides.shot_lambda``, the near-term analogue of this
+    same fix (SPEC_shift_both_sides / SPEC_lambda_meas_identity).
+    """
+    non_identity = [(label, c) for label, c in terms if set(label) != {"I"}]
+    c_identity = next((c for label, c in terms if set(label) == {"I"}), 0.0)
+    return non_identity, c_identity
+
+
 def build_walk_operator(terms, n):
     """LCU block encoding (PREPARE, SELECT) + qubitization walk W = R_anc · SELECT.
 
