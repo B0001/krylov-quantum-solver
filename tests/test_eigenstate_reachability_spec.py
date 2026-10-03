@@ -236,11 +236,24 @@ OPEN_SHELL = {"H4-triplet": dict(atom=LIN_H4, spin=2),
 
 @pytest.mark.parametrize("name", OPEN_SHELL)
 def test_G8_open_shell_degenerate_pairs_are_decided_per_eigenspace(name):
-    """eigh mixes the M_s = +S/-S copies (different (N_a, N_b) sectors, same energy). Deciding per
+    """eigh may mix the M_s = +S/-S copies (different (N_a, N_b) sectors, same energy). Deciding per
     cluster of degenerate eigenvalues keeps every populated level; the per-vector majority test
     (this module's first version) did not -- H4 triplet: 2 levels with p > 1e-3 dropped."""
     mh, w, V, pops = _system(**OPEN_SHELL[name])
     for tol in (ODMD_TOL, REACHABLE_TOL_CERTIFIED):
         assert np.array_equal(reachable_mask(mh, w, V, pops, tol), pops > tol), (name, tol)
-    if name == "H4-triplet":   # the per-vector rule really fails here -- the gate is not vacuous
-        assert ((pops > 1e-3) & (_weights(mh, V) < 0.5)).any()
+    if name == "H4-triplet":   # non-vacuous: in a basis that mixes the M_s copies the per-vector rule
+        # drops a populated level. Whether LAPACK's eigh mixes them depends on the build and on the
+        # operator's low bits (canonical term order unmixes them on macOS), so mix deliberately:
+        # a fixed orthogonal rotation of each populated degenerate cluster -- same span, so still
+        # an orthonormal eigenbasis of H.
+        Vm, rng, seen = V.copy(), np.random.default_rng(0), set()
+        for p in np.flatnonzero(pops > 1e-3):
+            cl = np.flatnonzero(np.abs(w - w[p]) < 1e-10)
+            if len(cl) > 1 and cl[0] not in seen:
+                seen.add(cl[0])
+                Vm[:, cl] = V[:, cl] @ np.linalg.qr(rng.standard_normal((len(cl), len(cl))))[0]
+        pm = (Vm.T @ np.asarray(mh.hf_state().data).real) ** 2
+        for tol in (ODMD_TOL, REACHABLE_TOL_CERTIFIED):   # the decision is basis-invariant...
+            assert np.array_equal(reachable_mask(mh, w, Vm, pm, tol), pm > tol), (name, tol)
+        assert ((pm > 1e-3) & (_weights(mh, Vm) < 0.5)).any()   # ...the per-vector rule is not
