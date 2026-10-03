@@ -1,8 +1,8 @@
 """
 Acceptance gates G1-G4 for specs/SPEC_nb3x8_magnetocaloric.md (Nb3X8 magnetocaloric S(T,B)).
 
-Test-first: ``nb3x8_magnetocaloric`` does not exist yet, so this file is RED until the spec is
-implemented. Two independent claims: (i) MACHINERY -- the Maxwell relation (dS/dB)_T = (dM/dT)_B,
+Test-first origin: written before ``nb3x8_magnetocaloric`` existed (RED until the spec was
+implemented; green now). Two independent claims: (i) MACHINERY -- the Maxwell relation (dS/dB)_T = (dM/dT)_B,
 computed from two independently-derived Boltzmann traces (entropy's ln Z + <E>/T route here vs
 magnetization_thermal's <Sz> route in nb3x8_metamagnetism_thermal.py), agrees to machine precision;
 (ii) VERDICT -- |Delta S_M| stays far under 10% of R ln2 per formula unit for B<=100T, T>=2K, and

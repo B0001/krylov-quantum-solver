@@ -189,3 +189,16 @@ bd close chem-1gr
 
 Git policy for this run: committed directly on `sandbox/chem-1gr` (see commits below); did not push,
 switch branches, merge, or rebase.
+
+## Landing note, 2026-10-02 (batch landing, branch `batch/nb3x8-landing`)
+
+Added when the work was landed on `origin/main`; the sections above are unchanged.
+
+- **Numbers reproduce on a second machine (Apple M3)** via `uv run python nb3x8_magnetocaloric.py`
+  (4.5 s): max |dS_M| = 1.718% / 0.530% / 0.124% of R ln2 per f.u. (Cl / Br / I), 0.176 / 0.033 /
+  0.0055 J/(kg K), i.e. 0.344% / 0.065% / 0.011% of the GGG entropy ceiling 3 R ln8 / M = 51.235
+  J/(kg K) (M_GGG = 1012.353 g/mol; formula masses 562.319 / 917.951 / 1293.955 g/mol). The BACKLOG
+  entry's 51.24 and 1293.95 are roundings of 51.235 and 1293.955.
+- **Maxwell relation:** the worst relative deviation over the G1 window is 1.89e-07 for each of Cl /
+  Br / I (the BACKLOG's "1.9e-7"); the gate bound is 1e-6.
+- The GGG comparison remains a theoretical ceiling, not a measured curve (as the entry says).
