@@ -51,7 +51,7 @@ def _centered(mh: MolecularHamiltonian):
     H_dense = np.asarray(mh.qubit_hamiltonian.to_matrix())
     psi0 = np.asarray(mh.hf_state().data, dtype=complex)
     w_eig, V, pops = _dense_hf_projection(mh)       # shared eigh: macOS ZHEEVD fallback
-    reach = w_eig[reachable_mask(mh, w_eig, V, pops, 1e-8)].real    # symmetry-aware (chem-obf)
+    reach = w_eig[reachable_mask(mh, w_eig, V, pops, 1e-8)].real    # population cut (chem-obf)
     mu = float(0.5 * (reach.max() + reach.min()))
     tau = float(np.pi / (reach.max() - reach.min()))
     return H_dense, psi0, mu, tau, w_eig, V, pops
@@ -61,8 +61,10 @@ def reference_population(mh: MolecularHamiltonian) -> float:
     """|<lowest reachable eigenstate|psi0>|^2 against the EXACT Hamiltonian -- the genuine
     signal at the eigenphase the pipeline extracts (`min` over populations > 1e-8, the same
     reachable set that defines its tau/mu frame), uncorrupted by Trotter leakage. The GLOBAL
-    ground state can be strictly unreachable (population 0 by symmetry) -- it never anchors
-    the eigenphase, so it is not the relevant signal."""
+    ground state can be strictly unreachable (population 0 by symmetry) -- it then never anchors
+    the eigenphase, so it is not the relevant signal. SCF residue on such a level (square H4 at a
+    loose conv_tol) does count: the pipeline converges to it, so its tiny population is returned
+    (``reachability.reachable_mask`` warns)."""
     _, _, _, _, w_eig, V, pops = _centered(mh)
     reachable = reachable_mask(mh, w_eig, V, pops, 1e-8)     # the frame's own reachable set
     i_low = int(np.argmin(np.where(reachable, w_eig.real, np.inf)))

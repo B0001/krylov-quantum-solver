@@ -134,7 +134,7 @@ def exact_hf_subspace_overlap(mh: MolecularHamiltonian, cluster_size: int,
                               tol: float = _REACHABLE_TOL) -> float:
     """REFERENCE ONLY (dense, O(2^n)): exact ||P_S u|| for the lowest-d REACHABLE eigenspace --
     the killable check. Reachable = nonzero HF amplitude (the QKSD sector). Never the live path."""
-    _, V = reachable_eigenpairs(mh, tol)      # symmetry-aware sector cut (chem-obf), ascending
+    _, V = reachable_eigenpairs(mh, tol)      # the population cut (residue kept), ascending
     u = np.asarray(mh.hf_state().data, dtype=complex)
     P_S = V[:, :cluster_size]
     return float(np.linalg.norm(P_S.conj().T @ u))
