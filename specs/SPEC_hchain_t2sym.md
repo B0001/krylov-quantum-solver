@@ -1,6 +1,6 @@
 # SPEC: Symmetry-adapted T2 for the certified Hₙ bracket — the chem-3z8 PQG+T2 kill test at n = 10–12
 
-**Status:** RESULTS_PENDING (chem-7ko). Amends [`SPEC_hchain_vsdp_bracket.md`](SPEC_hchain_vsdp_bracket.md) §7/§8 (R3).
+**Status:** DONE (chem-7ko). PQG+T2 at n = 12: **0.126 mHa/atom**, so the 1 mHa/atom kill is *not* triggered. Amends [`SPEC_hchain_vsdp_bracket.md`](SPEC_hchain_vsdp_bracket.md) §7/§8 (R3).
 
 ---
 
@@ -17,8 +17,8 @@ PQG+T2 lower bound becomes computable at n = 10 and 12 on a 16 GB laptop, and th
 - Spin adaptation of 2-RDM conditions is standard (Gidofalvi & Mazziotti 2005; DePrince's v2RDM uses
   it); this is that idea applied to make chem-3z8's certified bound reach n = 12. Not a new method.
 - **Can claim:** a floating-point-rigorous lower bound on E0 for the Hamiltonian defined by the
-  *reflection-symmetrized* float64 Löwdin integrals (h ← (h + PhP)/2, same for eri; changes FCI by
-  < 1e-12 Ha), valid *if* that Hamiltonian's Sz = 0 ground state is a nondegenerate singlet. That
+  *reflection-symmetrized* float64 Löwdin integrals (h ← (h + PhP)/2, same for eri; a
+  float-rounding-level change), valid *if* that Hamiltonian's Sz = 0 ground state is a nondegenerate singlet. That
   premise is FCI-verified for every n reported (gap and ⟨S²⟩ recorded per row).
 - **Cannot claim:** rigor without the singlet premise (beyond FCI size it is an assumption);
   anything at n > 12 (this spec does not run them); T2-tightness in other bases or geometries.
@@ -33,7 +33,7 @@ PQG+T2 lower bound becomes computable at n = 10 and 12 on a 16 GB laptop, and th
   block-diagonal on (spin S, parity). Only highest-weight copies are kept: the S = 1/2 block is
   ker(ad S⁺) inside the M = +1/2 Sz-sector, the S = 3/2 block is the whole M = +3/2 sector; each is
   split by parity. M = −1/2, −3/2 and the S = 3/2 part of M = 1/2 are exact duplicates and dropped.
-  Blocks at n = 4/6/8/10/12: 32/108/256/500/**864** (vs 88/306/736/1150/2520 Sz-only).
+  Blocks at n = 4/6/8/10/12: 32/108/256/500/**864** (vs 88/306/736/1450/2520 Sz-only).
 - **Exactness of the map.** Basis columns are built per reflection orbit of spatial labels by
   `fractions.Fraction` Gram–Schmidt, then scaled to primitive integer vectors, so each adapted entry
   X = QᵀMQ is an integer linear form of RDM parameters (A stays exact).
@@ -69,7 +69,32 @@ uv run python vsdp_hchain.py --ns 10,12 --sym             # certified PQG+T2sym 
 
 ## 6. Results
 
-RESULTS_TABLE
+Certified PQG+T2 (adapted), SCS eps 1e-8, upper bound = exact FCI on the same symmetrized integrals:
+
+| n | largest T2 block (Sz-only → adapted) | SDP value (Ha) | certified lower bound (Ha) | FCI (Ha) | width (mHa/atom) | PQG width (chem-3z8) |
+|---|---|---|---|---|---|---|
+| 6 | 306 → 108 | −3.26685747 | −3.26686454 | −3.26674310 | 0.020 | 1.254 |
+| 8 | 736 → 256 | −4.34544960 | −4.34550248 | −4.34507940 | 0.053 | 1.795 |
+| 10 | 1450 → 500 | −5.42513490 | −5.42526721 | −5.42438538 | 0.088 | 2.191 |
+| 12 | 2520 → 864 | −6.50545003 | −6.50574320 | −6.50422696 | **0.126** | 2.491 |
+
+Cost (SCS 3.3, one core for eigensolves, 16 GB M-series Mac): n = 8 14 min (Sz-only T2: 91 min);
+n = 10 2.1 h, 1.3 GB peak RSS; n = 12 3.8 h solve, 3.2 GB peak RSS. A is 1.0M × 2.0M with 5.2M
+nonzeros at n = 12 (31 s to build). Certified − solver gap: 0.13 mHa (n = 10), 0.29 mHa (n = 12), the
+price of SCS's dual infeasibility (worst λ_min ≈ −3e-8) times the R3 trace bound.
+
+**Premise check (FCI, converged, conv_tol 1e-12, 500 cycles).** Ground state is a nondegenerate singlet
+at both n: n = 10 ⟨S²⟩ = 3e-16, first excitation a triplet 0.127 Ha up; n = 12 ⟨S²⟩ = 2e-16, triplet
+0.109 Ha up. The first n = 12 run reported ⟨S²⟩ = 0.398 and a 0.18 Ha "gap": that was pyscf's
+default Davidson (max_cycle 100, nroots = 2) stopping unconverged, not spin contamination of the true
+ground state. The CLI now uses 500 cycles and asserts convergence. The converged FCI energy differs
+from the reported upper bound by 9e-11 Ha.
+
+**Verdict.** The pre-registered claim survives at n = 12: the certified PQG+T2 bracket is
+0.126 mHa/atom wide, 8× inside the 1 mHa/atom kill (PQG alone: 2.49, killed). Width per atom still
+grows with n (0.020 → 0.053 → 0.088 → 0.126), roughly linearly at ~0.018 mHa/atom per added atom; a
+naive linear extrapolation crosses 1 mHa/atom near n ≈ 60. That extrapolation is not a claim. Rigor rests on the
+singlet premise, which FCI checks at n ≤ 12 only.
 
 ## 7. Out of scope
 

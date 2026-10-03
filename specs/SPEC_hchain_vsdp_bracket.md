@@ -109,6 +109,8 @@ blocking. So the pre-registered PQG+T2 claim is **not killed and not confirmed**
   Davidson tolerance (1e-9 Ha), negligible at mHa resolution. At n = 10 the same path gives FCI + 3e-10.
 - **R3 — T2 at n = 12** needs ≈ 4× smaller blocks (spin + reflection adaptation) or a custom
   boundary-point solver (as in Mazziotti's and DePrince's v2RDM codes). Follow-up bead filed.
+  **Resolved by chem-7ko** ([`SPEC_hchain_t2sym.md`](SPEC_hchain_t2sym.md)): adapted PQG+T2 is
+  0.126 mHa/atom at n = 12.
 
 ## 9. Deliverables
 

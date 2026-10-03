@@ -1846,6 +1846,9 @@ hypothesis whose death is informative is worth more here than a safe one.
   [`SPEC_hchain_vsdp_bracket.md`](SPEC_hchain_vsdp_bracket.md). *Killed for PQG:* rigorous bound
   (any-dual weak duality + Cholesky-certified λ_min) is 2.49 mHa/atom wide at n=12 and grows to 2.92 at
   n=16. PQG+T2 is 0.0006/0.022/0.050 mHa/atom at n=4/6/8 but can't run at n=12 here → chem-7ko.
+  *PQG+T2 survives* (chem-7ko, [`SPEC_hchain_t2sym.md`](SPEC_hchain_t2sym.md)): SU(2)×reflection
+  adapted T2 (2520 → 864 blocks) certifies 0.088 / **0.126 mHa/atom** at n=10/12 vs FCI (singlet premise
+  FCI-verified), so the pre-registered kill holds for PQG only.
 - [-] **Hₙ to larger n, *cheaply*** (ramp + D=100/200/400) — → [`SPEC_hchain_largen.md`](SPEC_hchain_largen.md).
   *Killed:* D=400 truncates too hard as chain entanglement grows — stderr balloons to ~5 mHa, the
   discarded-weight extrapolation falls back to `invD` by n=30, and leave-one-out = 1.07 mHa/atom

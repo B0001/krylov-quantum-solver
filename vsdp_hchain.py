@@ -594,7 +594,10 @@ def main():
             from pyscf import fci
 
             h1, eri, ne, e_nuc = sym_integrals(n)
-            e, ci = fci.direct_spin1.kernel(h1, eri, n, ne, nroots=2, conv_tol=1e-10)
+            s = fci.direct_spin1.FCI()
+            s.conv_tol, s.max_cycle = 1e-12, 500  # default max_cycle left n=12 unconverged: <S^2> = 0.40
+            e, ci = s.kernel(h1, eri, n, ne, nroots=2)
+            assert all(s.converged), "FCI premise check did not converge"
             row.update(fci_gap=e[1] - e[0], fci_s2=fci.spin_op.spin_square0(ci[0], n, ne)[0])
         row.update(upper=up, upper_method=how,
                    width_mHa_per_atom=None if up is None else (up - row["certified_lb"]) / n * 1e3)
