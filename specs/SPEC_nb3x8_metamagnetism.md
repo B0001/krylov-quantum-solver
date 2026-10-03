@@ -112,7 +112,9 @@ nb3x8_metamagnetism (CLI __main__)                               # family table 
 - In-plane kagome exchange, anisotropy, or a full field-angle-dependent Hamiltonian — uniform
   field along the same Ŝz axis as `SPEC_odmd_spin` only.
 - Finite-temperature magnetization (this is the T=0 ground-state crossing only; combining with the
-  existing χ(T)/thermo machinery for M(h,T) is a natural follow-up, not attempted here).
+  existing χ(T)/thermo machinery for M(h,T) is a natural follow-up, not attempted here — closed by
+  `SPEC_nb3x8_metamagnetism_thermal`). The further composition with `nb3x8_thermo`'s entropy trace
+  (magnetocaloric S(T,B), a quantified negative) is closed by `SPEC_nb3x8_magnetocaloric`.
 - Verifying the disputed ~3000 T claims — only the two records with independent confirmation
   (Los Alamos 2012, U. Tokyo 2018) are used as the feasibility yardstick.
 

@@ -75,7 +75,8 @@ nb3x8_thermo (CLI)                                              # family table +
 
 - Lattice/phonon heat capacity, the cooperative structural transition, inter-dimer coupling.
 - Nb₃F₈ spin thermodynamics (J below neglected terms).
-- A magnetocaloric / field-dependent S(T,B) treatment (a follow-up).
+- A magnetocaloric / field-dependent S(T,B) treatment (a follow-up — now closed, as a quantified
+  negative, by `SPEC_nb3x8_magnetocaloric`).
 
 ## 8. Caveats and risks
 

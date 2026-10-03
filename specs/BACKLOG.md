@@ -382,58 +382,122 @@ hypothesis whose death is informative is worth more here than a safe one.
 
 ### Nb₃X₈ materials line
 
-- [ ] **The 15× Curie–Weiss miss is a phase-assignment artifact, not missing in-plane exchange** —
-  *Claim:* Sheckelton's θ_W = −13.1 K is fitted above 90 K, in the **undimerized high-temperature**
-  phase, but `nb3x8_magnetometry.py:42` imports only `NB3X8_LT_BULK` — so this repo's own published
-  G3(b) finding compares a low-temperature J to a high-temperature measurement. Using the HT
-  parameters already sitting unused in `NB3X8_CLUSTERS`, the miss inverts to a 4.1× *under*prediction,
-  leaving a clean mean-field statement θ = −z·J/4 ⟹ z_eff = 4.1. *Check (killable):* dies if |−J_HT/4|
-  is not within 10× of −13.1 K, if z_eff is unphysical (<1 or >12 for a layered stack), or if absolute
-  χ_HT(200 K) misses the measured Curie constant by >2× — any of which restores the published
-  conclusion. *Cost:* cheap. *Caveat:* z_eff is **extracted, not predicted** — gate on bounds or it is
-  a one-parameter fit. The experimental C = 0.484 / μ_eff = 1.97 μ_B reached the scout via a search
-  summary; **verify against the primary source before gating.** This corrects a conclusion this repo
-  already shipped — frame it as a refinement of G3(b), not a new result.
+- [x] **CLOSED 2026-09-28→2026-09-30 (chem-jiy) — the phase-correction hypothesis is KILLED, but
+  for a different reason than expected: the θ_W it was built on was never in the primary source.**
+  [SPEC](SPEC_nb3x8_magnetometry.md) G5, z_eff 16.06 (bound [1, 12]), verified miss 3.75×.
+  *Original claim:* Sheckelton's θ_W = −13.1 K is fitted above 90 K, in the **undimerized
+  high-temperature** phase, but `nb3x8_magnetometry.py:42` imported only `NB3X8_LT_BULK` — so this
+  repo's own published G3(b) finding compared a low-temperature J to a high-temperature measurement.
+  Using the HT parameters already sitting unused in `NB3X8_CLUSTERS`, the miss was conjectured to
+  invert to a 4.1× *under*prediction, leaving a clean mean-field statement θ = −z·J/4 ⟹ z_eff = 4.1.
+  **Primary-source read** (`arXiv:1701.05528` p.4, done this session — not a search summary): *"an
+  analysis of the inverse susceptibility data for T > 140 K yields a Curie constant C = 0.484
+  emu·K·mol⁻¹·Oe⁻¹ (p_eff = 1.97, consistent with S_eff = 1/2) and a Weiss temperature of
+  θ = −51.2 K."* C and μ_eff were correctly quoted; **θ_W = −13.1 K does not appear anywhere in the
+  paper** — it reached this repo via an unverified search-engine summary, exactly the risk the
+  original entry's caveat flagged. Recomputing z_eff with the *verified* θ_W = −51.2 K:
+  `z_eff_ht("Nb3Cl8")` = 16.1, **outside** the pre-registered [1, 12] physical bound for a layered
+  stack — the phase-correction hypothesis is killed by its own pre-registered check. χ_HT(200 K) is
+  within the 2× sanity bound (1.53×) and would not, alone, have killed it. **Net result:** the
+  original G3(b) 15×/−13.1 K headline was itself wrong (not a phase artifact) — the verified miss is
+  a real but smaller 3.75× (−192 K vs −51.2 K, LT J). Implemented as G5 in
+  `tests/test_nb3x8_magnetometry_spec.py`; `nb3x8_gaps.NB3X8_HT_BULK` factors out the HT parameters;
+  G3(b)'s threshold corrected from >5× to >3× to match the verified number (not loosened after the
+  fact — it now encodes the *verified* miss, which was always the target, not a threshold picked to
+  pass). → [`SPEC_nb3x8_magnetometry.md`](SPEC_nb3x8_magnetometry.md) §5 G5.
 
-- [ ] **Coordination cannot rescue the 5.3× Tc overprediction: the spin gap goes the wrong way** —
-  *Claim:* `SPEC_nb3x8_magnetometry` §7 names coordination/mean-field reduction as the follow-up and
-  its backlog entry *attributes* the 5.3×(Cl)/2.3×(Br) miss to it. The attribution looks false: run
-  the identical SSH/coordination machinery in the **spin** channel and J_eff rises slightly then
-  returns, never falls *(scout probe: Cl 66.20 → 71.08 (L=4) → 66.55 meV (L=6))*, against the same
-  machinery's −33% in the charge channel. Broadening softens charge, not spin — so the 5.3× must be
-  reassigned to the cooperative structural transition or to t_s itself. *Check (killable):* dies if
-  J_eff(largest cluster) ≤ J₀/3 for Nb₃Cl₈ (coordination *does* deliver it and the published
-  attribution was right); secondary kill if the charge-channel control does **not** drop ≥20% on the
-  same clusters (machinery broken, neither result stands). *Cost:* cheap to L ≤ 6; cap at L=8
-  (`nb3x8_gaps.py:131` warns L=12 half-filled FCI fails to converge). *Caveat:* needs an ⟨S²⟩ check or
-  a stated convention — the S_z=1 lowest state is the lowest *triplet* only absent a higher-S intruder.
-  Open-boundary end effects likely explain the L=4 bump, so gate "no reduction ≥3×", not an extrapolant.
+- [x] **CLOSED (chem-g78) — coordination/mean-field reduction does NOT explain the 5.3× (Cl) / 2.3× (Br)
+  Tc overprediction: the spin gap goes the wrong way for both halides** [SPEC](SPEC_nb3x8_gaps.md) G8
+  (`tests/test_nb3x8_gaps_spec.py`, both halides), J_eff(z=0→3) Nb₃Cl₈ 66.20→71.08→66.55→71.12 meV,
+  Nb₃Br₈ 119.11→126.50→120.11→126.63 meV, charge-channel control −33.5% / −30.1% at z=3.
+  *Claim:* `SPEC_nb3x8_magnetometry` §7 names coordination/mean-field reduction as the
+  follow-up and its backlog entry *attributes* the 5.3×(Cl)/2.3×(Br) miss to it. **THE FINDING: the
+  attribution is FALSE** (within finite open L≤8 clusters; no 3-D triplon band). Running the identical
+  `coordination_gap` cluster topology in the **spin** channel (`nb3x8_gaps.coordination_spin_gap`:
+  J_eff = E(Sz=1 lowest) − E(Sz=0 lowest) at half-filling) at L=4,6,8 (z=1,2,3): **Nb₃Cl₈** J_eff =
+  66.20 (z=0, isolated) → 71.08 (L=4) → 66.55 (L=6) → 71.12 meV (L=8); **Nb₃Br₈** 119.11 → 126.50 →
+  120.11 → 126.63 meV — it rises then partially returns then rises again, never falls, and is *larger*
+  at the largest cluster reached than in the isolated dimer. The Br leg was added when the work was
+  landed (the original chem-g78 run covered Cl only; its "5.3×/2.3×" wording was ahead of its data).
+  Every Sz=0/Sz=1 lowest state checked out as a clean singlet/triplet (⟨S²⟩ = 0.000/2.000 at every z,
+  both halides — no higher-S intruder). **Primary kill did NOT trigger:** the bar is the reduction
+  coordination must deliver, `min(3, Tc overprediction)` — J₀/3 = 22.07 meV for Cl, J₀/2.26 = 52.79 meV
+  for Br — and J_eff(z=3) = 71.12 / 126.63 meV is nowhere near it (Br's J_eff/J₀ ≥ 1.00 at every L, so
+  any bar ≤ 1 gives the same verdict); L=12 is out of reach (half-filled FCI convergence warning at
+  `nb3x8_gaps.py`). **Secondary kill (machinery-broken check) also did NOT trigger:** the
+  charge-channel control (`coordination_gap`) on the *identical* clusters drops monotonically,
+  Cl 1311.8 → 1167.5 → 1092.1 → 872.9 meV (33.5% at z=3), Br 1086.0 → 994.0 → 923.5 → 759.4 meV
+  (30.1%) (≥20% required) — confirming the machinery itself works and the spin/charge contrast is
+  real, not an artifact. **Verdict:** coordination/mean-field reduction of the interlayer J, as
+  modelled by finite clusters, does not explain the Tc overprediction; what does is **open** —
+  candidates the isolated-dimer model can't see (none tested here): the cooperative/first-order
+  structural transition itself, in-plane kagome exchange, or a direct lattice renormalization of
+  t_s⊥. Gate G8 in `tests/test_nb3x8_gaps_spec.py`; implementation in `nb3x8_gaps.py`
+  (`coordination_spin_gap`, `_coordination_cluster`); regenerate with `uv run python nb3x8_gaps.py`.
+  → [`SPEC_nb3x8_gaps.md`](SPEC_nb3x8_gaps.md) G8; [`SPEC_nb3x8_magnetometry.md`](SPEC_nb3x8_magnetometry.md)
+  §7 (follow-up closed as a negative result, not deferred).
 
-- [ ] **The parameter-free cluster optical gap hits Nb₃Cl₈'s measured absorption edge — and provably
-  cannot explain its thermal collapse** — *Claim:* `odmd_optical.dimer_optical_gap` on LT cRPA
-  parameters gives 1117.5 meV vs a measured ≈1.10 eV at 100 K, a 1.6% parameter-free agreement. Two
-  falsifiable consequences: the family trend (model spread Cl→I 44% vs measured ~12%) and the phase
-  test — measurement collapses to ≈0.63 eV at 300 K while the model's HT parameters give 1065 meV
-  (−5%), and `coordination_gap` bottoms out ~240 meV short. *Check (killable):* dies if the LT Cl
-  prediction misses 1.10 eV by >30% (the selection-rule picture fails on a real solid), or if
-  `coordination_gap` at z=3 reaches ≤700 meV (broadening explains the collapse and no thermal-melting
-  mechanism is needed). *Cost:* cheap. *Caveat:* the 1.6% hit is **partly fortuitous** — ω_opt is a
-  cluster excitation with P as a dipole stand-in, and a measured onset folds in dispersion and
-  excitonic binding; quote it as scale agreement and let the family/phase tests carry the
-  falsifiability. Partially blocked: no measured Nb₃Br₈ optical gap located — that leg may have to drop.
+- [x] **CLOSED 2026-09-30 (chem-a04) — re-verified, both kill conditions survive; the scale-agreement
+  caveat still applies up front.** [SPEC](SPEC_odmd_optical.md), LT Cl +1.59%, family spread 44.3%,
+  `coordination_gap` z=3 872.9 meV. *Original claim:* `odmd_optical.dimer_optical_gap` on LT cRPA
+  parameters gives 1117.5 meV vs a measured ≈1.10 eV at 100 K, a 1.6% parameter-free agreement, with
+  two falsifiable consequences — the family trend (model spread Cl→I 44% vs measured ~12%) and the
+  phase test (measurement collapses to ≈0.63 eV at 300 K while the model's HT parameters give
+  1065 meV (−5%), and `coordination_gap` bottoms out ~240 meV short). *Result:* all three legs
+  reproduced from the checked-in code (`nb3x8_optical_phase_collapse_check.py`, runnable
+  standalone): **(1) LT Cl base** —
+  `dimer_optical_gap(**NB3X8_LT_BULK["Nb3Cl8"])` = 1117.5 meV vs quoted measured 1100 meV (1.10 eV),
+  rel. err +1.59% — well inside the 30% kill threshold, survives. **(2) Family trend** — model
+  Cl→I spread (Cl−I)/I = 44.3% (Nb3Cl8 1117.5 meV, Nb3Br8 963.7 meV, Nb3I8 774.4 meV, LT bulk),
+  matching the quoted 44% to within rounding; Nb3Br8 leg stays DROPPED from any measured comparison —
+  still no measured Nb3Br8 optical gap located. **(3) Phase collapse** — the model's own HT
+  parameters (`NB3X8_CLUSTERS["Cl HT-bulk"]`) give 1065.3 meV, a 4.67% drop from LT, vs a quoted
+  measured 42.7% drop (1100→630 meV) — confirms the optical-gap formula alone cannot explain the
+  300 K collapse. `coordination_gap` at z=3 (Nb3Cl8, robust FCI settings) = **872.9 meV**, short of
+  630 meV by 242.9 meV (matches the quoted "~240 meV short") and stays well above the 700 meV kill
+  threshold — coordination/broadening alone does **not** explain the collapse either, so both kill
+  checks survive and the thermal-melting-mechanism claim is not falsified by these two probes.
+  *Caveat carried forward unchanged:* the LT-Cl 1.6%-scale hit is partly fortuitous (P is a dipole
+  stand-in; a measured onset folds in dispersion/exciton binding the cluster model omits) — quote it
+  as scale agreement, not prediction; legs 2–3 carry the actual falsifiability.
+  *What was NOT re-verified:* the measured reference numbers themselves (1.10 eV, ≈0.63 eV, ~12%
+  family spread) — this sandbox has no working internet access this session, so they are taken as
+  given from this entry's own prior citation, not re-sourced. *Convergence note (filed separately,
+  chem-q9g):* the public `coordination_gap(z=3)` call raises `RuntimeError` for Nb3Cl8 under the
+  module's default `max_cycle=1000` (an iteration-cap artifact, not near-degeneracy — the
+  non-converged energy already agreed with the converged one to 6 decimals); chem-q9g's keyword-only
+  `max_cycle` override fixed it, and this check now calls `coordination_gap(..., max_cycle=4000)`
+  (it first carried a hand-rolled copy with `max_cycle=4000, conv_tol=1e-10` — PySCF's default
+  tolerance — with identical output). **Re-run on a second machine (Apple M3) when landed: every
+  number above reproduces** (LT Cl 1117.5 meV / +1.59%, spread 44.3%, HT 1065.3 meV / −4.67%,
+  z=3 872.93 meV; ~65–90 s). Full reproduction commands and output: `sandbox-handoffs/chem-a04.md`.
 
-- [ ] **Magnetocaloric S(T,B): the named follow-up, closed as a quantified negative** — *Claim:*
-  `SPEC_nb3x8_thermo` §7 and `SPEC_nb3x8_metamagnetism` §7 both name this; one composition closes both
-  (feed `field_spectrum` into `entropy`'s Boltzmann trace). Two claims: (i) an exact internal identity
-  — the Maxwell relation (∂S/∂B)_T = (∂M/∂T)_B holds to machine precision, cross-tying two
-  independently derived modules; (ii) the verdict — |ΔS_M| peaks at B_c (Cl 572 T, already gated) where
-  the full R ln 2/f.u. unlocks, but at any laboratory field the response is suppressed by exp(−J/k_BT)
-  to orders below GGG. **Nb₃X₈ dimers are quantitatively useless magnetocalorics below megagauss
-  fields.** *Check (killable):* machinery dies if the two derivatives disagree by >1e-6 relative
-  anywhere in the spin window; **the verdict dies (the outcome worth hoping for) if any halide reaches
-  ≥10% of R ln 2 per f.u. at B ≤ 100 T and T ≥ 2 K.** *Cost:* cheap. *Caveat:* a bounding result by
-  construction — say so up front (precedent: `SPEC_senseforge` §3–4). Needs formula-unit molar masses
-  for the J kg⁻¹ K⁻¹ conversion; inherits g = 2, density-density only, isolated dimer.
+- [x] **CLOSED 2026-09-30 (chem-1gr) — Magnetocaloric S(T,B): the named follow-up, closed as a
+  quantified negative, on both counts.** [SPEC](SPEC_nb3x8_magnetocaloric.md) G1–G4, Maxwell 1.9e-7,
+  max |ΔS_M| 1.72 / 0.53 / 0.12 % of R ln2 (Cl / Br / I). `SPEC_nb3x8_thermo` §7 and `SPEC_nb3x8_metamagnetism` §7
+  both named this; one composition closes both (feed `field_spectrum` into `entropy`'s Boltzmann
+  trace — `SPEC_nb3x8_magnetocaloric`, `nb3x8_magnetocaloric.py`). Two claims, both survived: (i)
+  MACHINERY — the Maxwell relation (∂S/∂B)_T = (∂M/∂T)_B, computed from two independently-derived
+  Boltzmann traces (entropy's `ln Z + <E>/T` vs `nb3x8_metamagnetism_thermal`'s `<Sz>` route),
+  agrees to **< 2e-7 relative** across a documented spin window (a few near-symmetry-zero points,
+  including h=0 itself where both sides vanish by h→−h symmetry, are ill-conditioned for a
+  *relative* comparison and are excluded, not hidden — see G1's scope note). (ii) VERDICT — searched
+  over B ∈ [0,100] T, T ∈ [2 K, 5·J/k_B]: max |ΔS_M| reaches only **1.72% (Cl) / 0.53% (Br) / 0.12%
+  (I)** of R ln2/f.u. — an order of magnitude under the 10% kill threshold — and in physical units
+  is **0.176 / 0.033 / 0.0055 J/(kg·K)**, i.e. **0.34% / 0.065% / 0.011%** of GGG's theoretical
+  full paramagnetic-entropy ceiling (3·R·ln8/M_GGG = 51.24 J/(kg·K), Gd³⁺ S=7/2 orbital singlet —
+  see caveat below). A cheap direct check confirms |ΔS_M| grows >10x between 100 T and B_c, i.e.
+  the search window is genuinely far from the interesting physics, not an arbitrary cutoff.
+  **Nb₃X₈ dimers are quantitatively useless magnetocalorics below megagauss fields.** *Caveat:* a
+  bounding result by construction — stated up front (precedent: `SPEC_senseforge` §3–4). **GGG
+  sourcing:** this session's web-fetch tools returned inconsistent, uncitable numbers for GGG's
+  measured ΔS_M(T,B) on repeated attempts (one fetch even reported a wrong GGG molar mass,
+  644.37 vs the correct 1012.35 g/mol — fabrication, not data) — used GGG's rigorous theoretical
+  entropy ceiling instead (conservative, i.e. generous to GGG, so the negative direction of the
+  verdict is safe), not a measured curve; flagged as unverified rather than asserted. Formula-unit
+  molar masses (Nb₃Cl₈ 562.32 / Nb₃Br₈ 917.95 / Nb₃I₈ 1293.95 g/mol) from
+  `pyscf.data.elements.MASSES`, not hand-copied. Inherits g=2, density-density only, isolated
+  dimer from the parent specs, stated in the writeup.
 
 ### Fault-tolerant stack
 
@@ -871,15 +935,20 @@ hypothesis whose death is informative is worth more here than a safe one.
   observed Cl<Br ordering within an order of magnitude (G2). **THE FINDING (G3, DoD):** the isolated
   dimer **overpredicts Tc by 5.3× (Cl) / 2.3× (Br)** — an overcoupling that *weakens monotonically
   down the series*, the isolated-cluster→cooperative-lattice renormalization; and it exposes **two
-  distinct couplings** — −J/4 = −192 K overshoots the measured Curie–Weiss θ_W = −13.1 K by 15×, so
+  distinct couplings** — −J/4 = −192 K overshoots the measured Curie–Weiss θ_W by 3.75×, so
   the interlayer J sets Tc while a separate weak *in-plane* exchange (absent from the bilayer dimer)
   sets θ_W. Numbers the cluster papers never reported. **Boundary (G4):** Nb₃I₈ has no
   interlayer-singlet transition (moment-retaining ground state) — excluded; the predictor sets
   *scales*, not a first-order cooperative transition. 100% primitive reuse (`susceptibility`,
-  `dimer_exchange_analytic`) + a cited experimental table. Gates G1–G4 in
+  `dimer_exchange_analytic`) + a cited experimental table. Gates G1–G5 in
   `tests/test_nb3x8_magnetometry_spec.py`; `nb3x8_magnetometry.py`.
   → [`SPEC_nb3x8_magnetometry.md`](SPEC_nb3x8_magnetometry.md) (comparison vs measured references,
-  not a fit; isolated bilayer dimer, density-density only).
+  not a fit; isolated bilayer dimer, density-density only). **Correction (chem-jiy, 2026-09-30):**
+  θ_W was originally quoted as −13.1 K (15× miss); that number is not in the cited primary source
+  (verified via direct primary-source read) — the verified θ_W is −51.2 K (`arXiv:1701.05528` p.4,
+  T > 140 K fit), giving the 3.75× above. A follow-on hypothesis that this was a phase-assignment
+  artifact was tested and killed (G5) using the verified number — see the Nb₃X₈ materials line entry
+  below.
 - [x] **Be₂ toward experiment** — *Claim:* core-valence correlation + a cc-pVXZ→CBS extrapolation
   moves the well depth from ~305 cm⁻¹ toward the experimental 929.7. **THE FINDING: the original
   gate does not hold.** CASSCF orbital optimization tried first and rejected — numerically unstable
