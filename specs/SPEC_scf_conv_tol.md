@@ -126,3 +126,51 @@ None. No source file changes: `build_molecular_hamiltonian(..., conv_tol=1e-9)` 
 - `tests/test_scf_conv_tol_spec.py` — G1–G4.
 - Corrected text: `tests/test_chained_overlap_spec.py` (docstring + exclusion comment),
   `specs/SPEC_chained_overlap.md` §2, and the chem-ayr entry of `specs/BACKLOG.md`.
+
+## 10. Results (2026-10-02; section 5 above is unedited since its pre-registration commit 6e7c8b6)
+
+Apple M3, macOS 27.0.1, Python 3.13.14, numpy 2.4.6, scipy 1.15.3 (Accelerate), qiskit-nature
+0.8.0, pyscf 2.13.1; 2 BLAS threads, shared machine. `tests/test_scf_conv_tol_spec.py`:
+**14 passed in 5.2 s** (G1 ×9, G2 ×2, G3 ×2, G4). Regenerate the table below (not a gate):
+`uv run --no-sync python -c "import sys; sys.path.insert(0, 'tests'); import test_scf_conv_tol_spec as t; t.table()"`.
+
+| geometry | \|ΔE₀\| | \|ΔE_HF\| | overlap default → tight | p₀ default → tight | \|ΔE₀,reach\| | lowest reachable idx | reachable levels | Ritz leakage default → tight |
+|---|---|---|---|---|---|---|---|---|
+| H₂ 0.74 | 0 | 0 | 0.9936 → 0.9936 | 9.9e-1 | 0 | 0 / 0 | 2 / 2 | 3.5e-17 → 3.5e-17 |
+| H₂ 2.0 | 0 | 0 | 0.8437 → 0.8437 | 7.1e-1 | 0 | 0 / 0 | 2 / 2 | 0 → 0 |
+| H₄ chain 0.9 | 4.4e-15 | 5.5e-14 | 0.9769 (Δ 2.7e-9) | 9.5e-1 | 1.8e-15 | 0 / 0 | 12 / 12 | 2.8e-15 → 2.7e-15 |
+| H₄ chain 1.0 | 3.6e-15 | 3.2e-13 | 0.9677 (Δ 6.8e-9) | 9.4e-1 | 6.2e-15 | 0 / 0 | 12 / 12 | 2.2e-15 → 5.4e-15 |
+| H₄ chain 2.0 | 4.4e-15 | 0 | 0.6941 (Δ 1.3e-10) | 4.8e-1 | 4.4e-15 | 0 / 0 | 12 / 12 | 2.2e-13 → 3.0e-14 |
+| H₄ square 1.0 | 5.3e-15 | 0 | 0.6898 (Δ 9.0e-15) | 4.8e-1 | 0 | 0 / 0 | 8 / 8 | 1.1e-14 → 6.5e-15 |
+| H₄ square 1.05 | 3.4e-14 | 1.2e-14 | 0.6739 (Δ 7.7e-10) | 3.7e-32 → 1.7e-29 | 4.4e-15 | 4 / 4 | 8 / 8 | 9.3e-15 → 1.5e-14 |
+| H₄ square 1.2 | 4.4e-15 | **2.4e-10** | 0.6791 (Δ 1.0e-9) | 4.6e-1 | 2.7e-15 | 0 / 0 | **9 / 8** | **5.1e-7** → 1.1e-14 |
+| H₄ square 1.4 | 1.8e-15 | 8.9e-16 | 0.6637 (Δ 4.9e-15) | 4.4e-1 | 2.7e-15 | 0 / 0 | 8 / 8 | 1.4e-14 → 9.8e-15 |
+| **H₄ square 1.35** | 8.9e-16 | 1.1e-9 | **7.80e-5 → 0.6128** | **6.1e-9 → 4e-30** | **0.1376 Ha** | 0 / **4** | 10 / 8 | **1.6e-6 → 1.8e-14** |
+| **H₄ square 1.19** | 5.3e-15 | 2.3e-9 | **1.18e-4 → 0.6518** | **1.4e-8 → 3e-28** | **0.1496 Ha** | 0 / **4** | 10 / 8 | **2.6e-6 → 2.9e-14** |
+
+**Verdict: (a), (b), (c) and the G4 pin all hold; no kill rule fired.** Margins against the
+pre-registered thresholds: clean-set max |ΔE₀| 3.4e-14 (limit 1e-9), max |ΔE_HF| 2.4e-10 (1e-8),
+max |Δ overlap| 6.8e-9 (1e-4), lowest reachable index unchanged in 9/9. Witnesses: overlap moves
+0.61 / 0.65 (limit > 0.1), reachable ground energy moves 137.6 / 149.6 mHa (limit > 10 mHa) while
+E₀ is unchanged to 9e-16 / 5e-15 Ha (the eigenvalue is untouched, only the HF-reachable
+classification moves), p₀(tight) is machine zero (limit 1e-20; the floor varies run to run between
+~1e-31 and ~3e-28), and the Ritz leakage drops from ≥ 1.6e-6 to ≤ 2.9e-14 (limit 1e-12).
+
+**Unregistered observation, reported not gated (it does not touch the claims as pre-registered).**
+At a = 1.2 (broken-symmetry RHF, lowest level physical) the default tolerance still admits one
+symmetry-forbidden *excited* level into the reachable sector: 9 vs 8 reachable levels and Ritz
+leakage 5.1e-7 vs 1.1e-14. The lowest reachable level, the overlap and every G1 observable are
+unchanged, so G1 passes; but "only the witnesses move" is true of the pre-registered observables,
+not of the sector size or R2b's leakage. This is a second instance of `SPEC_chained_overlap` R2b's
+"the margin is a property of this set". a = 1.2 is not in the chained-overlap gated set.
+
+**Not gated, a = 1.10 (platform-dependent).** Lowest-level p₀ vs `conv_tol` on this Mac
+(`t.residue_sweep()`): 1e-6 → 2.7e-6, 1e-7 → 1.3e-6, 1e-8 → 8.7e-8, then 1.2e-29 for every
+`conv_tol` ≤ 1e-9. The default build therefore shows no artifact here, whereas the Linux freeze
+records 5.07e-10 (`SPEC_reachability_tolerance` §2b). See that spec's §10.
+
+**Recorded verdict (chem-ayr).** Document, do not change the default. The builder already exposes
+`conv_tol`; the artifact is real and large (reachable overlap 7.8e-5 → 0.613 at a = 1.35) but confined
+to exact-symmetry geometries; no clean-set number needs re-running; the default stays 1e-9 (pinned by
+G4) because changing it would break by design the gates that pin the artifact and change chemcheck's
+frozen hashes. Follow-ups are listed in §7. **Not verified:** Linux; 12-qubit H₆ and CAS tiers.

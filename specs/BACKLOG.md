@@ -186,17 +186,24 @@ hypothesis whose death is informative is worth more here than a safe one.
   → [`SPEC_chained_overlap.md`](SPEC_chained_overlap.md); `tests/test_chained_overlap_spec.py`
   (G1–G7, 54 passed — slow, ~15 min, H₆ dominates).
 
-- [ ] **`build_molecular_hamiltonian` cannot express a tight-SCF reference** *(found while gating the
-  entry above)* — *Claim:* the repo's only public Hamiltonian builder hardcodes
-  `PySCFDriver(atom, basis, charge, spin)` (`molecular_hamiltonian.py:103`) with no `conv_tol`, so
-  every recorded result in the repo uses the driver default 1e-9 — which is exactly where the
-  SCF-residue artifact of [`SPEC_reachability_tolerance`](SPEC_reachability_tolerance.md) lives. Two
-  symmetric-SCF geometries (square H₄ a=1.10, a=1.35) had to be **excluded** from the chained-overlap
-  gate for this reason: their "exact reachable overlap" reference *is* the residue. *Check
-  (killable):* thread `conv_tol` through and re-run the affected gates at 1e-13; **dies if no
-  recorded number moves** — the artifact would then be unreachable from the public API in practice
-  and the concern is theoretical. *Cost:* cheap. *Caveat:* if numbers DO move, this is a
-  blast-radius change across the certified arc, not a parameter addition.
+- [x] **CLOSED (chem-ayr) — the builder already exposes `conv_tol`; the artifact is real but confined
+  to exact-symmetry geometries; document, do NOT change the default.** *(filed as "`build_molecular_hamiltonian`
+  cannot express a tight-SCF reference"; that premise went stale when `conv_tol=1e-9` was added.)*
+  [`SPEC_scf_conv_tol.md`](SPEC_scf_conv_tol.md), `tests/test_scf_conv_tol_spec.py` (14 passed, 5 s;
+  thresholds pre-registered before the run). Default vs `TIGHT_SCF_CONV_TOL` (1e-13) in one process:
+  nine clean gate geometries do not move (|ΔE₀| ≤ 3.4e-14 Ha, |ΔE_HF| ≤ 2.4e-10 Ha, |Δ overlap| ≤
+  6.8e-9); the symmetric witnesses move a lot — a=1.35 reference overlap **7.8e-5 → 0.613**, a=1.19
+  1.2e-4 → 0.652, reachable E₀ +137.6 / +149.6 mHa with the eigenvalue unchanged, Ritz leakage
+  1.6e-6 / 2.6e-6 → 3e-14 — and the residue collapses to machine zero at 1e-13. The default stays
+  1e-9 (pinned): changing it would break by design the gates that pin the artifact and change
+  chemcheck's frozen hashes. Also found: the claim "references built at conv_tol=1e-13" in
+  `test_chained_overlap_spec.py` / `SPEC_chained_overlap` §2 was false (corrected); a=1.2 admits a
+  forbidden excited level at the default (9 vs 8 reachable levels, leakage 5.1e-7) without moving
+  the target. Follow-ups: thread `conv_tol` through `build_dipole_operators` (own SCF,
+  `molecular_hamiltonian.py:212`) and the callers that do not forward it (`pipeline.py:115`,
+  `certchem/core.py:94`, `chemcheck/tiers.py:109`, `certkit_bridge.py:190`, `screening_loop.py:136`);
+  re-admit a=1.35 to the chained-overlap gate at `TIGHT_SCF_CONV_TOL`. Not verified: Linux, 12-qubit
+  H₆, CAS tiers.
 
 - [x] **The floor-guard mechanism survives — the ~1e-4 level is PHYSICAL, not the SCF artifact**
   *(follow-up filed by `SPEC_reachability_tolerance` §2b; I suspected it was the artifact)* —

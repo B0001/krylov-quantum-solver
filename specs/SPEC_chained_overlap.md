@@ -33,7 +33,12 @@ E₁ floor instead of an oracle.**
 ## 2. Background and honest framing
 
 Measured on a symmetry-clean set (**5 systems × M ∈ {6,8,12} = 15 cells**), all references built at
-`conv_tol=1e-13` so the SCF-residue artifact of `SPEC_reachability_tolerance` is absent. (An earlier
+the builder's **default** `conv_tol` (1e-9); the SCF-residue artifact of `SPEC_reachability_tolerance`
+is avoided by *excluding* the geometries that carry it, not by tightening the SCF. (**Correction
+2026-10-02, chem-ayr:** this paragraph and the gate's docstring used to say `conv_tol=1e-13`; the code
+never did that. [`SPEC_scf_conv_tol`](SPEC_scf_conv_tol.md) G1 measures that the four ≤ 8-qubit
+members do not move when tightened to 1e-13 — |ΔE₀| ≤ 3.4e-14 Ha, |Δ overlap| ≤ 6.8e-9 — so no
+number here changes; linear H₆ was not re-measured.) (An earlier
 draft quoted 7 systems / 21 cells. That set included square H₄ at a = 1.10 and 1.35 — the two
 geometries this spec itself excludes as having no well-defined target, see R3. The counts below are
 the post-exclusion re-run; the *mechanism* numbers were unaffected by the correction.)
