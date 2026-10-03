@@ -32,6 +32,7 @@ from scipy.sparse import identity
 from scipy.sparse.linalg import expm_multiply
 
 from hybrid_quantum_solver.molecular_hamiltonian import MolecularHamiltonian
+from reachability import _dense_hf_projection, reachable_mask
 
 
 @dataclass
@@ -55,8 +56,8 @@ def build_odmd_problem(mh: MolecularHamiltonian, n: int = 20) -> ODMDProblem:
     """Exact survival amplitudes s_0..s_{n-1} with the msd.py energy-level shift and tau = pi/W."""
     H_full = mh.qubit_hamiltonian.to_matrix(sparse=True).tocsc()
     psi0 = np.asarray(mh.hf_state().data, dtype=complex)
-    w_eig, V = np.linalg.eigh(mh.qubit_hamiltonian.to_matrix())
-    reach = w_eig[(np.abs(V.conj().T @ psi0) ** 2) > 1e-8].real
+    w_eig, V, pops = _dense_hf_projection(mh)       # shared eigh: macOS ZHEEVD fallback
+    reach = w_eig[reachable_mask(mh, w_eig, V, pops, 1e-8)].real    # symmetry-aware (chem-obf)
     width = float(reach.max() - reach.min())
     mu = float(0.5 * (reach.max() + reach.min()))
     H_s = (H_full - mu * identity(H_full.shape[0], format="csc")).tocsc()

@@ -66,19 +66,19 @@ hypothesis whose death is informative is worth more here than a safe one.
   → [`SPEC_symmetry_reachability.md`](SPEC_symmetry_reachability.md);
   `reachability.py`; `tests/test_symmetry_reachability_spec.py` (G1–G6, 14 passed).
 
-- [ ] **Rewire the ~13 reachability-threshold sites onto the symmetry filter** *(the change
-  `SPEC_symmetry_reachability` deliberately declined to make)* — *Claim:* replacing
-  `|⟨HF|ψ_k⟩|² > tol` with the symmetry-aware decision at all 13 sites (1e-10: `certified_gaps:107`,
-  `hf_overlap_certificate`, `certified_dipole:118`, `certified_noise:80`, `odmd_spectral:79`; 1e-8:
-  `hf_overlap_subspace:41`, `odmd:59`, `msd:113`, `trotter_odmd:89`, `device_odmd:49`,
-  `trotter_resolution_floor:54,67`) changes **no recorded result**, because G5 shows the ordinary
-  gated systems (H₂, linear Hₙ) have no population between the machine-zero floor and the physical
-  ground state. *Check (killable):* re-run every affected spec gate after the rewire; **dies the
-  moment one recorded number moves** — and then the finding is *which* number and why. *Cost:*
-  medium (touches the certified arc and the ODMD family; each gate is cheap but there are many).
-  *Caveat:* the ODMD/MSD/Trotter family thresholds a *propagated* state's population, not the HF
-  determinant's, so the symmetry argument may not transfer — check that before assuming one
-  decision procedure serves both arcs.
+- [x] **CLOSED (chem-obf) — SURVIVES; premise corrected, caveat confirmed** [SPEC](SPEC_eigenstate_reachability.md).
+  SPEC_symmetry_reachability had only a per-*system* availability test, so a per-eigenstate
+  decision was built first: majority weight in HF's exact sector ((N_α, N_β) + every point-group
+  parity whose Z-string provably stays within 1/2 of the exact operator) AND the site's tol. Rewired
+  (tols unchanged): `reachable_eigenpairs` (→ certified_gaps, hf_overlap_certificate,
+  certified_dipole, certified_noise, excited_bounds), hf_overlap_subspace, odmd, msd, trotter_odmd,
+  device_odmd, trotter_resolution_floor. *Prediction confirmed:* no gated number moved —
+  identical masks on H₂, H₄, HeH⁺, LiH, LiH CAS(2,5), N₂ CAS(6,6) (G3); 43 affected gate files,
+  no new failure, 5 macOS ZHEEVD files fixed. Only the sq-H₄ residue witnesses move (the fix: Ag
+  ground selected, = symmetry-adapted FCI). *Caveat confirmed:* it does not transfer to Trotter
+  eigenbases (conserve Z-string parities, not N/S_z), odmd_spectral's kicked reference, or model
+  Hamiltonians — left on the population cut. Linux follow-up: reachability_tolerance G2/G5 pin the
+  residue.
 
 - [ ] ~~**A symmetry/sector-aware reachability test**~~ *(superseded by the closed entry above;
   original text follows)* *(the fix the

@@ -57,6 +57,7 @@ class MolecularHamiltonian:
     num_particles: Tuple[int, int]       # (n_alpha, n_beta)
     num_spatial_orbitals: int
     hf_energy: float                     # <HF|H|HF> + offset  (== RHF total energy)
+    build_args: Optional[dict] = None    # geometry builder kwargs (reachability.py rebuilds from them)
 
     def total_energy(self, electronic_eigenvalue: float) -> float:
         """Lift an eigenvalue of ``qubit_hamiltonian`` into the physical energy frame."""
@@ -154,6 +155,8 @@ def build_molecular_hamiltonian(
         num_particles=problem.num_particles,
         num_spatial_orbitals=problem.num_spatial_orbitals,
         hf_energy=hf_energy,
+        build_args=dict(atom=atom, basis=basis, charge=charge, spin=spin, conv_tol=conv_tol,
+                        active_electrons=active_electrons, active_orbitals=active_orbitals),
     )
 
 
