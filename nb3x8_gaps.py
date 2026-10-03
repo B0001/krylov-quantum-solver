@@ -173,8 +173,10 @@ def coordination_gap(U0: float, ts: float, Us: float, tw: float, Uw: float, z: i
 
     ``max_cycle`` (default 1000, matching ``fci_energy``'s default) caps the FCI Davidson solver for
     each of the three charge sectors. Larger z / odd-electron sectors can need more than 1000
-    iterations to converge even when not genuinely degenerate (chem-q9g: Nb3Cl8, z=3, N=9 needs
-    ~4x); raise this rather than catching the ``RuntimeError`` and re-deriving the cluster yourself.
+    iterations to converge even when not genuinely degenerate (chem-q9g: Nb3Cl8, z=3, N=9 exceeds
+    the default on both platforms checked and converges by 2000-4000; Nb3Br8 hits the default on
+    x86_64 Linux but not on Apple M3); raise this rather than catching the ``RuntimeError`` and
+    re-deriving the cluster yourself.
     """
     h1, eri, _ = _coordination_cluster(U0, ts, Us, tw, Uw, z)
     return _cluster_charge_gap(h1, eri, max_cycle=max_cycle)
