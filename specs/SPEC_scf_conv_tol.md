@@ -174,3 +174,9 @@ records 5.07e-10 (`SPEC_reachability_tolerance` §2b). See that spec's §10.
 to exact-symmetry geometries; no clean-set number needs re-running; the default stays 1e-9 (pinned by
 G4) because changing it would break by design the gates that pin the artifact and change chemcheck's
 frozen hashes. Follow-ups are listed in §7. **Not verified:** Linux; 12-qubit H₆ and CAS tiers.
+
+**Disclosure addendum (added after the results commit).** Before the pre-registration commit the author
+had already run the a = 1.10 `conv_tol` sweep above (reproducing the hand-off's macOS numbers) and the
+baseline `test_reachability_tolerance_spec` / `test_chained_overlap_spec` runs. That knowledge fixed
+the decision not to gate a = 1.10 (§3, §8 R1); it fixed no §5 threshold, and the other measurements in
+this section were first taken after the commit.
