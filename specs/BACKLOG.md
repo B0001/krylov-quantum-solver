@@ -83,7 +83,10 @@ hypothesis whose death is informative is worth more here than a safe one.
   CAS(2,2)), symmetry PySCF detects only within its tolerance, an unrecorded mapper. *Caveat
   confirmed:* it does not transfer to Trotter eigenbases (conserve Z-string parities, not N/S_z),
   odmd_spectral's kicked reference, or model Hamiltonians. Follow-up: fix the residue where it
-  belongs, a tight/symmetric SCF in the builder.
+  belongs, a tight/symmetric SCF in the builder. **Done (chem-n3w):**
+  [SPEC](SPEC_symmetric_scf.md) — opt-in `symmetric_scf=True` on `build_molecular_hamiltonian`
+  floors `conv_tol` to `TIGHT_SCF_CONV_TOL` on point-group-symmetric geometries; default build
+  (and every existing call site/gate) is unchanged.
 
 - [ ] ~~**A symmetry/sector-aware reachability test**~~ *(superseded by the closed entry above;
   original text follows)* *(the fix the
