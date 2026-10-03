@@ -46,6 +46,9 @@ Two facts make this decisive, not a corner case:
 In the sweep the resulting *certificate* γ_min stayed ≤ exact ‖P_S u‖ in all 8 cases — but only by
 unquantified slack, as thin as **0.0045** (asym H₆, M=6). So the library did not emit an outright
 invalid number here, yet self-mode rests on slack it does not control. **It is not rigorous.**
+*Follow-up:* [`SPEC_pm3_eta_bound.md`](SPEC_pm3_eta_bound.md) (chem-pm3) quantifies that slack:
+γ_corr = √(1 − r²/δ² − η) is valid for any β, and with oracle band edges the Krylov moments bound η
+to ≤ 0.05 on 2 of these 3 witnesses at M ≤ 24 (R=1.1 needs M ≈ 60).
 
 ## Conclusion / rigor statement
 

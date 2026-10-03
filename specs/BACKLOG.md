@@ -268,18 +268,30 @@ hypothesis whose death is informative is worth more here than a safe one.
   refinement, not of the problem. SPEC-21b still stands for genuinely degenerate ground levels. That
   relabeling must be written down, not buried.
 
-- [ ] **The missing "certified sub-cluster anchor" is a spectral-weight bound, and its target is now
-  quantified** — *Claim:* the blocker `SPEC_subspace_floor_resolvability` deferred as hard reduces to
-  an exact leakage correction: if the self-mode floor β overshoots E_d, the only damage is the HF
-  weight η on the missed levels, and γ_corr = √(1 − r²/δ² − η) is valid for *any* β. So the anchor
-  problem becomes: can Krylov data bound η? The raw material exists — S₀ₖ are the Fourier moments of
-  the HF spectral measure. *Check (killable):* G-a validity on the spec's own escape witnesses;
-  G-b the killer — bound η from the Krylov moments and compare. **Dies if the moment bound exceeds
-  ~0.05 at M ≤ 24.** *(scout probe: measured η = 2.4e-2 / 3.8e-2 / 7.4e-2 on the three witnesses,
-  spanning 54–142 levels — *not* the ~1e-4 "one tiny missed level" story, because β overshoots by
-  0.22–0.33 Ha and sweeps a whole band.)* *Cost:* medium. *Caveat:* **I expect G-b to be killed**, and
-  that is the point — it converts "open problem, deferred" into "needs Krylov resolution 1/(MΔt)
-  below the floor overshoot, measured at 0.22–0.33 Ha", a falsifiable design target.
+- [x] **CLOSED (chem-pm3) — G-a holds; the sound Krylov-moment bound on η survives on 2 of 3
+  escape witnesses (linear H₆ R=1.1 is killed and needs M ≈ 60), so not a full kill; the predicted
+  "1/(MΔt) below the overshoot" design target is contradicted.**
+  [SPEC](SPEC_pm3_eta_bound.md), `scripts/spec_pm3_subspace_eta_bound.py`,
+  `tests/test_pm3_eta_bound_spec.py`.
+  - *Claim:* if the self-mode floor β overshoots E_d, γ_corr = √(1 − r²/δ² − η) is valid for *any*
+    β, so the anchor problem becomes: can the Krylov moments S₀ₖ bound η?
+  - **G-a holds** on all three witnesses: γ_corr 0.912 / 0.846 / 0.955 ≤ exact ‖P_S u‖
+    0.967 / 0.947 / 0.977.
+  - **The scout LP was unsound.** It enforced f ≥ 1_band only on a grid and gave 0.14717 < η = 0.15
+    on a synthetic measure, so its bounds are void. Repaired with cutting planes plus a certified
+    continuous gap.
+  - **G-b, pre-registered** (survive iff the min over M ≤ 24 of the bound is ≤ 0.05):
+    - R=1.0: min bound 0.0396, SURVIVES.
+    - R=1.1: min bound 0.0594, KILLED (not box-dependent). First ≤ 0.05 at M = 60, where
+      1/(MΔt) = 0.0429 Ha.
+    - asym: min bound 0.0359, SURVIVES.
+  - **The design target fails.** At M = 24, 1/(MΔt) = 0.107–0.121 Ha is below every overshoot,
+    yet R=1.1 dies.
+  - *Corrected scout numbers:* η = 2.37e-2 / 3.78e-2 / 3.40e-2 (not 7.4e-2), over 4 / 2 / 18
+    reachable missed levels (not 54–142). Overshoot +0.2821 / +0.2155 / +1.0548 Ha
+    (not 0.22–0.33).
+  - *Caveat:* E_d and the spectral support are oracle (dense) inputs. A survival means "not ruled
+    out"; the kill is robust. The anchor itself stays open.
 
 - [x] **CLOSED (chem-mqu) — the overlap certificate's noise IS structurally different, the kill
   criterion fails to kill it, and there's a sharper, unpredicted finding: inflation reverses sign.**
