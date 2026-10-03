@@ -285,6 +285,17 @@ hypothesis whose death is informative is worth more here than a safe one.
   PDS to < 1e-6 Ha with a 9.5–14-order cut, and δμ ∈ [−5, +2] Ha is harmless on N₂ (δ = +10 Ha
   breaks it).
 
+- [x] **CLOSED (chem-u87) — does centering change how shot noise in ⟨Hⁿ⟩ amplifies into PDS(K)?
+  No. The float64 gain survives shot noise in kind, but the pre-registered rule was not decisive.**
+  [`SPEC_centered_pds_shots.md`](SPEC_centered_pds_shots.md), `tests/test_centered_pds_shots_spec.py`.
+  The noise is circuit-level: one random-Pauli shadow record of |HF⟩ feeds every moment
+  (symmetry-projected). Raw and centered PDS are the same function of the same data (agree to
+  < 1e-6 Ha wherever raw cond < 1e10, and NaN together). At 10⁶ snapshots on N₂ CAS(6,6), centered
+  PDS(8) has a median error of 0.089 mHa against PDS(4) 2.4 mHa and raw PDS(8) 0.29 mHa. Raw PDS(7)
+  fails catastrophically in about 35% of trials even at negligible noise. The hit-rate rule's verdict
+  flipped between runs (BLAS-path and seed dependence), so it is recorded and not gated.
+  Independent-per-moment noise (the prior attempt's model) is about 340× too pessimistic at K=8.
+
 - [x] **CLOSED (chem-pc1) — the higher roots of P_K(E) are bounded excited-state estimates, but the
   usefulness claim is KILLED, and a second, sharper finding: the bound itself can break in floating
   point.** `pds_roots` added (`moment_expansion.py`), `pds_energy` now `pds_roots(...)[0]` (no
