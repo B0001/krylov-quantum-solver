@@ -97,10 +97,10 @@ def test_g2_h2_pqg_is_exact():
 @pytest.mark.parametrize("n", [4, 6])
 def test_g3_certified_bound_below_fci_and_tight(n):
     """The certified bound is below exact E0, and within 1e-5 Ha of the solver's own value."""
-    from pyscf import fci
+    from hybrid_quantum_solver.dmrg_reference import fci_energy
 
     h1, eri, ne, e_nuc, _ = integrals(n, localize=True)
-    e0 = fci.direct_spin1.kernel(h1, eri, n, ne, conv_tol=1e-12)[0] + e_nuc
+    e0 = fci_energy(h1, eri, ne, e_core=e_nuc)
     prob, e_nuc = V.hchain_problem(n)
     val, y, _ = V.solve(prob)
     lb, _ = V.certify(prob, y, e_nuc)
@@ -120,10 +120,10 @@ def test_g4_rigor_survives_garbage_duals(h4):
 
 def test_g5_t2_tightens_and_stays_valid():
     """PQG+T2 is a subset of PQG: its certified bound is higher, and still below E0."""
-    from pyscf import fci
+    from hybrid_quantum_solver.dmrg_reference import fci_energy
 
     h1, eri, ne, e_nuc, _ = integrals(4, localize=True)
-    e0 = fci.direct_spin1.kernel(h1, eri, 4, ne, conv_tol=1e-12)[0] + e_nuc
+    e0 = fci_energy(h1, eri, ne, e_core=e_nuc)
     lbs = []
     for t2 in (False, True):
         prob, _ = V.hchain_problem(4, t2)

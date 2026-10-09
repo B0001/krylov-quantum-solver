@@ -75,6 +75,10 @@ def _fci(atom, wfnsym, symmetry="D2h"):
     solver = fci.FCI(mf)
     solver.wfnsym, solver.nroots = wfnsym, 1000
     e, _ = solver.kernel()
+    if not np.all(solver.converged):
+        raise RuntimeError(f"FCI Davidson did not converge for all roots: atom={atom!r} "
+                            f"wfnsym={wfnsym!r} converged={solver.converged} "
+                            f"(chem-60i: an unchecked Davidson call can silently report a wrong energy)")
     return np.sort(np.atleast_1d(e)) - mol.energy_nuc()
 
 
