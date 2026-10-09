@@ -17,6 +17,7 @@ import numpy as np
 
 from hybrid_quantum_solver.molecular_hamiltonian import build_molecular_hamiltonian
 from hybrid_quantum_solver.quantum_krylov_solver import QuantumKrylovSolver
+from reachability import _dense_hf_projection
 from temple_bounds import bracket_ladder, krylov_bracket
 
 SYSTEMS = {
@@ -33,9 +34,7 @@ def _case(key):
     """(mh, shared solver, exact reachable E0/E1 as total energies)."""
     if key not in _CACHE:
         mh = build_molecular_hamiltonian(**SYSTEMS[key])
-        w_eig, V = np.linalg.eigh(mh.qubit_hamiltonian.to_matrix())
-        psi0 = np.asarray(mh.hf_state().data, dtype=complex)
-        pops = np.abs(V.conj().T @ psi0) ** 2
+        w_eig, _, pops = _dense_hf_projection(mh)   # shared eigh: macOS ZHEEVD fallback
         reach = w_eig[pops > 1e-8].real + mh.energy_offset
         _CACHE[key] = (mh, QuantumKrylovSolver(mh), float(reach[0]), float(reach[1]))
     return _CACHE[key]

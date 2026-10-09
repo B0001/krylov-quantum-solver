@@ -25,6 +25,7 @@ from hybrid_quantum_solver.certified_overlap.krylov_refine import (
 )
 from hybrid_quantum_solver.molecular_hamiltonian import build_molecular_hamiltonian
 from hybrid_quantum_solver.quantum_krylov_solver import QuantumKrylovSolver
+from reachability import _dense_hf_projection
 
 H2_EQ = "H 0 0 0; H 0 0 0.74"
 H2_STRETCHED = "H 0 0 0; H 0 0 2.0"
@@ -52,10 +53,9 @@ def _setup(atom):
     mh = build_molecular_hamiltonian(atom=atom)
     H = mh.qubit_hamiltonian.to_matrix()
     u = np.asarray(mh.hf_state().data, dtype=complex)
-    w, V = np.linalg.eigh(H)
-    amp = np.abs(V.conj().T @ u)
-    reach = np.where(amp ** 2 > 1e-10)[0]
-    return mh, H, u, float(w[reach[1]]), float(amp[reach[0]])
+    w, V, pops = _dense_hf_projection(mh)       # shared eigh: macOS ZHEEVD fallback
+    reach = np.where(pops > 1e-10)[0]
+    return mh, H, u, float(w[reach[1]]), float(np.sqrt(pops[reach[0]]))
 
 
 def _ritz(mh, m, solver):
@@ -193,10 +193,7 @@ def _leakage(atom, m):
     """(||P_unreach v||, #unreachable levels below E1_reach) -- u's unreachable components vanish by
     construction, v's only numerically, which is the whole content of R2b."""
     mh = build_molecular_hamiltonian(atom=atom)
-    H = mh.qubit_hamiltonian.to_matrix()
-    u = np.asarray(mh.hf_state().data, dtype=complex)
-    w, V = np.linalg.eigh(H)
-    amp2 = np.abs(V.conj().T @ u) ** 2
+    w, V, amp2 = _dense_hf_projection(mh)       # shared eigh: macOS ZHEEVD fallback
     reach = np.where(amp2 > REACHABLE_TOL_CERTIFIED)[0]
     unreach = np.where(amp2 <= REACHABLE_TOL_CERTIFIED)[0]
     v = _ritz(mh, m, QuantumKrylovSolver(mh))

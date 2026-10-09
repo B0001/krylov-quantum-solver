@@ -20,6 +20,7 @@ import numpy as np
 from hybrid_quantum_solver.molecular_hamiltonian import build_molecular_hamiltonian
 from hybrid_quantum_solver.quantum_krylov_solver import QuantumKrylovSolver
 from odmd import build_odmd_problem, noise_edge, odmd_spectrum, sample_odmd_spectrum
+from reachability import _dense_hf_projection
 
 SYSTEMS = {
     "h4": dict(atom="H 0 0 0; H 0 0 0.9; H 0 0 1.8; H 0 0 2.7"),
@@ -33,9 +34,7 @@ def _case(key):
     if key not in _CACHE:
         mh = build_molecular_hamiltonian(**SYSTEMS[key])
         prob = build_odmd_problem(mh, n=48)
-        w_eig, V = np.linalg.eigh(mh.qubit_hamiltonian.to_matrix())
-        psi0 = np.asarray(mh.hf_state().data, dtype=complex)
-        pops = np.abs(V.conj().T @ psi0) ** 2
+        w_eig, _, pops = _dense_hf_projection(mh)   # shared eigh: macOS ZHEEVD fallback
         _CACHE[key] = (mh, prob, w_eig[pops > 1e-8].real - prob.mu)
     return _CACHE[key]
 

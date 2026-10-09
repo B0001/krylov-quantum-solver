@@ -21,6 +21,7 @@ from hf_overlap_subspace import _weinstein_intervals_disjoint, certify_hf_subspa
 from hybrid_quantum_solver.certified_overlap import residual_norm
 from hybrid_quantum_solver.molecular_hamiltonian import build_molecular_hamiltonian
 from hybrid_quantum_solver.quantum_krylov_solver import QuantumKrylovSolver
+from reachability import _dense_hf_projection
 
 
 def _chain(n, R):
@@ -44,9 +45,9 @@ def B():
     out = {}
     for key, atom in _ATOMS.items():
         mh = build_molecular_hamiltonian(atom=atom)
-        w, V = np.linalg.eigh(mh.qubit_hamiltonian.to_matrix())
+        w, V, pops = _dense_hf_projection(mh)       # shared eigh: macOS ZHEEVD fallback
         u = np.asarray(mh.hf_state().data, dtype=complex)
-        reach = np.where(np.abs(V.conj().T @ u) ** 2 > 1e-8)[0]
+        reach = np.where(pops > 1e-8)[0]
         out[key] = dict(mh=mh, solver=QuantumKrylovSolver(mh), off=mh.energy_offset,
                         Hs=mh.qubit_hamiltonian.to_matrix(sparse=True).tocsc(),
                         w=w, V=V, u=u, reach=reach)
