@@ -223,23 +223,49 @@ exact-H eigenbasis** (exact evolution conserves them). It does not transfer to:
 
 The diagnostic can warn wrongly or stay silent; since the revision it never changes a number.
 
-- **L1 — compressed R_b (review).** β is rigorous only where `D_b R_b` is orthogonal (the full
+**L1–L4 fixed (chem-648, 2026-10-09)** — see the revision note in §9 for gate results and
+thresholds. Kept below as the original review record; each item now says what the fix is, not just
+the upgrade path.
+
+- **L1 — compressed R_b (fixed).** β is rigorous only where `D_b R_b` is orthogonal (the full
   orbital space). An active window that splits a degenerate shell compresses R_b far from orthogonal
   and β under-reports: symmetric CH₄ (Td, C–H 1.087 Å) CAS(2,2) flags a populated level (probe:
   −0.669500 Ha electronic, p = 3.3e-6) that `QuantumKrylovSolver.solve_excited(4)` returns as θ₁ —
   under the PR #62 veto `reachable_gap` was off by 0.81 Ha (review). The review also reports NH₃
   CAS(4,4) flagging populations up to 8.1e-4; not reproduced at our probe geometry (PySCF found only
-  Cs there). Upgrade path: an orthogonality check on R_b.
-- **L2 — symmetry PySCF detects only within its geometric tolerance is treated as exact (review).**
+  Cs there). Fix: `orbital_parity_bounds` now excludes a bit (β = ∞) when
+  `‖R_b R_b^T − I‖ > _R_ORTHOGONALITY_ATOL = 1e-6`, measured directly on `R_b` in `mh`'s own MO
+  basis. On the CH₄ CAS(2,2) witness this separates cleanly: ~1e-14 for a window that does not split
+  the degenerate t2 shell, ≥0.1 once it does (`test_L1_degenerate_shell_split_window_is_excluded_full_window_is_not`).
+- **L2 — symmetry PySCF detects only within its geometric tolerance is treated as exact (fixed).**
   sq-H₄ 1.1 with the fourth atom moved 5e-6 / 1e-5 Å along x, `conv_tol=1e-13`: a level whose
-  population is real distortion, 2.1e-9 / 5.8e-9 (probe), is flagged as residue. Upgrade path:
-  tolerance-aware symmetry detection.
-- **L3 — mapper not recorded (review).** `hf_symmetry_sector`'s Jordan–Wigner layout guard checks
+  population is real distortion, 2.1e-9 / 5.8e-9 (probe), is flagged as residue. Fix: a new
+  `_geometry_residuals` check applies each bit's claimed point-group operation directly to the real
+  (unsymmetrized) geometry and measures the atom-mapping residual in Bohr, independent of
+  `symm.geom.TOLERANCE` (which both PySCF's own detection and `symm_adapted_basis`'s atom-equivalence
+  grouping use, scaled by `1/sqrt(1+natm)`); a bit excluded (β = ∞) above
+  `_GEOMETRY_RESIDUAL_ATOL = 1e-8`. The spec's own 5e-6/1e-5 Å witness no longer fools PySCF's
+  detection on this host/pyscf version (Linux, pyscf 2.13.1 vs. the macOS run that recorded it) — the
+  boundary here is 1e-6 Å (still detected as D2h; fix correctly excludes) vs. 2e-6 Å (PySCF itself
+  falls back to C2h). A platform/version difference in where the tolerance bites, not a
+  re-derivation of the mechanism (`test_L2_geometry_pyscf_mistakes_for_exact_is_excluded`).
+- **L3 — mapper not recorded (fixed).** `hf_symmetry_sector`'s Jordan–Wigner layout guard checks
   only the HF index, which an `InterleavedQubitMapper` operator can share (linear H₄, spin = 2), and
-  `build_args` does not record the mapper. No in-repo caller. Upgrade path: record the mapper.
-- **L4 — accidental degeneracy.** Levels of different symmetry closer than 1e-9 Ha form one cluster
-  and share its majority verdict: a missed or a spurious warning for one of them. Never seen on a
-  gated system.
+  `build_args` does not record the mapper. No in-repo caller. Fix: `build_molecular_hamiltonian` now
+  records `build_args["mapper"] = type(mapper).__name__`; `hf_symmetry_sector` refuses the index
+  coincidence unless that field is absent (no provenance, e.g. the integrals-only builder, which only
+  ever uses Jordan–Wigner) or equals `"JordanWignerMapper"` (`test_L3_mapper_is_recorded_and_checked`,
+  reproduces end-to-end with no monkeypatching).
+- **L4 — accidental degeneracy (fixed).** Levels of different symmetry closer than 1e-9 Ha form one
+  cluster and share its majority verdict: a missed or a spurious warning for one of them. Never seen
+  on a gated system. Fix: `symmetry_allowed` abstains (treats as allowed, i.e. does not flag) when a
+  cluster's sector weight falls in `(_AMBIGUOUS_WEIGHT_MARGIN, 1 - _AMBIGUOUS_WEIGHT_MARGIN) =
+  (1e-3, 0.999)` instead of applying the `> 0.5` majority cut there — chosen to match G6's own
+  observed bound (every witnessed gated system's weight sits within 1e-3 of 0 or 1), so it changes
+  nothing for any system this file currently gates. No real gated witness for the accidental-
+  degeneracy condition itself exists, so this is checked with a synthetic cluster constructed to hit
+  exactly a 50/50 split (`test_L4_accidental_cross_sector_degeneracy_abstains`): the pre-fix
+  majority-only rule would flag both members of that tie as forbidden; the fix abstains on both.
 - **R2 — residual symmetry outside PySCF's abelian frame.** At broken-RHF geometries a level can
   still carry convergence-dependent population (sq-H₄ 1.20: 1.5e-9 → 6.2e-9 between `conv_tol` 1e-9
   and 1e-6) that the D2h bits cannot see; the diagnostic is silent there.
@@ -248,7 +274,20 @@ The diagnostic can warn wrongly or stay silent; since the revision it never chan
   `test_reachability_tolerance_spec` G2 and G5 (`constant_governs_the_certified_reference`) should
   not happen: those gates pin the residue the cut keeps. Not verifiable on this macOS host.
 
-## 9. Results (macOS 27, Apple M3, 2 BLAS/OMP threads)
+## 9. Results (macOS 27, Apple M3, 2 BLAS/OMP threads, except the chem-648 entry below)
+
+**chem-648 (2026-10-09, Linux x86_64, pyscf 2.13.1):** fixed L1–L4 (§8). Four new gates
+(`test_L1_*`..`test_L4_*`), each isolating the fix from the production `_driver_orbitals` rebuild
+path via monkeypatching known-good orbitals/sectors (L3 excepted — it reproduces end-to-end) because
+that path's reproducibility check is independently unreliable on this host for near-degenerate
+geometries (chem-g14, filed and left open — out of scope here; see
+`sandbox-handoffs/chem-648.md`). All four pass. Full-file run: 17 failed / 32 passed both before and
+after the four L1–L4 code changes (`uv run pytest tests/test_eigenstate_reachability_spec.py -q`,
+~55 s) — same failure COUNT, but the exact failing IDs are not stable run-to-run even on an
+unmodified checkout (confirmed by re-running the pre-change baseline twice): every failure observed,
+in every run, is a `test_G1`/`test_G2`(sq-H4 or linear-H4)/`test_G4`/`test_G5`/`test_G9_control` case
+— the chem-g14 category — never a `test_G3`/`G6`/`G7`/`G8`/`G10` case or one of the new `test_L*`
+gates. Not independently reproduced on macOS for this revision.
 
 **Revision (2026-10-03):**
 
