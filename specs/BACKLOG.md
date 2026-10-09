@@ -564,9 +564,11 @@ hypothesis whose death is informative is worth more here than a safe one.
   closed form for a literal *fixed-t* point-estimate ratio is **killed** (the ratio swings 18–279×
   across t=4..20 on every system — the dyadic staircase the π·sin θ₀ entry above bounds), while
   λ'/λ = 0.51–0.70 cuts the walk-step budget ∝ λ/ε by 1.43–1.94× and the phase-bit count at ε=1e-3
-  by 0–1 bit (13→13, 13→12, 15→14, 15→14 under the *empirical* `3λ/2^t` envelope of
-  `SPEC_qpe_readout_laws` G2; the decode's hard ceiling is π), confirmed by running `run_qpe` end to
-  end at each variant's own budget (G3); (4) `df_lambda` vs
+  by 0–1 bit (13→13, 13→12, 15→14, 15→14 under `tests/test_ft_identity_shift_spec.py::_t_star`'s
+  own empirical `3λ/2^t` envelope — the decode's hard ceiling is π; chem-aob later swapped
+  `SPEC_qpe_readout_laws` G2 itself to that derived π ceiling, so this `_t_star` constant is no
+  longer tied to that gate's text, see the qpe_readout_laws entry above), confirmed by running
+  `run_qpe` end to end at each variant's own budget (G3); (4) `df_lambda` vs
   identity-excluded naive λ resolved as **NOT-COMPARABLE-AND-VACUOUS, not a flip**: `SPEC_scdf_lambda`
   G1(b) (identity-*included* comparison) still holds on every system, and `df_lambda` is a provably
   pure function of `(h1, eri)` with no lever for identity-exclusion at all, so the identity-excluded
@@ -1673,7 +1675,8 @@ hypothesis whose death is informative is worth more here than a safe one.
   literal "~lambda/2^t" smooth-scaling reading is FALSE — the realized argmax point-estimate error
   is a monotonically non-increasing STAIRCASE in `t` (adding phase bits never hurts, but the error
   often doesn't move for several consecutive `t` before a sudden drop), bounded above by a real,
-  checked constant (measured max ratio `err/(lambda/2^t)` = 2.175, gated at 3x). The state-prep
+  PROVABLE ceiling `pi*lambda/2^t` (mean-value-theorem on cos + the half-dyadic-bin phase error;
+  measured max ratio `err/(lambda/2^t)` = 2.175, comfortably inside `pi`). The state-prep
   claim sharpens into a precise law: `p_success(window)/overlap` depends almost entirely on `t`, NOT
   on the overlap value — verified band width `< 0.05` across an overlap sweep spanning 0.02 to 0.99
   (a 50x range) at each of `t=8,10,12` (measured widths 0.029 / 0.002 / 0.0001). **Boundary, recorded
@@ -1683,7 +1686,11 @@ hypothesis whose death is informative is worth more here than a safe one.
   code changes — the checks live entirely in the test file, exercising `qpe_walk_readout.py`'s
   existing `run_qpe` unmodified. Gates G1–G4 in `tests/test_qpe_readout_laws_spec.py`.
   → [`SPEC_qpe_readout_laws.md`](SPEC_qpe_readout_laws.md) (exact Fejer-kernel simulation oracle,
-  not circuit-level; one system, H2 CAS(2,2) — the specific constants are measurements, not derived).
+  not circuit-level; one system, H2 CAS(2,2). **chem-aob correction:** G2 originally called the
+  constant `3` "provable" — it wasn't, it was a bare fit to this one sweep (`3 < pi`, so not even a
+  valid ceiling in general); G2 now uses the actually-derived `pi`. The *tight* realized ratio
+  (2.175) remains a measurement, not derived — `SPEC_qpe_precision_bound` below tightens that to a
+  per-system `pi*sin(theta_0)` envelope).
 
 - [x] **krylov_subspace_solver — the documented bug fix gets a regression test, and the cross-check
   finally happens** — a second, independent real-time Krylov implementation (FCI-direct, not
