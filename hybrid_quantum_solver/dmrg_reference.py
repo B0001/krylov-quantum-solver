@@ -53,8 +53,12 @@ def _scratch_dir(scratch):
     An explicit ``scratch`` string is passed straight to the driver, untouched and NOT cleaned up
     here -- callers that already namespace their own scratch (e.g. per-PID, per-case subdirectories
     in nbn_dmrg_reference.py / benchmark_hubbard_lieb_wu.py) are relying on it surviving the call.
+    It IS created (with any missing parents) first: block2 only creates the leaf directory, so a
+    nested path like ``./.dmrg_tmp/g8_free`` failed in a fresh checkout with no ``.dmrg_tmp`` yet
+    (``SparseMatrix:save_data ... failed`` -- chem-qqu).
     """
     if scratch is not None:
+        os.makedirs(scratch, exist_ok=True)
         yield scratch
         return
     os.makedirs(DEFAULT_SCRATCH_ROOT, exist_ok=True)
