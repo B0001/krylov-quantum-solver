@@ -13,8 +13,6 @@ Noiseless by design: the claim is about RIGOR (one containment escape kills the 
 sampling. References: exact reachable spectrum by dense diagonalization, as
 SPEC_qksd_excited.md. PySCF/qiskit, no block2; `make gates` runs it in its own process.
 """
-import numpy as np
-
 from hybrid_quantum_solver.molecular_hamiltonian import build_molecular_hamiltonian
 from hybrid_quantum_solver.quantum_krylov_solver import QuantumKrylovSolver
 from reachability import _dense_hf_projection
