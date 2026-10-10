@@ -274,20 +274,31 @@ the upgrade path.
   `test_reachability_tolerance_spec` G2 and G5 (`constant_governs_the_certified_reference`) should
   not happen: those gates pin the residue the cut keeps. Not verifiable on this macOS host.
 
-## 9. Results (macOS 27, Apple M3, 2 BLAS/OMP threads, except the chem-648 entry below)
+## 9. Results (macOS 27, Apple M3, 2 BLAS/OMP threads, unless an entry says otherwise)
 
-**chem-648 (2026-10-09, Linux x86_64, pyscf 2.13.1):** fixed L1–L4 (§8). Four new gates
-(`test_L1_*`..`test_L4_*`), each isolating the fix from the production `_driver_orbitals` rebuild
-path via monkeypatching known-good orbitals/sectors (L3 excepted — it reproduces end-to-end) because
-that path's reproducibility check is independently unreliable on this host for near-degenerate
-geometries (chem-g14, filed and left open — out of scope here; see
-`sandbox-handoffs/chem-648.md`). All four pass. Full-file run: 17 failed / 32 passed both before and
-after the four L1–L4 code changes (`uv run pytest tests/test_eigenstate_reachability_spec.py -q`,
-~55 s) — same failure COUNT, but the exact failing IDs are not stable run-to-run even on an
-unmodified checkout (confirmed by re-running the pre-change baseline twice): every failure observed,
-in every run, is a `test_G1`/`test_G2`(sq-H4 or linear-H4)/`test_G4`/`test_G5`/`test_G9_control` case
-— the chem-g14 category — never a `test_G3`/`G6`/`G7`/`G8`/`G10` case or one of the new `test_L*`
-gates. Not independently reproduced on macOS for this revision.
+**chem-648 (2026-10-09, Linux x86_64 container, pyscf 2.13.1; re-run on macOS 2026-10-10):** fixed
+L1–L4 (§8). Four new gates (`test_L1_*`..`test_L4_*`), each isolating the fix from the production
+`_driver_orbitals` rebuild path via monkeypatching known-good orbitals/sectors (L3 excepted — it
+reproduces end-to-end) because that path's reproducibility check is independently unreliable in the
+Linux container for near-degenerate geometries (chem-g14, filed and left open — out of scope here;
+see `sandbox-handoffs/chem-648.md`). All four pass on both platforms.
+
+- **macOS 27 (Apple M3, 8 cores; BLAS/OMP threads unset, i.e. library defaults, not the 2 of the
+  entries below; pyscf 2.13.1, numpy 2.4.6, scipy 1.15.3):** `uv run pytest
+  tests/test_eigenstate_reachability_spec.py -q`, three runs each: main b0d82fd (before the change)
+  **45 passed** every run; this revision **49 passed** every run (those 45 + the four `test_L*`),
+  ~36 s. No pre-existing gate changed outcome. `test_reachability_tolerance_spec`: 9 passed, 3
+  skipped (its Linux-only G1–G3), three runs each, before and after.
+- **Linux container: the pre-registered criterion (same failure count before and after) was NOT
+  met,** and the container cannot say why. Before: 16 failed / 29 passed (45 tests, one run). After:
+  17 failed / 32 passed in all four runs, i.e. 17 failed / 28 passed among the same 45, plus the four
+  `test_L*` passing — one more pre-existing gate failing. The failing IDs are not stable run-to-run on
+  an unmodified checkout there (re-running only `test_G9_control_tight_scf_stays_on_the_ag_level`
+  twice before the change flipped its [1.19] case), so a one-test difference cannot separate a
+  regression from that nondeterminism. Every failure observed is a `test_G1`/`test_G2`(sq-H4 or
+  linear-H4)/`test_G4`/`test_G5`/`test_G9_control` case — the chem-g14 category — never a
+  `test_G3`/`G6`/`G7`/`G8`/`G10` case or a `test_L*` gate. The macOS runs above, where the file is
+  deterministic, are what show the change regression-free.
 
 **Revision (2026-10-03):**
 
