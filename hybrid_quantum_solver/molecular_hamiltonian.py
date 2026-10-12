@@ -77,6 +77,27 @@ class MolecularHamiltonian:
         return self.total_energy(eigenvalue)
 
 
+# Matches reachability.TIGHT_SCF_CONV_TOL (specs/SPEC_scf_conv_tol.md G3: collapses the
+# symmetry-forbidden-level SCF residue to machine zero). Duplicated as a literal rather than
+# imported -- this package does not depend on the top-level research scripts (reachability.py is
+# one of those; see CLAUDE.md "Architecture"), so the two constants are kept in sync by hand and by
+# tests/test_symmetric_scf_spec.py G6.
+_SYMMETRIC_TIGHT_CONV_TOL = 1e-13
+
+
+def _point_group(atom: str, basis: str, charge: int, spin: int) -> str:
+    """PySCF's point-group label for this geometry/basis (``"C1"`` if none detected).
+
+    Geometry-only: this does not run SCF, so it says nothing about whether RHF will land on a
+    symmetric or a spontaneously symmetry-broken solution (square H4 does both, depending on
+    side length -- specs/SPEC_symmetry_reachability.md).
+    """
+    from pyscf import gto
+
+    mol = gto.M(atom=atom, basis=basis, charge=charge, spin=spin, symmetry=True, verbose=0)
+    return mol.groupname
+
+
 def map_canonical(mapper, fermionic_op: FermionicOp) -> SparsePauliOp:
     """Map a fermionic operator to qubits bit-for-bit independently of PYTHONHASHSEED.
 
@@ -104,6 +125,7 @@ def build_molecular_hamiltonian(
     active_orbitals: Optional[int] = None,
     mapper: Optional[JordanWignerMapper] = None,
     conv_tol: float = 1e-9,
+    symmetric_scf: bool = False,
 ) -> MolecularHamiltonian:
     """Build the correct qubit Hamiltonian for a molecule.
 
@@ -124,13 +146,29 @@ def build_molecular_hamiltonian(
             unchanged to 10 digits. That artifact is specific to exact-symmetry
             geometries (e.g. square H4); it is not a general reason to tighten the
             default.
+        symmetric_scf: opt-in (default ``False``, so every existing call site is
+            unaffected). When ``True`` and PySCF detects nontrivial point-group symmetry
+            in ``atom``/``basis``/``charge``/``spin``, ``conv_tol`` is floored to
+            ``reachability.TIGHT_SCF_CONV_TOL`` (1e-13) before the SCF runs -- fixing the
+            residue artifact above at its source (the loose SCF that creates it) rather
+            than downstream, in whatever consumes the returned ``MolecularHamiltonian``.
+            A no-op (bit-identical build) on geometries PySCF labels ``"C1"``. See
+            ``specs/SPEC_symmetric_scf.md`` for the blast-radius analysis of why this is
+            opt-in rather than the default: the gates in ``SPEC_scf_conv_tol`` and
+            ``SPEC_eigenstate_reachability`` deliberately pin the residue's presence in
+            the DEFAULT build, so flipping this on everywhere would move them.
 
     Returns:
         A populated :class:`MolecularHamiltonian`.
     """
     mapper = mapper or JordanWignerMapper()
 
-    problem = PySCFDriver(atom=atom, basis=basis, charge=charge, spin=spin, conv_tol=conv_tol).run()
+    effective_conv_tol = conv_tol
+    if symmetric_scf and _point_group(atom, basis, charge, spin) != "C1":
+        effective_conv_tol = min(conv_tol, _SYMMETRIC_TIGHT_CONV_TOL)
+
+    problem = PySCFDriver(atom=atom, basis=basis, charge=charge, spin=spin,
+                          conv_tol=effective_conv_tol).run()
 
     if active_electrons is not None and active_orbitals is not None:
         problem = ActiveSpaceTransformer(active_electrons, active_orbitals).transform(problem)
@@ -155,9 +193,9 @@ def build_molecular_hamiltonian(
         num_particles=problem.num_particles,
         num_spatial_orbitals=problem.num_spatial_orbitals,
         hf_energy=hf_energy,
-        build_args=dict(atom=atom, basis=basis, charge=charge, spin=spin, conv_tol=conv_tol,
-                        active_electrons=active_electrons, active_orbitals=active_orbitals,
-                        mapper=type(mapper).__name__),
+        build_args=dict(atom=atom, basis=basis, charge=charge, spin=spin,
+                        conv_tol=effective_conv_tol, active_electrons=active_electrons,
+                        active_orbitals=active_orbitals, mapper=type(mapper).__name__),
     )
 
 
