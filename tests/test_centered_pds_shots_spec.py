@@ -54,7 +54,7 @@ def test_G0a_noiseless_reproduces_centered_pds():
     mh = _n2()
     lam, V, hf, lo, hi = cps.sector_eigensystem(mh)
     d0 = cps.exact_weights(V, lo, hi, hf)
-    ref, off = hamiltonian_moments(mh, 15)
+    ref, off = hamiltonian_moments(mh, 15, centered=False)   # raw frame, as cps.moments(.., 0.0, ..)
     assert np.max(np.abs(cps.moments(lam, d0, 0.0, 15) - ref) / np.abs(ref)) < 1e-12
     res = _study()
     e0 = res["e0"]
