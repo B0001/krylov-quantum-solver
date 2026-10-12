@@ -131,7 +131,10 @@ scipy = [
 #   chem-a0y  macOS-only LAPACK ZHEEVD abort; same reason
 #   chem-3z8  research-sized; needs an SDP producer chosen by a human first
 #   chem-80w  run_on_cloud.sh / GCP pipeline; needs the owner's cloud context
-park = ["chem-dfe", "chem-3z8", "chem-80w", "chem-a0y"]
+#   chem-i19  cross-platform tier fingerprint; verifying it needs a macOS host too
+#   chem-nxn  its 2026-10-01 branch is 90 commits behind main and claims DONE, but
+#             none of it landed; needs a human rebase/review, not another worker
+park = ["chem-dfe", "chem-3z8", "chem-80w", "chem-a0y", "chem-i19", "chem-nxn"]
 # block2 0.5.3 has no Linux arm64 wheel, so chem's workers run as linux/amd64
 # (emulated on Apple silicon); see sandbox.Dockerfile. Build it before the first run.
 image = "claude-chem"
