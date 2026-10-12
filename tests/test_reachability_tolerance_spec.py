@@ -174,6 +174,9 @@ def test_G7_the_state_is_symmetry_forbidden_to_the_HF_determinant():
         solver.wfnsym = wfnsym
         solver.nroots = 1
         e, civec = solver.kernel()
+        if not solver.converged:
+            raise RuntimeError(f"FCI Davidson did not converge for wfnsym={wfnsym!r} "
+                                f"(chem-60i: an unchecked Davidson call can silently report a wrong energy)")
         c0 = float(np.atleast_2d(np.asarray(civec))[0, 0])
         coeffs[wfnsym] = (float(np.atleast_1d(e)[0]), c0 ** 2)
     # The B1g state is LOWER in energy but carries exactly zero HF weight.
