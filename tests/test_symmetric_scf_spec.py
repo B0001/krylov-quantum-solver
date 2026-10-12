@@ -37,6 +37,12 @@ from reachability import (  # noqa: E402
 
 ASYM_H4 = "H 0 0 0; H 1.1 0.2 0.3; H 1.9 1.3 0.1; H 0.3 1.7 0.9"  # true C1: no mirror plane
 WITNESS_A = 1.2  # square H4 side; Linux-native residue witness (SPEC_symmetric_scf R2)
+_LINUX_REFERENCE_ONLY = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="square H4 side 1.2 is a Linux-native witness (spec R2): on macOS 27 its RHF breaks "
+           "symmetry (scf_symmetry_status -> (True, -0.0764 Ha), threads pinned), so there is no "
+           "residue to collapse and both builds' QKSD land on B1g. specs/SPEC_symmetric_scf.md R2.",
+)
 
 
 def _square(a):
@@ -123,6 +129,7 @@ def test_G5_equivalent_to_manual_tight_tolerance(a):
 
 # --- G6: residue collapse at the Linux-native witness, thread-pinned (definition of done, 1/2) ----
 
+@_LINUX_REFERENCE_ONLY
 def test_G6_residue_collapses_at_the_witness():
     atom = _square(WITNESS_A)
     for _ in range(5):
@@ -145,6 +152,7 @@ def test_G6_residue_collapses_at_the_witness():
 
 # --- G7: QKSD lands on the physical level, not the artifact (definition of done, 2/2) -------------
 
+@_LINUX_REFERENCE_ONLY
 def test_G7_qksd_lands_on_the_physical_level_not_the_artifact():
     atom = _square(WITNESS_A)
     e_ag = ter._fci(atom, "Ag")[0]

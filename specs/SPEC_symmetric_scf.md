@@ -138,6 +138,12 @@ helper in `hybrid_quantum_solver/molecular_hamiltonian.py`); gates in
   are not even landing near the same solution family as the macOS run). Recorded on `chem-ffe`
   (notes) rather than a new bead, since that bead's stated purpose is exactly a Linux verification
   pass over these witnesses.
+  **macOS (2026-10-12, merging into main; macOS 27, Apple M3, threads pinned):** side 1.2 falls on
+  the other side of that inversion — `scf_symmetry_status` returns `(True, -0.0764 Ha)` — so G6
+  sees no `RuntimeWarning` and G7's `symmetric_scf=True` QKSD lands on B1g (`-4.3551` vs Ag
+  `-4.2059` electronic), on the unmerged branch (`d9e9d2e`) as well as the merge. G6/G7 are
+  therefore Linux-reference-only (`_LINUX_REFERENCE_ONLY`, as `SPEC_reachability_tolerance` §10);
+  the other 21 gates pass on macOS. No macOS-native witness was searched for.
 - **R3 — multithreaded BLAS nondeterminism.** Without thread-pinning, repeated default-`conv_tol`
   builds at the same geometry on this machine landed on visibly different SCF trajectories run to
   run (`chem-8tl`'s already-documented phenomenon, previously measured via Hamiltonian hash digest;
