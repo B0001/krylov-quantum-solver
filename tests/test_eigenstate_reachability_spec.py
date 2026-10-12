@@ -351,3 +351,139 @@ def test_G10_odd_electron_active_space_is_verified():
                              active_orbitals=4)
     assert orbital_parity_bounds(mh) is not None             # the rebuild reproduced the operator
     assert symmetry_allowed(mh, w, V)[pops > REACHABLE_TOL_CERTIFIED].all()
+
+
+# --- L1-L4: the known limitations in SPEC section 8 (chem-648) -------------------------------------
+#
+# These four witnesses are reproduced with _driver_orbitals (or hf_symmetry_sector) monkeypatched to
+# supply known orbitals/sectors directly, rather than through the production PySCFDriver rebuild
+# path. That path's reproducibility check (_SAME_OPERATOR_ATOL) is independently flaky on this Linux
+# environment for near-degenerate geometries (chem-g14, filed and out of scope here: see
+# sandbox-handoffs/chem-648.md) -- it fails even for an EXACT, unperturbed square/rectangle H4 at
+# conv_tol=1e-13, because free (symmetry=False) SCF leaves an arbitrary, non-reproducible rotation
+# inside a geometrically-degenerate MO shell. Monkeypatching isolates the L1-L4 logic itself from
+# that unrelated bug so these gates are deterministic. L3 is the exception: it reproduces end-to-end
+# with no monkeypatch at all, since its witness has no degenerate-shell SCF involved.
+
+def _rhf(atom, conv_tol=1e-12):
+    from pyscf import gto, scf
+
+    mol = gto.M(atom=atom, basis="sto-3g", symmetry=False, verbose=0)
+    mf = scf.RHF(mol)
+    mf.conv_tol = conv_tol
+    mf.kernel()
+    assert mf.converged
+    return mol, mf
+
+
+def test_L1_degenerate_shell_split_window_is_excluded_full_window_is_not(monkeypatch):
+    """CH4 Td (reduced to D2 by PySCF), C-H 1.087 A, STO-3G (SPEC L1 witness). CAS(2,2) on 2 of the
+    3 degenerate HOMO (t2) MOs compresses R_b away from orthogonal -- excluded (beta=inf). A
+    non-degenerate CAS(2,2) window (HOMO-1, LUMO; both singly-degenerate 'a1'-like MOs under this
+    SCF) is not."""
+    r = 1.087 / 0.529177210903
+    d = r / np.sqrt(3)
+    hpos = [(d, d, d), (d, -d, -d), (-d, d, -d), (-d, -d, d)]
+    atom = "C 0 0 0; " + "; ".join(f"H {x} {y} {z}" for x, y, z in hpos)
+    mol, mf = _rhf(atom)
+    assert np.ptp(mf.mo_energy[2:5]) < 1e-8, "HOMO shell is not degenerate here -- witness stale"
+
+    mh0 = _system(H2)[0]
+
+    def bounds_for(mo_window):
+        mh = dataclasses.replace(mh0, num_particles=(1, 1))
+        monkeypatch.setattr(reachability, "_driver_orbitals", lambda _mh: (mol, mo_window))
+        return orbital_parity_bounds(mh)
+
+    split = bounds_for(mf.mo_coeff[:, [2, 3]])         # 2 of the 3 degenerate t2 MOs
+    assert all(beta == float("inf") for _, beta in split)
+
+    whole = bounds_for(mf.mo_coeff[:, [1, 5]])         # non-degenerate HOMO-1/LUMO window
+    assert all(beta < 1e-10 for _, beta in whole)
+
+
+def _rect_h4(dx_angstrom, conv_tol=1e-13):
+    """D2h rectangle H4 (a != b: no orbital degeneracy), one atom shifted by dx along x."""
+    from pyscf import gto
+
+    a, b = 1.1, 1.3
+    dx = dx_angstrom / 0.529177210903
+    atom = f"H 0 0 0; H {a + dx} 0 0; H {a} {b} 0; H 0 {b} 0"
+    mol, mf = _rhf(atom, conv_tol)
+    ref = gto.M(atom=mol.atom, symmetry=True, verbose=0)
+    return mol, mf, ref.groupname
+
+
+def test_L2_geometry_pyscf_mistakes_for_exact_is_excluded(monkeypatch):
+    """Rectangle H4 (a=1.1, b=1.3 A), one atom shifted 1e-6 A along x: real D2h symmetry is broken,
+    but PySCF's own (natm-scaled) detection tolerance still reports D2h -- SPEC L2's witness (the
+    spec recorded 5e-6/1e-5 A on macOS; this environment's boundary is an order of magnitude tighter,
+    1e-6 vs 2e-6 A, a platform/pyscf-version difference, not a re-derivation of the mechanism). The
+    exact (dx=0) geometry is a clean control: no orbital degeneracy, so no SCF-rotation ambiguity,
+    and every D2h bit should be (and is) trusted."""
+    mh0 = _system(H2)[0]
+
+    def bounds_for(dx):
+        mol, mf, groupname = _rect_h4(dx)
+        mh = dataclasses.replace(mh0, num_particles=(2, 2))
+        monkeypatch.setattr(reachability, "_driver_orbitals", lambda _mh: (mol, mf.mo_coeff))
+        return groupname, orbital_parity_bounds(mh)
+
+    gp, exact = bounds_for(0.0)
+    assert gp == "D2h" and all(beta < 1e-10 for _, beta in exact)
+
+    gp, fooled = bounds_for(1e-6)
+    assert gp == "D2h", "witness stale: PySCF no longer fooled at this perturbation"
+    assert all(beta == float("inf") for _, beta in fooled)
+
+
+def test_L3_mapper_is_recorded_and_checked():
+    """Linear H4, spin=2 (SPEC L3 witness): an InterleavedQubitMapper build shares its HF
+    computational-basis INDEX with a Jordan-Wigner build of the same system, despite a different
+    qubit layout. Reproduces end-to-end (no monkeypatch): build_args now records the mapper, and
+    hf_symmetry_sector refuses the coincidence rather than trusting the index alone."""
+    from qiskit_nature.second_q.mappers import InterleavedQubitMapper, JordanWignerMapper
+
+    mh_jw = build_molecular_hamiltonian(atom=LIN_H4, spin=2)
+    mh_int = build_molecular_hamiltonian(atom=LIN_H4, spin=2,
+                                         mapper=InterleavedQubitMapper(JordanWignerMapper()))
+    hf_jw = int(np.argmax(np.abs(np.asarray(mh_jw.hf_state().data))))
+    hf_int = int(np.argmax(np.abs(np.asarray(mh_int.hf_state().data))))
+    assert hf_jw == hf_int, "witness stale: the two mappers no longer share an HF index"
+
+    assert mh_jw.build_args["mapper"] == "JordanWignerMapper"
+    assert mh_int.build_args["mapper"] == "InterleavedQubitMapper"
+    assert hf_symmetry_sector(mh_jw) is not None
+    assert hf_symmetry_sector(mh_int) is None
+
+
+def test_L4_accidental_cross_sector_degeneracy_abstains(monkeypatch):
+    """Two eigenvectors merged into one cluster (|E1 - E2| < _DEGENERATE_ATOL) whose HF-projection
+    splits the cluster's weight exactly 50/50 between in-sector and out-of-sector rows: the
+    majority-only rule (weight > 0.5) would flag BOTH as forbidden on this tie; the abstention band
+    (chem-648 L4) instead leaves both allowed. A cluster clearly on one side (weight=0.95) is
+    unaffected and still decided normally."""
+    from qiskit.circuit import QuantumCircuit
+
+    mh0 = _system(H2)[0]
+    mh = dataclasses.replace(mh0, hf_circuit=QuantumCircuit(2))     # |HF> = |00> (row 0)
+    sector = np.array([True, True, False, False])
+    monkeypatch.setattr(reachability, "hf_symmetry_sector", lambda _mh: sector)
+
+    def weight_of(a2):
+        a, b = np.sqrt(a2), np.sqrt(1 - a2)
+        vecs = np.array([[a, 0.0], [0.0, 1.0], [b, 0.0], [0.0, 0.0]])
+        w = np.array([0.0, 0.5e-9])                 # one cluster: within _DEGENERATE_ATOL
+        return w, vecs
+
+    w, vecs = weight_of(0.5)                          # exactly ambiguous
+    allowed = symmetry_allowed(mh, w, vecs)
+    assert allowed.all(), "exact 50/50 tie should abstain (allowed), not flag"
+
+    w, vecs = weight_of(0.95)                         # clearly outside the ambiguous band
+    allowed = symmetry_allowed(mh, w, vecs)
+    assert allowed.all(), "0.95 is > 1 - margin, so it is decided (allowed) normally"
+
+    w, vecs = weight_of(0.0005)                       # clearly outside the band, on the other side
+    allowed = symmetry_allowed(mh, w, vecs)
+    assert not allowed.any(), "0.0005 is < margin, so it is decided (forbidden) normally"

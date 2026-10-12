@@ -175,6 +175,65 @@ def _driver_orbitals(mh):
     return drv._mol, mo
 
 
+# D_b R_b bounds the Z-string error only where R_b (the point-group operation g_b restricted to the
+# active MO window, oblique-projected) is itself orthogonal. An active window that splits a
+# point-group-degenerate shell compresses R_b into something far from orthogonal, and the beta bound
+# built from it can then be small (and so get greedily ACCEPTED by hf_symmetry_sector) while being
+# physically wrong -- chem-648 L1, CH4 Td CAS(2,2): a populated level solve_excited reports as theta_1
+# got flagged forbidden this way. Measured separation on that witness: ||R_b R_b^T - I|| ~ 1e-14 for
+# the full orbital space or a window that does not split a degenerate shell, >= 5.7e-4 once it does.
+_R_ORTHOGONALITY_ATOL = 1e-6
+
+# Bit -> the Cartesian operation it is the sign of, derived from pyscf.symm.param.CHARACTER_TABLE
+# (column order matches OPERATOR_TABLE; bit b's column is the one whose +-1 pattern across irrep ids
+# equals (-1)**((id >> b) & 1)). Only the finite abelian point groups symm_adapted_basis actually
+# returns for a non-linear molecule; Dooh/Coov (linear) are out of scope for the geometric check
+# below -- their ids are folded into a D2h/C2v parent by ``% 10`` and the bit layout differs.
+_BIT_OPERATION = {
+    "D2h": ("C2y", "C2z", "i"),
+    "D2": ("C2y", "C2z"),
+    "C2h": ("C2z", "i"),
+    "C2v": ("sy", "C2z"),
+    "Cs": ("sz",),
+    "Ci": ("i",),
+    "C2": ("C2z",),
+    "C1": (),
+}
+
+# A real symmetry operation applied to the ACTUAL (unsymmetrized) geometry, independent of whatever
+# geometric tolerance PySCF's own detection used. Exact-to-double-precision geometries land at
+# ~1e-15 Bohr; chem-648 L2's witness (square H4, one atom moved 1e-6 Angstrom -- still inside PySCF's
+# natm-scaled detection tolerance, so ``ref.groupname`` still reports D2h) lands at ~1e-6 Bohr under
+# the operations that atom's shift actually breaks. Fixed and size-independent, unlike
+# ``symm.geom.TOLERANCE`` (which both PySCF's detection AND symm_adapted_basis's own atom-equivalence
+# grouping use, scaled by ``1/sqrt(1+natm)``) -- that is the point: this check does not inherit it.
+_GEOMETRY_RESIDUAL_ATOL = 1e-8
+
+
+def _geometry_residuals(mol, ref):
+    """{op_name: max atom-mapping residual (Bohr)} for each bit's claimed operation, checked against
+    the REAL geometry directly -- not PySCF's own (size-scaled) detection tolerance."""
+    from pyscf import symm
+
+    ops = _BIT_OPERATION.get(ref.groupname, ())
+    if not ops:
+        return {}
+    prop_atoms = mol.format_atom(mol._atom, ref._symm_orig, ref._symm_axes, "Bohr")
+    coords = np.array([a[1] for a in prop_atoms])
+    elems = [a[0] for a in prop_atoms]
+    opdic = symm.geom.symm_ops(ref.groupname)
+    out = {}
+    for name in ops:
+        op = opdic[name]
+        newc = coords * op if np.ndim(op) == 0 else coords @ op
+        residual = 0.0
+        for i, elem in enumerate(elems):
+            same = [j for j, e in enumerate(elems) if e == elem]
+            residual = max(residual, float(np.min(np.linalg.norm(coords[same] - newc[i], axis=1))))
+        out[name] = residual
+    return out
+
+
 def orbital_parity_bounds(mh):
     """[(odd, beta)] per parity bit of the point group's abelian irrep ids, or None if ``mh``'s MO
     basis cannot be verified (no geometry, or a stale/edited operator).
@@ -184,8 +243,12 @@ def orbital_parity_bounds(mh):
     ||Z-string - exact operator|| on N-electron states: the sum of the N largest spin-orbital
     |1 - lambda| over the eigenvalues of D_b R_b (specs/SPEC_eigenstate_reachability.md section 3).
     Rigorous for the full orbital space, where D_b R_b is orthogonal; heuristic for active spaces
-    (and wrong when the window splits a degenerate shell). May raise where PySCF only half-detects
-    the symmetry; ``reachable_mask`` treats any failure here as "no diagnostic".
+    (and wrong when the window splits a degenerate shell) -- guarded by an explicit orthogonality
+    check on R_b, below which a bit is excluded (beta = inf) rather than trusted (chem-648 L1). A bit
+    whose claimed operation does not actually map the real geometry onto itself to
+    ``_GEOMETRY_RESIDUAL_ATOL``, independent of PySCF's own detection tolerance, is excluded the same
+    way (chem-648 L2). May raise where PySCF only half-detects the symmetry; ``reachable_mask`` treats
+    any failure here as "no diagnostic".
     """
     found = _driver_orbitals(mh)
     if found is None:
@@ -201,10 +264,18 @@ def orbital_parity_bounds(mh):
     s = mol.intor_symmetric("int1e_ovlp")
     proj = [mo.T @ s @ c @ np.linalg.solve(c.T @ s @ c, c.T @ s @ mo) for c in so]
     n_elec = sum(mh.num_particles)
+    geom_residuals = _geometry_residuals(mol, ref)
+    op_names = _BIT_OPERATION.get(ref.groupname, ())
     bounds = []
     for b in range(int(ids.max()).bit_length()):
         r = sum((-1.0) ** ((i >> b) & 1) * p for i, p in zip(ids, proj))   # g_b, MO basis
         odd = np.diag(r) < 0
+        untrustworthy = np.linalg.norm(r @ r.T - np.eye(r.shape[0])) > _R_ORTHOGONALITY_ATOL
+        if b < len(op_names):
+            untrustworthy |= geom_residuals.get(op_names[b], 0.0) > _GEOMETRY_RESIDUAL_ATOL
+        if untrustworthy:
+            bounds.append((odd, float("inf")))   # compressed/not-really-symmetric: not trustworthy
+            continue
         lam = np.linalg.eigvals(np.where(odd, -1.0, 1.0)[:, None] * r)
         dev = np.sort(np.repeat(np.abs(1.0 - lam), 2))[::-1]               # alpha and beta
         bounds.append((odd, float(dev[:n_elec].sum())))
@@ -219,16 +290,22 @@ def hf_symmetry_sector(mh) -> Optional[np.ndarray]:
     projector within 1/2 of the exact one so the majority test in ``symmetry_allowed`` cannot flip
     for a non-degenerate symmetry eigenstate. None when |HF> is not a Jordan-Wigner HF bitstring
     (other mapper, tapered operator): no sector, so no diagnostic. The layout check sees only the HF
-    index, which an interleaved-mapper operator can share (a known limitation of the diagnostic).
+    index, which an interleaved-mapper operator CAN share with a Jordan-Wigner one for some
+    (n_alpha, n_beta, n_orb) -- chem-648 L3 -- so it additionally requires ``build_args`` (when
+    present) to record ``mapper="JordanWignerMapper"``; absent ``build_args`` (no provenance, e.g.
+    ``build_hamiltonian_from_integrals``, which only ever uses Jordan-Wigner) still trusts the index.
     """
     cached = mh.__dict__.get("_hf_sector")
     if cached is not None and cached[0] is mh.qubit_hamiltonian:
         return cached[1]        # ponytail: per-instance cache; the rebuild is an SCF + a JW map
+    build_args = getattr(mh, "build_args", None)
+    mapper_name = build_args.get("mapper", "JordanWignerMapper") if build_args else "JordanWignerMapper"
     n, n_orb = mh.num_qubits, mh.num_spatial_orbitals
     n_a, n_b = mh.num_particles
     hf = int(np.argmax(np.abs(np.asarray(mh.hf_state().data))))
     sector = None
-    if n == 2 * n_orb and hf == (1 << n_a) - 1 + (((1 << n_b) - 1) << n_orb):
+    if (mapper_name == "JordanWignerMapper" and n == 2 * n_orb
+            and hf == (1 << n_a) - 1 + (((1 << n_b) - 1) << n_orb)):
         occ = ((np.arange(2 ** n)[:, None] >> np.arange(n)) & 1).astype(np.int8)
         sector = (occ[:, :n_orb].sum(1) == n_a) & (occ[:, n_orb:].sum(1) == n_b)
         budget = 0.0
@@ -248,6 +325,14 @@ def hf_symmetry_sector(mh) -> Optional[np.ndarray]:
 # wrong one -- a missed or spurious diagnostic warning; the reachable mask never depends on it.
 _DEGENERATE_ATOL = 1e-9
 
+# A cluster's sector weight is 0 or 1 to within this on every witnessed gated system (also G6's own
+# bound) -- real symmetry (even a true degeneracy spanning two sectors, e.g. an open-shell M_s pair)
+# concentrates HF's overlap on one side. A weight meaningfully away from 0 or 1 is the signature of
+# chem-648 L4: an ACCIDENTAL <1e-9 Ha degeneracy merging two different-symmetry, both-populated
+# levels into one cluster, where the majority rule's 1/2 cut is no longer backed by physics. Abstain
+# (do not flag) rather than guess which side the majority verdict actually belongs to.
+_AMBIGUOUS_WEIGHT_MARGIN = 1e-3
+
 
 def symmetry_allowed(mh, w, vecs) -> np.ndarray:
     """Per eigenvector: does HF's component in its eigenspace lie mostly in HF's symmetry sector?
@@ -256,7 +341,10 @@ def symmetry_allowed(mh, w, vecs) -> np.ndarray:
     basis-independent projection phi_C = V_C V_C^dagger |HF>: allowed iff ||P_sector phi_C||^2 >
     ||phi_C||^2 / 2 -- exactly 1 or 0 under exact symmetry, so 1/2 is its rounding, not a tuned
     constant. Per vector this is the majority test; per cluster it survives ``eigh`` mixing exactly
-    degenerate levels across sectors (open-shell M_s pairs), which a per-vector test does not.
+    degenerate levels across sectors (open-shell M_s pairs), which a per-vector test does not. A
+    cluster whose weight falls in the ambiguous band around 1/2 (chem-648 L4: an accidental,
+    non-symmetry degeneracy merging two real sectors) abstains -- treated as allowed -- rather than
+    applying the majority cut, since neither side of 1/2 is trustworthy there.
     Meaningful only where HF's projection is above roundoff (populated levels). All True when no
     sector can be formed. A DIAGNOSTIC: no reference depends on it (see ``reachable_mask``)."""
     sector = hf_symmetry_sector(mh)
@@ -267,7 +355,11 @@ def symmetry_allowed(mh, w, vecs) -> np.ndarray:
     for idx in np.split(np.arange(len(w)), np.flatnonzero(np.diff(w) > _DEGENERATE_ATOL) + 1):
         c = vecs[hf, idx].conj()                         # <psi_k|HF>, k in the cluster
         inside = vecs[np.ix_(sector, idx)] @ c           # P_sector phi_C
-        allowed[idx] = np.vdot(inside, inside).real > 0.5 * np.vdot(c, c).real
+        c_norm = np.vdot(c, c).real
+        weight = np.vdot(inside, inside).real / c_norm if c_norm > 0 else 0.0
+        if _AMBIGUOUS_WEIGHT_MARGIN < weight < 1.0 - _AMBIGUOUS_WEIGHT_MARGIN:
+            continue                                    # accidental cross-sector degeneracy: abstain
+        allowed[idx] = weight > 0.5
     return allowed
 
 

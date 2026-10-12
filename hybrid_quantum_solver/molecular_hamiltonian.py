@@ -156,7 +156,8 @@ def build_molecular_hamiltonian(
         num_spatial_orbitals=problem.num_spatial_orbitals,
         hf_energy=hf_energy,
         build_args=dict(atom=atom, basis=basis, charge=charge, spin=spin, conv_tol=conv_tol,
-                        active_electrons=active_electrons, active_orbitals=active_orbitals),
+                        active_electrons=active_electrons, active_orbitals=active_orbitals,
+                        mapper=type(mapper).__name__),
     )
 
 
