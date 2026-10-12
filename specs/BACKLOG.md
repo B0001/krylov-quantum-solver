@@ -545,10 +545,11 @@ hypothesis whose death is informative is worth more here than a safe one.
   earlier scout-probe numbers logged in this entry's history ("2.285 vs 2.175, 2.351 vs 2.285, 2.391
   vs 2.364") are close to but not identical with this closure's pre-registered `π·sin θ₀` values —
   they predate the pre-registration discipline applied here and were not reproduced as part of this
-  closure; treat this entry's own numbers above as the checked ones. **Landing finding (not gated):**
-  on chem-177's recentered walk, H₂ at t=4 reaches 2.6966 > π·sin θ₀' = 2.6212. That is under the
-  exact nearest-bin bound 2.7739, so the first-order envelope is not a strict bound at small t
-  (SPEC §10).
+  closure; treat this entry's own numbers above as the checked ones. **Landing finding, now gated
+  (chem-bu4, SPEC §10/G4):** on chem-177's recentered walk, H₂ at t=4 reaches 2.6966 > π·sin θ₀' =
+  2.6212. That is under the exact nearest-bin bound 2.7739, so the first-order envelope is not a
+  strict bound at small t — restated as a large-t envelope, with the exact bound gated directly on
+  both walks across t=4..14.
   *Cost:* cheap; ≤6 qubits (`pauli_decompose` is exponential). *Caveat:* an upper envelope (first-order
   geometric argument, not a worst-case proof), tested on 3 systems, all STO-3G, all ≤6 qubits, all near
   equilibrium geometry — generalization beyond that is not tested (`SPEC_qpe_precision_bound` R1-R3).
@@ -564,8 +565,9 @@ hypothesis whose death is informative is worth more here than a safe one.
   closed form for a literal *fixed-t* point-estimate ratio is **killed** (the ratio swings 18–279×
   across t=4..20 on every system — the dyadic staircase the π·sin θ₀ entry above bounds), while
   λ'/λ = 0.51–0.70 cuts the walk-step budget ∝ λ/ε by 1.43–1.94× and the phase-bit count at ε=1e-3
-  by 0–1 bit (13→13, 13→12, 15→14, 15→14 under the *empirical* `3λ/2^t` envelope of
-  `SPEC_qpe_readout_laws` G2; the decode's hard ceiling is π), confirmed by running `run_qpe` end to
+  by 0–1 bit (14→13, 13→12, 15→14, 15→15, revised chem-bu4 to use the derived hard ceiling `πλ/2^t`
+  in the budget formula itself, in place of the *empirical* `3λ/2^t` fit of `SPEC_qpe_readout_laws`
+  G2), confirmed by running `run_qpe` end to
   end at each variant's own budget (G3); (4) `df_lambda` vs
   identity-excluded naive λ resolved as **NOT-COMPARABLE-AND-VACUOUS, not a flip**: `SPEC_scdf_lambda`
   G1(b) (identity-*included* comparison) still holds on every system, and `df_lambda` is a provably
