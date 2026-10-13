@@ -268,7 +268,24 @@ the upgrade path.
   majority-only rule would flag both members of that tie as forbidden; the fix abstains on both.
 - **R2 — residual symmetry outside PySCF's abelian frame.** At broken-RHF geometries a level can
   still carry convergence-dependent population (sq-H₄ 1.20: 1.5e-9 → 6.2e-9 between `conv_tol` 1e-9
-  and 1e-6) that the D2h bits cannot see; the diagnostic is silent there.
+  and 1e-6) that the D2h bits cannot see; the diagnostic is silent there. **Mechanism identified
+  (chem-3fd, 2026-10-13):** sq-H₄/sto-3g is planar (every atom at z = 0) with an all-s-type basis, so
+  σ_xy — the D2h operation `_BIT_OPERATION` never names — acts as the identity on every AO. D2h's
+  group relation `i = σ_xy·C2z` then forces `rep(i) = rep(C2z)` exactly: `_BIT_OPERATION["D2h"] =
+  (C2y, C2z, i)` carries only 2 independent bits on this geometry/basis, not 3 (confirmed:
+  `orbital_parity_bounds`'s bit1/bit2 `R_b` matrices are byte-identical at every bond length probed).
+  Consequence for `hf_symmetry_sector`'s greedy budget: whenever the C2y-type bit is excluded for
+  any reason (genuine RHF symmetry-breaking, chem-3fd's a = 1.35 witness below; or an arbitrary
+  near-degenerate-pair rotation — sq-H₄ is a perfect square at every tested `a`, so it carries the
+  non-abelian D4h point group and PySCF's own symmetry detection only ever returns the D2h subgroup,
+  leaving an exactly-degenerate real irrep for the free, `symmetry=False` solve to mix arbitrarily;
+  observed directly at a = 1.00 flipping the same bit between β ≈ 0 and β ≈ 5.66 across fresh
+  process runs of the identical, fully-converged lowest-energy solution), only one effective
+  constraint beyond (N_α, N_β) remains — mathematically insufficient to cut 20 candidate levels down
+  to the true 10-level Ag sector. Not a defect in the projector or budget math (both are correct
+  given the bits available); D2h genuinely does not have a third independent generator for this
+  geometry/basis class. Out of scope to fix without a basis- or geometry-dependent bit set beyond
+  `_BIT_OPERATION["D2h"]`'s three names — not attempted here.
 - **R3 — cost.** One extra SCF + JW map per Hamiltonian (cached on the instance), as in PR #62.
 - **R4 — Linux.** With the population cut restored, the Linux-only failures PR #62 predicted for
   `test_reachability_tolerance_spec` G2 and G5 (`constant_governs_the_certified_reference`) should
