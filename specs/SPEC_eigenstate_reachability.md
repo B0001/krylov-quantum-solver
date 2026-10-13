@@ -273,6 +273,26 @@ the upgrade path.
 - **R4 — Linux.** With the population cut restored, the Linux-only failures PR #62 predicted for
   `test_reachability_tolerance_spec` G2 and G5 (`constant_governs_the_certified_reference`) should
   not happen: those gates pin the residue the cut keeps. Not verifiable on this macOS host.
+- **R5 — D2h's three named bits are not independent for a planar, all-s-orbital molecule
+  (chem-0m8, chem-3fd).** `_BIT_OPERATION["D2h"] = (C2y, C2z, i)` assumes three independent
+  generators. For square H4/sto-3g (every atom at z=0, s-type basis only) sigma_xy fixes every
+  atom and every AO is invariant under z -> -z, so sigma_xy acts as the IDENTITY operator on the
+  AO space -- independent of bond length and of which RHF branch (symmetric or symmetry-broken)
+  produced the MOs. D2h's group relation `i = sigma_xy . C2z` then forces `rep(i) == rep(C2z)`
+  EXACTLY in any MO basis: verified directly, the two bits' `R_b` matrices built by
+  `orbital_parity_bounds` are byte-identical at a = 1.05, 1.10, 1.19, 1.35, on whichever branch the
+  free SCF reached. Only 2 of the 3 named bits are independent, which can distinguish at most 4
+  parity sectors -- mathematically insufficient to isolate D2h's Ag irrep (1 of 8) from the 36
+  levels sharing HF's (N_alpha, N_beta); observed as an exact 2x over-inclusion (20 vs the true 10)
+  once `orbital_parity_bounds` succeeds. This is a provable fact of the geometry + basis, not
+  platform or RHF-branch variance (that is chem-7cx's, separate, domain) -- `test_G2`'s square-H4
+  cases are marked `xfail` for this reason, not `skip`. No fix within the current 3-bit D2h
+  convention; a redesigned generator set (so a planar system's bits stay independent) is out of
+  scope here. `test_G4`'s hardcoded bond lengths (1.20 broken, 1.40 broken) are a different
+  problem -- not a structural impossibility, but a premise (the free RHF actually broke symmetry
+  at that `a`) that chem-7cx shows is not guaranteed on every host; those tests now check
+  `scf_symmetry_status` first and skip when the premise does not hold, instead of asserting a
+  hardcoded outcome. See `sandbox-handoffs/chem-0m8.md`.
 
 ## 9. Results (macOS 27, Apple M3, 2 BLAS/OMP threads, unless an entry says otherwise)
 
