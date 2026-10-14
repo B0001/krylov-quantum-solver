@@ -63,15 +63,26 @@ def scf_symmetry_status(atom: str, basis: str = "sto-3g",
     ``dE = E_unsymmetrized - E_symmetry_enforced``; negative beyond SYMMETRY_BREAK_TOL means RHF
     broke symmetry. On square H4 this is textbook behaviour for a strongly-correlated square, not a
     defect -- the broken solution is variationally better by ~0.08 Ha.
-    """
-    from pyscf import gto, scf
 
-    free = scf.RHF(gto.M(atom=atom, basis=basis, symmetry=False, verbose=0))
-    free.conv_tol = conv_tol
-    free.kernel()
-    enforced = scf.RHF(gto.M(atom=atom, basis=basis, symmetry=True, verbose=0))
-    enforced.conv_tol = conv_tol
-    enforced.kernel()
+    Both RHF solves run with ``pyscf.lib.num_threads(1)`` pinned (ambient count restored in a
+    ``finally``), the same fix chem-7cx applied to ``build_molecular_hamiltonian``: PySCF's
+    multi-threaded integral evaluation is not bit-associative, which on a near-degenerate geometry
+    can tip the free (``symmetry=False``) solve onto a different locally-stable branch between
+    otherwise-identical calls (chem-s6c, specs/SPEC_reachability_scf_determinism.md).
+    """
+    from pyscf import gto, lib, scf
+
+    ambient_threads = lib.num_threads()
+    lib.num_threads(1)
+    try:
+        free = scf.RHF(gto.M(atom=atom, basis=basis, symmetry=False, verbose=0))
+        free.conv_tol = conv_tol
+        free.kernel()
+        enforced = scf.RHF(gto.M(atom=atom, basis=basis, symmetry=True, verbose=0))
+        enforced.conv_tol = conv_tol
+        enforced.kernel()
+    finally:
+        lib.num_threads(ambient_threads)
     d_e = float(free.e_tot - enforced.e_tot)
     return (d_e < -SYMMETRY_BREAK_TOL), d_e
 
@@ -96,7 +107,7 @@ def hf_orbital_irreps(atom: str, basis: str = "sto-3g",
     Only the first is a refusal. Distinguishing them by ENERGY (not by whether labelling threw) is
     what makes the refusal meaningful.
     """
-    from pyscf import gto, scf, symm
+    from pyscf import gto, lib, scf, symm
 
     broken, _ = scf_symmetry_status(atom, basis=basis, conv_tol=conv_tol)
     if broken:
@@ -105,7 +116,14 @@ def hf_orbital_irreps(atom: str, basis: str = "sto-3g",
     mol_sym = gto.M(atom=atom, basis=basis, symmetry=True, verbose=0)
     mf_sym = scf.RHF(mol_sym)
     mf_sym.conv_tol = conv_tol
-    mf_sym.kernel()
+    # Same thread-pin as scf_symmetry_status (chem-s6c): this is a second, independent RHF solve
+    # (symmetry-enforced, but still subject to the same non-bit-associative integral evaluation).
+    ambient_threads = lib.num_threads()
+    lib.num_threads(1)
+    try:
+        mf_sym.kernel()
+    finally:
+        lib.num_threads(ambient_threads)
     try:
         return list(symm.label_orb_symm(mol_sym, mol_sym.irrep_name, mol_sym.symm_orb,
                                         mf_sym.mo_coeff))
