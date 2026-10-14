@@ -32,7 +32,7 @@ from scipy.sparse import identity
 from scipy.sparse.linalg import expm_multiply
 
 from hybrid_quantum_solver.molecular_hamiltonian import MolecularHamiltonian
-from reachability import _dense_hf_projection, reachable_mask
+from reachability import reachable_frame
 
 
 @dataclass
@@ -56,15 +56,11 @@ def build_odmd_problem(mh: MolecularHamiltonian, n: int = 20) -> ODMDProblem:
     """Exact survival amplitudes s_0..s_{n-1} with the msd.py energy-level shift and tau = pi/W."""
     H_full = mh.qubit_hamiltonian.to_matrix(sparse=True).tocsc()
     psi0 = np.asarray(mh.hf_state().data, dtype=complex)
-    w_eig, V, pops = _dense_hf_projection(mh)       # shared eigh: macOS ZHEEVD fallback
-    reach = w_eig[reachable_mask(mh, w_eig, V, pops, 1e-8)].real    # population cut (chem-obf)
-    width = float(reach.max() - reach.min())
-    mu = float(0.5 * (reach.max() + reach.min()))
-    H_s = (H_full - mu * identity(H_full.shape[0], format="csc")).tocsc()
-    tau = float(np.pi / width)
-    s = np.array([psi0.conj() @ expm_multiply(-1j * (k * tau) * H_s, psi0) for k in range(n)])
-    return ODMDProblem(n=n, tau=tau, mu=mu, s=s, dim=int(H_full.shape[0]),
-                       offset=mh.energy_offset + mu, ref=float(w_eig[0] - mu))
+    frame = reachable_frame(mh)                     # shared eigh + reachable mask + mu/tau (chem-mg8)
+    H_s = (H_full - frame.mu * identity(H_full.shape[0], format="csc")).tocsc()
+    s = np.array([psi0.conj() @ expm_multiply(-1j * (k * frame.tau) * H_s, psi0) for k in range(n)])
+    return ODMDProblem(n=n, tau=frame.tau, mu=frame.mu, s=s, dim=int(H_full.shape[0]),
+                       offset=mh.energy_offset + frame.mu, ref=float(frame.w[0] - frame.mu))
 
 
 def _dmd_modes(s, tau, mod_window, cutoff_abs=0.0, cutoff_rel=0.0):
