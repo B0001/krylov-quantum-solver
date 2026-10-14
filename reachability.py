@@ -183,10 +183,18 @@ def _driver_orbitals(mh):
     alternate MO basis. See ``_ENERGY_MATCH_ATOL`` / ``_MAX_SIGN_SEARCH_ORBITALS`` above and
     chem-g14 / specs/SPEC_rebuild_gauge_search.md. A rebuild whose plain, unflipped comparison
     already matches costs exactly one PySCFDriver call, same as before this fix.
+
+    Each retry's ``drv.run_pyscf()`` runs with ``pyscf.lib.num_threads(1)`` pinned (ambient count
+    restored in a ``finally``) -- the same chem-7cx/chem-s6c fix for the same mechanism (PySCF's
+    multi-threaded integral evaluation is not bit-associative), applied here to this function's own
+    independent RHF solve (chem-50w, specs/SPEC_driver_orbitals_scf_determinism.md). The sign search
+    itself makes no new SCF call (just a fresh AO2MO transform on already-computed ``mo_coeff``), so
+    nothing else here touches thread count.
     """
     args = getattr(mh, "build_args", None)
     if not args:
         return None
+    from pyscf import lib
     from qiskit_nature.second_q.drivers import PySCFDriver
     from qiskit_nature.second_q.mappers import JordanWignerMapper
     from qiskit_nature.second_q.transformers import ActiveSpaceTransformer
@@ -220,7 +228,15 @@ def _driver_orbitals(mh):
     for _ in range(_MAX_REBUILD_RETRIES):
         drv = PySCFDriver(atom=args["atom"], basis=args["basis"], charge=args["charge"],
                           spin=args["spin"], conv_tol=args["conv_tol"])
-        drv.run_pyscf()
+        # PySCFDriver hardcodes symmetry=False; its RHF solve shares chem-7cx/chem-s6c's
+        # non-bit-associative multi-threaded integral evaluation (chem-50w). Pin/restore around
+        # just this call -- the sign search below makes no further SCF call.
+        ambient_threads = lib.num_threads()
+        lib.num_threads(1)
+        try:
+            drv.run_pyscf()
+        finally:
+            lib.num_threads(ambient_threads)
         if hf_energy is not None and abs(drv._calc.e_tot - hf_energy) > _ENERGY_MATCH_ATOL:
             continue                            # a different, worse SCF local minimum -- retry
 
