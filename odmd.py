@@ -40,8 +40,12 @@ class ODMDProblem:
     """Noiseless survival amplitudes in the centered frame (H - mu), msd.py conventions.
 
     Energies from :func:`odmd_energy` are in this frame; add ``offset`` to recover the total
-    energy. ``ref`` is the exact (FCI) ground energy in the frame, so ``ref + offset`` is the
-    total FCI energy.
+    energy. ``ref`` is the exact HF-reachable ground energy in the frame (the lowest
+    population-admitted eigenvalue, `reachable_mask`'s cut -- see specs/SPEC_odmd.md's reachability
+    addendum): the signal `s_k` is built from `|phi_0>` alone, so it can only ever resolve states
+    HF overlaps, and `ref` must track what the signal can converge to, not a global FCI ground the
+    signal has no amplitude on. ``ref + offset`` is the total HF-reachable energy; this equals the
+    total FCI energy except on geometries where HF cannot reach the true ground (chem-1x3).
     """
     n: int
     tau: float             # pi / W, W = HF-reachable spectral width
@@ -49,7 +53,7 @@ class ODMDProblem:
     s: np.ndarray          # complex s_k, k = 0..n-1 (s[0] = 1)
     dim: int               # Hilbert-space dimension d (sets the Hadamard-test variance constant)
     offset: float          # mh.energy_offset + mu  -> total energy
-    ref: float             # exact ground energy in the centered frame
+    ref: float             # HF-reachable ground energy in the centered frame
 
 
 def build_odmd_problem(mh: MolecularHamiltonian, n: int = 20) -> ODMDProblem:
@@ -64,7 +68,7 @@ def build_odmd_problem(mh: MolecularHamiltonian, n: int = 20) -> ODMDProblem:
     tau = float(np.pi / width)
     s = np.array([psi0.conj() @ expm_multiply(-1j * (k * tau) * H_s, psi0) for k in range(n)])
     return ODMDProblem(n=n, tau=tau, mu=mu, s=s, dim=int(H_full.shape[0]),
-                       offset=mh.energy_offset + mu, ref=float(w_eig[0] - mu))
+                       offset=mh.energy_offset + mu, ref=float(reach[0] - mu))
 
 
 def _dmd_modes(s, tau, mod_window, cutoff_abs=0.0, cutoff_rel=0.0):
