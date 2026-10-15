@@ -67,6 +67,17 @@ while the amplitude moves **19 orders of magnitude**:
 
 A physical overlap does not depend on how tightly the SCF was converged. Gated as **G6**.
 
+*Maintenance (chem-ffe, 2026-10-15):* `test_G6`'s helper (`_p0_at_conv_tol`) built its qubit
+Hamiltonian with a bare `mapper.map(...)`, which chem-8tl's `map_canonical` finding (see
+`SPEC_centered_pds_roots.md`) means is `PYTHONHASHSEED`-dependent in its low coefficient bits and
+term order. Switched it to `map_canonical` for consistency with `build_molecular_hamiltonian`. The
+RHF branch and SCF residue this table reports are decided by PySCF before any qubit mapping runs,
+and this Hamiltonian is nowhere near the cond ~ 1e17 regime where chem-8tl's bit-path sensitivity
+shows up, so no number here is expected to move. Not independently re-verified: G6 already fails on
+this Linux container for an unrelated, already-filed reason (chem-8ls: RHF branch selection does not
+reproduce this spec's §2b Linux witness here), so this table could not be regenerated end-to-end on
+this run either way.
+
 **(ii) The mechanism: the state is symmetry-forbidden.** Square H₄ is D2h. The RHF MO irreps are
 `[Ag, B2u, B3u, Ag]` with occupation (2,2,0,0), so the **HF determinant is Ag**. Symmetry-resolved
 FCI in the tightly-converged basis:
