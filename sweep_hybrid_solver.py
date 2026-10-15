@@ -4,9 +4,9 @@ Parameter sweep harness for the validated quantum Krylov solver.
 
 Runs in two stages so you can inspect Stage 1 before spending compute on Stage 2:
 
-    python sweep_hybrid_solver.py 1     # active-space convergence
+    uv run python sweep_hybrid_solver.py 1     # active-space convergence
     # ... inspect data/sweep_stage1_active_space.csv, pick CHOSEN_ACTIVE_SPACE ...
-    python sweep_hybrid_solver.py 2     # krylov_dim x shots grid
+    uv run python sweep_hybrid_solver.py 2     # krylov_dim x shots grid
 
 Stage 1 - active-space convergence. Varies (cas_elec, cas_orb) at a fixed krylov_dim with
           exact (noiseless) evaluation, looking for where the computed energy stops moving.
@@ -237,4 +237,4 @@ if __name__ == "__main__":
     elif stage == "2":
         run_stage2()
     else:
-        print("Usage: python sweep_hybrid_solver.py [1|2]")
+        print("Usage: uv run python sweep_hybrid_solver.py [1|2]")

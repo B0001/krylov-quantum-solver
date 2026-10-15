@@ -2,7 +2,7 @@
 """
 Materials driver: CIF -> PySCF CASCI -> validated quantum Krylov solver.
 
-    python run_real_material_simulation.py <path_to_cif> [--active_space E,O] [--krylov_dim M] [--shots N]
+    uv run python run_real_material_simulation.py <path_to_cif> [--active_space E,O] [--krylov_dim M] [--shots N]
 
 This is the CIF/materials front end for the validated pipeline. It reuses the same classical
 pre-processing as the main CLI (hybrid_quantum_solver.chemistry_gateway.load_and_compute_integrals:
