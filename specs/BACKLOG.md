@@ -466,6 +466,67 @@ hypothesis whose death is informative is worth more here than a safe one.
   → [`SPEC_nb3x8_gaps.md`](SPEC_nb3x8_gaps.md) G8; [`SPEC_nb3x8_magnetometry.md`](SPEC_nb3x8_magnetometry.md)
   §7 (follow-up closed as a negative result, not deferred).
 
+- [x] **CLOSED 2026-10-15 (chem-phh) — of the three candidates chem-g78 left open, the third
+  (direct lattice renormalization of t_s⊥) is tested and also KILLED, in the narrow form stated;
+  the other two are pre-registered but blocked on data this sandbox cannot source.**
+  [SPEC](SPEC_nb3x8_tc_attribution.md) G1–G5. *Check:* hold U0, Us fixed and solve for the
+  multiplier `eta` on t_s⊥ such that the isolated-dimer predicted Tc (already-validated
+  `nb3x8_magnetometry.predicted_transition_K`) lands on the measured Tc; compare `|1-eta|` to an
+  *independent* slice of the same vendored table — the relative |t_s⊥| spread between the bulk and
+  bilayer stacking variants of the same halide's LT (dimerized) structure (2.041% F, 0.147% Cl,
+  0.118% Br, 0.092% I; zero new parameters, both already in `NB3X8_CLUSTERS`). *Result:* the
+  rescaling needed to match measured Tc is **57.7% (Nb3Cl8, eta=0.4229) / 35.8% (Nb3Br8,
+  eta=0.6424)** — 17–600× the 2.04% family-wide same-motif anchor even at a generous 10× kill margin
+  (bound 20.4%). A same-structural-motif renormalization of t_s⊥ alone cannot explain the
+  overprediction for either halide — **KILLED**. *Caveat, stated up front:* this is a narrow claim —
+  it does not rule out t_s⊥ moving as part of an actual structural PHASE change (the HT/LT |t_s⊥|
+  ratio, 0.126 Cl / 0.121 Br, shows the hopping CAN move by a large factor under a real phase
+  change — that is candidate 1's territory, untested here, not contradicted). *Candidates 1
+  (cooperative/first-order structural transition) and 2 (in-plane kagome exchange) remain
+  untested* — pre-registered in `nb3x8_tc_attribution.UNTESTED_CANDIDATES` with the kill condition
+  each would need to pass, but both need data (elastic/lattice free energies; an in-plane exchange
+  constant) that `arXiv:2501.10320`'s vendored tables do not carry and that this sandbox cannot
+  fetch: `WebSearch` was re-attempted this session and returned the same canned non-answer
+  chem-a04 recorded ("I don't have the capability to perform real-time web searches..."), confirming
+  the no-internet-access finding is still current, not stale. Gate G5 in
+  `tests/test_nb3x8_tc_attribution_spec.py` asserts both candidates stay honestly marked untested
+  (non-empty description/check/blocked_on) rather than silently claimed as tested.
+  → [`SPEC_nb3x8_tc_attribution.md`](SPEC_nb3x8_tc_attribution.md); `nb3x8_tc_attribution.py`;
+  follow-up beads chem-cfl (structural-transition data sourcing) and chem-b0y (in-plane kagome
+  exchange data sourcing) filed for whenever that data becomes reachable.
+
+- [x] **CLOSED 2026-10-15 (chem-cfl) — candidate 1 (cooperative/first-order structural transition,
+  pre-registered by chem-phh above) is now tested and SURVIVES; chem-phh/chem-a04's "no internet
+  access" finding did not hold for `WebFetch` on direct URLs.** [SPEC](SPEC_nb3x8_tc_attribution.md)
+  G5–G7. *Data sourced:* Mortazavi, Zhuang & Rabczuk, "A first-principles study on the physical
+  properties of two-dimensional Nb3Cl8, Nb3Br8 and Nb3I8," `arXiv:2412.03360v1` — fetched via
+  `WebFetch` on the arXiv PDF URL and read in full with the `Read` tool (not a search-engine
+  summary, per the chem-jiy lesson); reports DFT exfoliation energies and monolayer lattice
+  constants, independent of `arXiv:2501.10320`. *Check (exactly the one chem-phh pre-registered):*
+  build `F_phase(T) = E_mag,phase(T) - T*S_mag,phase(T) + E_lattice,phase` for HT vs LT using the
+  already-validated N=2 Boltzmann trace (`nb3x8_susceptibility.n2_spectrum`, via a new
+  `nb3x8_tc_attribution.mean_energy` accessor) on `NB3X8_HT_BULK`/`NB3X8_LT_BULK`; because
+  `E_lattice` enters linearly, the value that puts the crossing exactly at the measured Tc is solved
+  directly (`required_e_lattice`); compare to the sourced exfoliation energy per formula unit as a
+  loose, physically-plausible upper bound (`exfoliation_energy_per_fu`; a partial HT<->LT relaxation
+  cannot plausibly cost more than full layer separation). *Result:* needed `E_lattice` = **9.94 meV
+  (Nb3Cl8, 1.7% of the 596.9 meV bound) / 41.61 meV (Nb3Br8, 5.6% of the 740.1 meV bound)** — both
+  positive (correct sign) and small fractions of the bound, robust even to a 2× tightening of the
+  bound (1-vs-2-formula-units-per-cell ambiguity). **SURVIVES**: a modest, physically plausible
+  lattice energy reproduces the measured Tc without extreme tuning. *Caveat, stated up front (not
+  rounded into the verdict):* this is a plausibility bound, not confirmation — `arXiv:2412.03360`
+  does not resolve an HT phase at all, so the exfoliation energy is a generous upper bound on *any*
+  structural relaxation, not a measured HT/LT energy difference; `NB3X8_HT_BULK`/`NB3X8_LT_BULK` are
+  single-dimer electronic parameters with no lattice feedback. Surviving this check means candidate
+  1 is not ruled out on energetic grounds, not that it is confirmed as the mechanism. Candidate 2
+  (in-plane kagome exchange) remains untested — `arXiv:2412.03360` has no magnetic exchange data
+  either — but the `WebSearch`-only "no internet access" finding is now known to be wrong; a future
+  session should retry sourcing it with `WebFetch` before assuming it is unreachable.
+  → [`SPEC_nb3x8_tc_attribution.md`](SPEC_nb3x8_tc_attribution.md) §3b, G5–G7;
+  `nb3x8_tc_attribution.py` (`mean_energy`, `exfoliation_energy_per_fu`, `required_e_lattice`,
+  `candidate1_verdict`); follow-up bead chem-b0y (in-plane kagome exchange data) remains open, now
+  with the WebFetch note.
+
 - [x] **CLOSED 2026-09-30 (chem-a04) — re-verified, both kill conditions survive; the scale-agreement
   caveat still applies up front.** [SPEC](SPEC_odmd_optical.md), LT Cl +1.59%, family spread 44.3%,
   `coordination_gap` z=3 872.9 meV. *Original claim:* `odmd_optical.dimer_optical_gap` on LT cRPA

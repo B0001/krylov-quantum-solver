@@ -127,6 +127,19 @@ nb3x8_magnetometry (CLI)                                          # family table
   overprediction. What is left open: the cooperative structural transition, in-plane kagome
   exchange, or a direct lattice renormalization of t_s⊥ (candidates, none tested here) — this
   follow-up is closed as a negative result, not merely deferred.
+  **Update (chem-phh, `SPEC_nb3x8_tc_attribution.md`):** the third candidate (a direct lattice
+  renormalization of t_s⊥, within the *same* dimerized structural motif) is now tested and also
+  **killed** — the rescaling needed to match measured Tc (57.7% Cl / 35.8% Br) is 17–600× the
+  largest same-motif |t_s⊥| spread this family's own vendored table shows (bulk vs bilayer, ≤2.04%).
+  **Update (chem-cfl, same spec, §3b/G5–G7):** the cooperative/first-order structural transition is
+  now also tested and **survives** — sourcing elastic/lattice data from a second primary reference
+  (`arXiv:2412.03360`, fetched via `WebFetch` on a direct PDF URL; `WebSearch` alone still does not
+  work in this sandbox) gives a physically-plausible exfoliation-energy bound on `E_lattice`
+  (596.9 meV Cl / 740.1 meV Br) that comfortably covers the `E_lattice` the pre-registered F_phase(T)
+  crossing needs to match measured Tc (9.94 meV Cl / 41.61 meV Br, 1.7%/5.6% of the bound) — not
+  proof the transition IS the mechanism, but not ruled out either. In-plane kagome exchange remains
+  pre-registered but untested — it needs a constant neither vendored source reports; worth
+  re-attempting with `WebFetch` (not just `WebSearch`) before assuming it is permanently blocked.
 
 ## 8. Caveats and risks
 
