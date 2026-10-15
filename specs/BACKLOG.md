@@ -345,6 +345,22 @@ hypothesis whose death is informative is worth more here than a safe one.
   On both seeds, centered roots stay above every target for K=3..8 (min +0.0042 mHa at K=8) and match
   across the seeds to < 1e-13 Ha. Follow-up: hash-seed-deterministic `build_molecular_hamiltonian`.
 
+- [x] **CLOSED (chem-nxn) — `hamiltonian_moments` centers by ⟨H⟩ by default, conditioning-guarded.
+  SURVIVES.** [`SPEC_centered_moments_default.md`](SPEC_centered_moments_default.md),
+  `tests/test_centered_moments_default_spec.py` (5/5 green, Linux x86_64, 8 vCPU/16GB, one process
+  per file, 67 s). `hamiltonian_moments(mh, max_order)` — no caller-side centering — now returns
+  `chem-70c`'s μ=⟨H⟩-centered moments whenever that is not worse-conditioned at the deepest K the
+  call supports, else falls back to the exact raw moments; the decision is a one-shot comparison at
+  `K_max = max_order // 2`. Every existing gate reproduces its original numbers: `SPEC_moment_pds`
+  G1–G4 unmodified (4/4), `SPEC_pds_excited_roots` and `SPEC_centered_pds` updated to pass
+  `centered=False` at their raw-frame call sites (both still green, 5/5 and 6/6), `SPEC_centered_pds_roots`
+  and `SPEC_centered_pds_shots` likewise pass `centered=False` and are unaffected (4/4, 7/7). H₂'s
+  K≥3 exhaustion boundary (`chem-70c`'s amendment) correctly falls back to raw: centered cond(Hankel)
+  at K=4 is 6.17e17 vs 5.96e17 raw — centered is worse, so the fallback returns the exact pre-chem-nxn
+  raw numbers. Re-verified on Linux after this branch was rebuilt from a stale, 109-commits-behind
+  base; the 2026-10-01 handoff's numbers were macOS-only. No other `hamiltonian_moments` caller in the
+  repo needed a `centered=False` update (`centered_pds_shots.py` imports only `pds_energy`).
+
 - [x] **CLOSED (chem-pc1) — the higher roots of P_K(E) are bounded excited-state estimates, but the
   usefulness claim is KILLED, and a second, sharper finding: the bound itself can break in floating
   point.** `pds_roots` added (`moment_expansion.py`), `pds_energy` now `pds_roots(...)[0]` (no
