@@ -256,6 +256,7 @@ def build_dipole_operators(
     charge: int = 0,
     spin: int = 0,
     mapper: Optional[JordanWignerMapper] = None,
+    conv_tol: float = 1e-9,
 ) -> list[SparsePauliOp]:
     """Total molecular dipole operator per Cartesian axis, on the same qubit basis as the
     Hamiltonian.
@@ -269,9 +270,13 @@ def build_dipole_operators(
     Full orbital space only (no active-space transform): the property gates run on full-space
     molecules, which keeps the dipole convention exactly as probed. An active-space dipole (with
     the frozen-core contribution folded in) is a follow-up. See specs/SPEC_qksd_properties.md.
+
+    ``conv_tol`` must match whatever was used to build the paired Hamiltonian (default 1e-9, same
+    as ``build_molecular_hamiltonian``) -- otherwise the dipole and the Hamiltonian are evaluated
+    on different SCF orbitals (chem-qhi).
     """
     mapper = mapper or JordanWignerMapper()
-    problem = PySCFDriver(atom=atom, basis=basis, charge=charge, spin=spin).run()
+    problem = PySCFDriver(atom=atom, basis=basis, charge=charge, spin=spin, conv_tol=conv_tol).run()
     dipole = problem.properties.electronic_dipole_moment
     elec_ops = dipole.second_q_ops()                 # {'XDipole', 'YDipole', 'ZDipole'}
     nuclear = np.asarray(dipole.nuclear_dipole_moment, dtype=float)

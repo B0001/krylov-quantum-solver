@@ -106,6 +106,7 @@ def run_geometry(
     seed: Optional[int] = None,
     reference: str = "exact",
     track_convergence: bool = True,
+    conv_tol: float = 1e-9,
 ) -> PipelineResult:
     """Run the solver from a molecular geometry string (PySCFDriver under the hood).
 
@@ -115,6 +116,7 @@ def run_geometry(
     mh = build_molecular_hamiltonian(
         atom=atom, basis=basis, charge=charge, spin=spin,
         active_electrons=active_electrons, active_orbitals=active_orbitals,
+        conv_tol=conv_tol,
     )
     reference_energy = None
     if reference == "exact" and mh.num_qubits <= _EXACT_REFERENCE_MAX_QUBITS:

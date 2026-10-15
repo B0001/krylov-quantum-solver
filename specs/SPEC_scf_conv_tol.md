@@ -100,11 +100,15 @@ None. No source file changes: `build_molecular_hamiltonian(..., conv_tol=1e-9)` 
 ## 7. Out of scope (filed as follow-ups, not done)
 
 - Changing the default `conv_tol`.
-- Threading `conv_tol` through the callers that do not forward it: `pipeline.py:115`,
+- ~~Threading `conv_tol` through the callers that do not forward it: `pipeline.py:115`,
   `certchem/core.py:94`, `chemcheck/tiers.py:109`, `certkit_bridge.py:190`, `screening_loop.py:136`,
   and `build_dipole_operators` (`molecular_hamiltonian.py:212`), which runs its own SCF with no
-  `conv_tol` at all.
-- Re-admitting a = 1.35 to the chained-overlap gate at `TIGHT_SCF_CONV_TOL` (G3 makes it a candidate).
+  `conv_tol` at all.~~ **Done (2026-10-15, chem-qhi):** all six now accept an opt-in `conv_tol`
+  parameter (default `1e-9`, matching `build_molecular_hamiltonian`'s default — no behaviour change
+  for existing callers). See `sandbox-handoffs/chem-qhi.md`.
+- ~~Re-admitting a = 1.35 to the chained-overlap gate at `TIGHT_SCF_CONV_TOL` (G3 makes it a
+  candidate).~~ **Done (2026-10-15, chem-qhi):** `tests/test_chained_overlap_spec.py` gates it as a
+  separate tight-build case; see `SPEC_chained_overlap.md` §10.
 
 ## 8. Caveats and risks
 

@@ -181,13 +181,13 @@ def emit(enc: dict, rule: str, x, lo: float, hi: float, out: Path, name: str,
     return Verdict(name, rule, ok, line, float(lo), float(hi))
 
 
-def run_case(case: str, out: Path) -> tuple[float, list[Verdict]]:
+def run_case(case: str, out: Path, conv_tol: float = 1e-9) -> tuple[float, list[Verdict]]:
     """Emit every certificate this case supports, and check each one independently.
 
     Returns the exact electronic-frame lambda_min -- for comparison only, no certificate
     depends on it -- and one Verdict per certificate actually emitted.
     """
-    mh = build_molecular_hamiltonian(**CASES[case])
+    mh = build_molecular_hamiltonian(**CASES[case], conv_tol=conv_tol)
     H = mh.qubit_hamiltonian.to_matrix(sparse=True).tocsc()
     lam = mh.ground_state_energy() - mh.energy_offset     # comparison only
 
