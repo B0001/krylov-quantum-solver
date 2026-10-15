@@ -9,7 +9,7 @@ not imported: nothing here may call check() in-process.
 Nothing in this file is trusted: it is a producer. The only question it answers is
 whether the solver's bound survives an independent re-derivation.
 
-Run:  uv pip install -e ".[certkit]"  then  uv run python certkit_bridge.py [H2|H4|H4-stretched|N2]
+Run:  uv sync --extra certkit  then  uv run python certkit_bridge.py [H2|H4|H4-stretched|N2]
 
 The gate over what this emits is tests/test_certkit_regression_gate_spec.py.
 """

@@ -111,8 +111,9 @@ These are the directions this PRD prioritizes. They reuse validated primitives; 
   Hamiltonian == FCI; Krylov converges to FCI and never dips below the variational floor;
   `dmrg_reference.reference_energy` shares the integral convention with
   `build_hamiltonian_from_integrals`.
-* **Environment:** Everything runs in the `chem` conda env — always prefix shell commands with
-  `conda run -n chem`. `ft_resource_estimator.py` (openfermion) runs in a separate `chem-ft` env.
+* **Environment:** `uv` is the exclusive dependency manager — always prefix shell commands with
+  `uv run` (e.g. `uv run pytest`, `uv run python script.py`). `ft_resource_estimator.py`
+  (openfermion) runs in a separate `chem-ft` env.
 * **Process isolation:** `block2`/DMRG segfaults if loaded into a process that already imported
   `pyscf` or `qiskit-aer` — DMRG and every `test_*_spec.py` gate run in their own process (the
   Makefile / `run_in_chem.sh` enforce this). Preserve it when adding tests.
