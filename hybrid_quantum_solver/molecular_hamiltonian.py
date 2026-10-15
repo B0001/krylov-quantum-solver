@@ -33,6 +33,7 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import numpy as np
+from pyscf import lib
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import SparsePauliOp, Statevector
 from qiskit_nature.second_q.circuit.library import HartreeFock
@@ -160,6 +161,22 @@ def build_molecular_hamiltonian(
 
     Returns:
         A populated :class:`MolecularHamiltonian`.
+
+    Note:
+        The underlying RHF/ROHF solve runs with ``pyscf.lib.num_threads(1)`` pinned for its
+        duration (ambient count restored in a ``finally``, same pattern as
+        ``benchmark_nbn._tight_scf``, chem-y6w/``specs/SPEC_nbn_scf_determinism.md``). Without
+        this, multi-threaded BLAS/OpenMP reductions inside PySCF's integral evaluation are not
+        bit-associative, and on a near-degenerate geometry (e.g. square H4) that noise is enough
+        to tip the free (``symmetry=False``) SCF onto a different locally-stable solution from one
+        call to the next -- same input, different output (chem-7cx; measured: pinning
+        ``OMP_NUM_THREADS`` alone reproduces the flip, pinning only ``OPENBLAS_NUM_THREADS`` does
+        not, so the integral evaluation is the actual source, not the linear algebra). Pinning
+        makes a given (atom, basis, charge, spin, conv_tol) build bit-identical across repeated
+        calls and across ambient thread counts on this host/pyscf build -- see
+        ``specs/SPEC_scf_branch_determinism.md``. It does NOT make the result match a different
+        host/platform/pyscf-version's branch choice (chem-g14 is the open, separate issue tracking
+        that cross-platform divergence).
     """
     mapper = mapper or JordanWignerMapper()
 
@@ -167,8 +184,13 @@ def build_molecular_hamiltonian(
     if symmetric_scf and _point_group(atom, basis, charge, spin) != "C1":
         effective_conv_tol = min(conv_tol, _SYMMETRIC_TIGHT_CONV_TOL)
 
-    problem = PySCFDriver(atom=atom, basis=basis, charge=charge, spin=spin,
-                          conv_tol=effective_conv_tol).run()
+    ambient_threads = lib.num_threads()
+    lib.num_threads(1)
+    try:
+        problem = PySCFDriver(atom=atom, basis=basis, charge=charge, spin=spin,
+                              conv_tol=effective_conv_tol).run()
+    finally:
+        lib.num_threads(ambient_threads)
 
     if active_electrons is not None and active_orbitals is not None:
         problem = ActiveSpaceTransformer(active_electrons, active_orbitals).transform(problem)
