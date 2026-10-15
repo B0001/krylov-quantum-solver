@@ -66,21 +66,62 @@ def _system(atom, conv_tol=1e-9, **kw):
 
 @lru_cache(maxsize=None)
 def _fci(atom, wfnsym, symmetry="D2h"):
-    """PySCF symmetry-adapted FCI, S_z = 0, tight symmetric SCF -- independent of the qubit path."""
-    from pyscf import fci, gto, scf
+    """PySCF symmetry-adapted FCI, S_z = 0, tight symmetric SCF -- independent of the qubit path.
+
+    chem-0yh: pyscf's own multi-threaded integral evaluation is not bit-associative, so an
+    unpinned scf.RHF/fci.FCI call can land on ~1e-13-level noise in mf.e_tot that a near-degenerate
+    geometry (square H4 at a=1.19) amplifies through the Davidson solve enough to occasionally flip
+    which side of test_G2's classification boundary this reference lands on. Same mechanism and fix
+    as chem-7cx (build_molecular_hamiltonian) and chem-y6w (benchmark_nbn._tight_scf): pin
+    pyscf.lib.num_threads(1) around the call, restore the ambient count in a finally so this cached,
+    module-level helper does not leave other callers in the same process pinned to 1.
+    """
+    from pyscf import fci, gto, lib, scf
 
     mol = gto.M(atom=atom, basis="sto3g", symmetry=symmetry, verbose=0)
-    mf = scf.RHF(mol)
-    mf.conv_tol = 1e-13
-    mf.kernel()
-    solver = fci.FCI(mf)
-    solver.wfnsym, solver.nroots = wfnsym, 1000
-    e, _ = solver.kernel()
+    ambient_threads = lib.num_threads()
+    lib.num_threads(1)
+    try:
+        mf = scf.RHF(mol)
+        mf.conv_tol = 1e-13
+        mf.kernel()
+        solver = fci.FCI(mf)
+        solver.wfnsym, solver.nroots = wfnsym, 1000
+        e, _ = solver.kernel()
+    finally:
+        lib.num_threads(ambient_threads)
     if not np.all(solver.converged):
         raise RuntimeError(f"FCI Davidson did not converge for all roots: atom={atom!r} "
                             f"wfnsym={wfnsym!r} converged={solver.converged} "
                             f"(chem-60i: an unchecked Davidson call can silently report a wrong energy)")
     return np.sort(np.atleast_1d(e)) - mol.energy_nuc()
+
+
+def test_fci_helper_is_deterministic_across_ambient_thread_counts():
+    """chem-0yh regression floor for the lib.num_threads(1) pin above. Before the fix, _fci's own
+    unpinned scf.RHF+FCI call picked up ~1e-13-level bit noise from pyscf's multi-threaded integral
+    evaluation depending on the ambient thread count the caller happened to leave in place -- at
+    square H4's near-degenerate a=1.19 geometry, that noise occasionally flipped which FCI level
+    this reference landed on (the chem-0yh repro: 3 full-file runs post chem-7cx's fix still showed
+    test_G2[1.19] flipping). This reproduces that repro directly: fresh calls at ambient thread
+    counts 2 and 8 (bypassing lru_cache, which would otherwise mask the recompute) must agree
+    bit-for-bit, and the ambient setting the caller had before calling _fci must be restored."""
+    from pyscf import lib
+
+    atom = _sq(1.19)
+    ambient = lib.num_threads()
+    try:
+        lib.num_threads(2)
+        _fci.cache_clear()
+        e_2 = _fci(atom, "Ag")
+        lib.num_threads(8)
+        _fci.cache_clear()
+        e_8 = _fci(atom, "Ag")
+    finally:
+        lib.num_threads(ambient)
+        _fci.cache_clear()
+    assert np.array_equal(e_2, e_8), (e_2, e_8)
+    assert lib.num_threads() == ambient
 
 
 def _weights(mh, V):
