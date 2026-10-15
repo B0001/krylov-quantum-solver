@@ -112,27 +112,20 @@ def test_G1_residue_level_identified_warned_and_kept(a, conv_tol, tol):
 # --- G2: brute force against an independent symmetry-adapted FCI, every populated level -----------
 
 # sq-H4/sto-3g is planar with an all-s-orbital basis: sigma_xy (z -> -z) fixes every atom and maps
-# every s AO to itself, so it acts as the IDENTITY operator on the AO space -- independent of bond
-# length and independent of which RHF branch (symmetric or symmetry-broken) built the orbitals.
-# D2h's group relation i = sigma_xy . C2z then forces rep(i) == rep(C2z) EXACTLY in any MO basis
-# (verified directly, chem-0m8: orbital_parity_bounds' two R_b matrices for bits "C2z" and "i" are
-# byte-identical at every bond length below, on both the broken and the symmetric branch).
-# _BIT_OPERATION["D2h"] = (C2y, C2z, i) therefore carries only 2 independent constraints here, not
-# 3 -- mathematically insufficient to separate the Ag irrep from D2h's other 7 among levels sharing
-# HF's (N_alpha, N_beta); observed as an exact 2x over-inclusion (20 vs the true 10) once
-# orbital_parity_bounds succeeds, see specs/SPEC_eigenstate_reachability.md section 8 "R5". This is
-# a provable fact of the geometry+basis, NOT platform/RHF-branch variance (chem-7cx's domain), so it
-# is marked xfail (a known, tracked limitation) rather than skip (sandbox-handoffs/chem-3fd.md).
-_G2_SQUARE_H4_XFAIL_REASON = (
-    "sq-H4/sto-3g: D2h's C2z and i bits are structurally degenerate for a planar all-s-orbital "
-    "basis (sigma_xy == identity), leaving only 2 independent constraints -- provably insufficient "
-    "to isolate the 10-level Ag sector from the 36 (N_a, N_b)-restricted candidates, regardless of "
-    "RHF branch. See SPEC_eigenstate_reachability.md section 8 R5 (chem-0m8, chem-3fd)."
-)
-G2_CASES = [
-    pytest.param(_sq(a), ct, marks=pytest.mark.xfail(reason=_G2_SQUARE_H4_XFAIL_REASON, strict=False))
-    for a in (1.05, 1.10, 1.19, 1.35) for ct in (1e-6, 1e-9)
-]
+# every s AO to itself, so it acts as the IDENTITY operator on the AO space, independent of bond
+# length and of which RHF branch built the orbitals. D2h's group relation i = sigma_xy . C2z then
+# forces rep(i) == rep(C2z) EXACTLY in any MO basis -- _BIT_OPERATION["D2h"] = (C2y, C2z, i) carries
+# only 2 independent constraints here, not 3, so sigma_xy == identity alone does not determine
+# whether the decision matches FCI: with only C2z/i usable, sq-H4 is D2h-degenerate in the (N_a, N_b)
+# sector between {Ag, B1g} and {B2u, B3u} (sigma_xy = +1 for every level, so C2z alone splits the 8
+# irreps into only 4 distinguishable pairs) UNLESS the C2y bit (bit 0, excluded only when the free
+# RHF breaks symmetry or an exactly-degenerate pair rotates arbitrarily -- chem-7cx, SPEC section 8
+# R2) is also trusted, in which case C2y and C2z together isolate Ag exactly. So G2 branches on
+# whether orbital_parity_bounds trusts the C2y bit on THIS run, instead of assuming either outcome
+# (chem-0m8, after a macOS review of the prior xfail/R5-based version found it xpassed there: the
+# over-inclusion is RHF-branch-dependent after all, see SPEC section 8 R2, not a geometry/basis
+# constant as R5 claimed -- R5 is dropped, superseded by this branch-aware check and R2).
+G2_CASES = [(_sq(a), ct) for a in (1.05, 1.10, 1.19, 1.35) for ct in (1e-6, 1e-9)]
 G2_CASES += [(LIN_H4, 1e-9), (H2, 1e-9)]
 
 
@@ -141,12 +134,29 @@ def test_G2_decision_equals_symmetry_adapted_fci(atom, conv_tol):
     mh, w, V, pops = _system(atom, conv_tol)
     ref = _fci(atom, "Ag")
     in_sector = np.sort(w[_weights(mh, V) > 0.5])          # the sector itself, every eigenvector
-    assert len(in_sector) == len(ref), (len(in_sector), len(ref))
-    assert np.abs(in_sector - ref).max() < 1e-8
     defined = pops > DEFINED
     in_ag = np.array([np.abs(ref - e).min() < 1e-8 for e in w[defined]])
+    allowed = symmetry_allowed(mh, w, V)
+
+    bounds = orbital_parity_bounds(mh)
+    # D2h bit 0 is C2y (_BIT_OPERATION["D2h"][0]); untrustworthy is reported as beta == inf, a large
+    # finite beta (chem-7cx's degenerate-pair-rotation case) is just as unusable by the >= 1.0 greedy
+    # budget in hf_symmetry_sector, so both are "not trusted" here.
+    c2y_trusted = bounds is not None and bounds[0][1] < 1.0
+    if c2y_trusted:
+        assert len(in_sector) == len(ref), (len(in_sector), len(ref))
+        assert np.abs(in_sector - ref).max() < 1e-8
+        assert np.array_equal(allowed[defined], in_ag)
+    else:
+        # C2y not trusted: C2z/i alone cannot separate Ag from the other D2h irrep sharing sigma_xy
+        # = +1 and HF's (N_a, N_b) -- over-inclusion is the conservative direction (SPEC section 8
+        # R2): every true Ag level must still appear, and never get flagged forbidden, but the
+        # sector/the "allowed" mask may keep extra, non-Ag levels too.
+        assert len(in_sector) >= len(ref)
+        for e in ref:
+            assert np.abs(in_sector - e).min() < 1e-8
+        assert allowed[defined][in_ag].all()
     assert in_ag.sum() >= 2                                 # above the minimum, not just the ground
-    assert np.array_equal(symmetry_allowed(mh, w, V)[defined], in_ag)
 
 
 # --- G3: no false alarm on the ordinary gated systems ---------------------------------------------
