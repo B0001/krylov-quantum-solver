@@ -165,3 +165,30 @@ certified_overlap.krylov_refine.SATURATION_SLACK = 1e-14
 
 - `hybrid_quantum_solver/certified_overlap/krylov_refine.py` — the implementation.
 - `tests/test_chained_overlap_spec.py` — G1–G7.
+
+## 10. Addendum (2026-10-15, chem-qhi): square H₄ a = 1.35 re-admitted at `TIGHT_SCF_CONV_TOL`
+
+§2's "possible — a follow-up" line is now done. `specs/SPEC_scf_conv_tol.md` §10 measured that
+tightening square H₄ a = 1.35's build from the default `conv_tol` to `TIGHT_SCF_CONV_TOL` (1e-13)
+collapses the SCF-residue artifact (Ritz leakage 1.6e-6 → 1.8e-14, nine orders below `LEAK_TOL`),
+making the certified target well-defined there. This spec's gated set gains that geometry **at the
+tight build only** — the default-build exclusion and its G7 positive control (R2b/R3 above) are
+unchanged, because at the default conv_tol the residue is still present and the target is still
+ill-defined; the two builds of the same atom string are different, deliberately coexisting cases.
+
+Measured (Linux, this repo's freeze; `tests/test_chained_overlap_spec.py`,
+`H4_SQUARE_135_TIGHT = "H 0 0 0; H 1.35 0 0; H 1.35 1.35 0; H 0 1.35 0"`, `conv_tol=TIGHT_SCF_CONV_TOL`):
+
+- The direct bound is **vacuous** at every M ∈ {6,8,12} (same shape as the other DIRECT_VACUOUS
+  members), so it joins G1/G3/G4/G7, not G2 (G2 only applies where the direct bound survives).
+- **G1** (validity): oracle/self chained bound ≤ exact overlap (0.668076) + `SATURATION_SLACK` at
+  M = 6, 8, 12 (self values 0.6066, 0.6628, 0.6680759096384864 at those depths).
+- **G3** (rescue): self mode is non-vacuous and > 0 at M = 8, 12 (direct confirmed vacuous there).
+- **G4** (self cost): γ_self/γ_oracle = 0.9866 (M=6), 0.99989 (M=8), ~1.0 (M=12) — all ≥ 0.9.
+- **G7** (leakage): ‖P_unreach v‖ = 2.365e-14 at M = 6, below `LEAK_TOL = 1e-12` by two orders — this
+  is the measurement that makes re-admission valid, mirroring R2b's collapse-at-tight-tolerance
+  argument for the eigenvalue itself.
+
+New test functions (suffixed `_tight_scf_square_h4_135`) were added alongside, not merged into, the
+existing parametrized G1/G3/G4/G7 tests, so the default-build a = 1.35 exclusion/positive-control
+behavior has zero diff.
