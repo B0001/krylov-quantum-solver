@@ -535,6 +535,19 @@ def upper_bound(n, sym=False):
     return (ub[str(n)]["energy"], ub[str(n)]["method"]) if str(n) in ub else (None, None)
 
 
+def _noise_schedule(n_stages):
+    """1e-4 for the early stages, annealed to 1e-5 then 0.0 for the last two -- always exactly
+    `n_stages` long, so it lines up 1:1 with `bond_dims` (chem-0wh: the old
+    `(1e-4,)*(len(bond_dims)-2) + (1e-5, 0.0)` always appended both tail entries even when
+    `len(bond_dims) < 2`, so a single bond-dim value got a leftover noises=(1e-5, 0.0) of length
+    2 -- one entry longer than bond_dims/thrds -- silently shifting which sweep each noise value
+    lands on instead of giving the lone stage its intended terminal noise of 0.0)."""
+    tail = (1e-5, 0.0)
+    if n_stages >= len(tail):
+        return (1e-4,) * (n_stages - len(tail)) + tail
+    return tail[len(tail) - n_stages:]
+
+
 def dmrg_upper(n, bond_dims, threads):
     """Variational DMRG upper bound (final two-site sweep energy, NOT the extrapolation). block2 must
     not share a process with pyscf, so the integrals come from a child process."""
@@ -549,7 +562,7 @@ def dmrg_upper(n, bond_dims, threads):
 
     na = int(d["na"])
     e = dmrg_energy(d["h1"], d["eri"], (na, na), float(d["e_nuc"]), bond_dims=bond_dims,
-                    noises=(1e-4,) * (len(bond_dims) - 2) + (1e-5, 0.0), n_sweeps=4 * len(bond_dims),
+                    noises=_noise_schedule(len(bond_dims)), n_sweeps=4 * len(bond_dims),
                     n_threads=threads)
     os.makedirs("data", exist_ok=True)
     out = "data/hchain_vsdp_upper.json"
