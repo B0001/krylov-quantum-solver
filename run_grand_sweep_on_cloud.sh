@@ -59,7 +59,7 @@ cd "${ORIGINAL_DIR}"
 
 # 3. Execute the high-throughput Python sweep orchestrator
 echo "[STEP 3] Running the High-Throughput Grand Chemistry Sweep Suite..."
-conda run -n chem python run_grand_sweep.py "${API_URL}"
+uv run python run_grand_sweep.py "${API_URL}"
 
 echo ""
 echo "Grand sweep execution finished successfully."

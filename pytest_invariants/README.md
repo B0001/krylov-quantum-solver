@@ -22,6 +22,10 @@ instant it appears, with a failure message a reviewer can read at a glance.
 
 ## Install
 
+Within the hybrid_quantum_solver repo this plugin already ships as part of the package; `uv sync`
+installs it and its `pytest11` entry point along with everything else -- no separate step needed.
+The commands below are for using this plugin standalone, in another project:
+
 ```bash
 pip install -e .          # from this repo; registers the pytest11 entry point
 # or, once published:

@@ -8,7 +8,7 @@ beyond FCI's reach), DMRG is the reference. This module provides both behind one
 benchmark ladder can be extended in an environment that has `block2` installed.
 
   fci_energy(...)        exact active-space FCI via PySCF        (always available; tested here)
-  dmrg_energy(...)       DMRG via block2 / pyblock2              (requires: pip install block2)
+  dmrg_energy(...)       DMRG via block2 / pyblock2              (requires: uv sync --extra dmrg)
   reference_energy(...)  DMRG if available (method="auto"), else exact FCI
 
 Integral convention (identical to ``molecular_hamiltonian.build_hamiltonian_from_integrals``):
@@ -118,7 +118,7 @@ def dmrg_energy(
     scratch: Optional[str] = None,
     n_threads: int = 4,
 ) -> float:
-    """DMRG total energy via block2 / pyblock2. Requires ``pip install block2``.
+    """DMRG total energy via block2 / pyblock2. Requires ``uv sync --extra dmrg``.
 
     Intended for active spaces too large for exact FCI. On small spaces it reproduces
     ``fci_energy`` (the natural validation in an environment that has block2).
@@ -131,7 +131,7 @@ def dmrg_energy(
         from pyblock2.driver.core import DMRGDriver, SymmetryTypes
     except Exception as exc:  # pragma: no cover - exercised only without block2
         raise ImportError(
-            "dmrg_energy requires the 'block2' package (pip install block2). "
+            "dmrg_energy requires the 'block2' package (uv sync --extra dmrg). "
             "For active spaces where exact FCI is tractable, use fci_energy(...) instead."
         ) from exc
 
@@ -381,7 +381,7 @@ def dmrg_energy_extrapolated(
     try:
         from pyblock2.driver.core import DMRGDriver, SymmetryTypes
     except Exception as exc:  # pragma: no cover - only without block2
-        raise ImportError("dmrg_energy_extrapolated requires block2 (pip install block2).") from exc
+        raise ImportError("dmrg_energy_extrapolated requires block2 (uv sync --extra dmrg).") from exc
     if protocol not in ("perD", "ramp"):
         raise ValueError(f"protocol must be 'perD' or 'ramp', got {protocol!r}")
 

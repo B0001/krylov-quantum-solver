@@ -104,7 +104,7 @@ def main():
                          "(SPEC_hchain_largen2.md mechanism tier, bead chem-1uu).")
     args = ap.parse_args()
     if not dmrg_available():
-        print("[FATAL] block2 required: pip install block2.")
+        print("[FATAL] block2 required: run `uv sync --extra dmrg`.")
         return
 
     ns_list = [int(x) for x in args.ns.split(",")] if args.ns else CHAIN_LENGTHS

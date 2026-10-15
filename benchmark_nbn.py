@@ -20,7 +20,7 @@ HONEST CAVEATS (see also REFACTOR_PLAN.md):
     NOT the periodic superconductor. It says nothing about superconductivity.
   * At 16 qubits the exact answer (CASCI) is classically trivial, so there is NO quantum
     advantage here; this is a methodology study, not a discovery.
-  * block2 (DMRG) required: pip install block2.
+  * block2 (DMRG) required: uv sync --extra dmrg.
 
 Run:  python benchmark_nbn.py   ->  prints a table and writes data/nbn_active_space.csv
 """
@@ -174,7 +174,7 @@ def ground_state_mf(cif):
 
 def main():
     if not dmrg_available():
-        print("[WARN] block2 not importable -- install with `pip install block2`. "
+        print("[WARN] block2 not importable -- install with `uv sync --extra dmrg`. "
               "DMRG column unavailable.\n")
     print(f"NbN active-space growth | {CIF} | quantum Krylov M={KRYLOV_DIM} (statevector <= {KRYLOV_QUBIT_CAP} qubits)")
 

@@ -32,7 +32,7 @@ try:
 except ImportError as exc:  # pragma: no cover
     sys.exit(
         "[FATAL] qiskit-addon-sqd is not installed in this environment.\n"
-        "        pip install qiskit-addon-sqd   (inside the `chem` conda env)\n"
+        "        It is a core dependency -- run `uv sync` to install it.\n"
         f"        Original error: {exc}"
     )
 

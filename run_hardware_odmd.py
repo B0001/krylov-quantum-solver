@@ -157,7 +157,7 @@ def main():
         try:
             from qiskit_ibm_runtime import QiskitRuntimeService
         except ImportError:
-            sys.exit("qiskit-ibm-runtime not installed: pip install qiskit-ibm-runtime")
+            sys.exit("qiskit-ibm-runtime not installed: it is a core dependency -- run `uv sync`")
         try:
             service = QiskitRuntimeService()
         except Exception:
