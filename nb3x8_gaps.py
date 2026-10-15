@@ -74,6 +74,12 @@ cannot see and did not test: the cooperative/first-order structural transition i
 kagome exchange, or a lattice renormalization of t_s directly. See ``coordination_spin_gap`` /
 ``tests/test_nb3x8_gaps_spec.py::test_G8_*`` and specs/BACKLOG.md ("Coordination cannot rescue the
 5.3x Tc overprediction").
+
+*** chem-phh (nb3x8_tc_attribution.py, SPEC_nb3x8_tc_attribution.md): the "lattice renormalization of
+t_s directly" candidate above is now tested too, and also KILLED in its narrow (same dimerized
+structural motif) form -- the t_s shrinkage needed to match measured Tc is 17-600x the largest
+bulk-vs-bilayer |t_s| spread this family's own table shows. The structural-transition and in-plane
+kagome candidates remain untested (blocked on data this sandbox cannot source). ***
 """
 from __future__ import annotations
 
