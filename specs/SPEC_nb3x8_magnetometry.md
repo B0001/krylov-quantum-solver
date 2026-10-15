@@ -127,6 +127,24 @@ nb3x8_magnetometry (CLI)                                          # family table
   overprediction. What is left open: the cooperative structural transition, in-plane kagome
   exchange, or a direct lattice renormalization of t_s⊥ (candidates, none tested here) — this
   follow-up is closed as a negative result, not merely deferred.
+  **Update (chem-phh, `SPEC_nb3x8_tc_attribution.md`):** the third candidate (a direct lattice
+  renormalization of t_s⊥, within the *same* dimerized structural motif) is now tested and also
+  **killed** — the rescaling needed to match measured Tc (57.7% Cl / 35.8% Br) is 17–600× the
+  largest same-motif |t_s⊥| spread this family's own vendored table shows (bulk vs bilayer, ≤2.04%).
+  **Update (chem-b0y, `SPEC_nb3x8_tc_attribution.md` G5–G7):** the second candidate (in-plane kagome
+  exchange) is also now tested and **killed**. An in-plane exchange constant was sourced from Zhang,
+  Dai, Wang, Cheng & Ji, `arXiv:2508.17352` Table 1 (Nb3Cl8 J1=+0.12/J2=−0.24 meV, Nb3Br8
+  J1=−2.74/J2=−0.37 meV, verified against the downloaded PDF text) — correcting two premises along
+  the way: the paper's in-plane net is triangular, not kagome, and the coupling is not robustly
+  antiferromagnetic for either halide. The standard RPA self-consistency closure
+  (`J'_eff * chi_dimer(Tc) = 1`) gives the in-plane coupling needed to explain the full Tc miss
+  alone; it exceeds even the most generous reading of the sourced value by 35.5× (Br) / 9156× (Cl),
+  and exceeds `J_interlayer` itself by 5.6× (Br) / 298.7× (Cl). Only the cooperative structural
+  transition (candidate 1) remains untested — it needs elastic/lattice free-energy data this repo
+  does not vendor and that was not found in any source checked (chem-phh/chem-a04's "no working
+  internet access" framing was itself corrected by chem-b0y: `WebSearch` is broken in this sandbox,
+  but direct bash `curl` to arXiv is not — candidate 1 is blocked because the data isn't reported
+  anywhere found, not because of a tooling limitation).
 
 ## 8. Caveats and risks
 

@@ -74,6 +74,16 @@ cannot see and did not test: the cooperative/first-order structural transition i
 kagome exchange, or a lattice renormalization of t_s directly. See ``coordination_spin_gap`` /
 ``tests/test_nb3x8_gaps_spec.py::test_G8_*`` and specs/BACKLOG.md ("Coordination cannot rescue the
 5.3x Tc overprediction").
+
+*** chem-phh (nb3x8_tc_attribution.py, SPEC_nb3x8_tc_attribution.md): the "lattice renormalization of
+t_s directly" candidate above is now tested too, and also KILLED in its narrow (same dimerized
+structural motif) form -- the t_s shrinkage needed to match measured Tc is 17-600x the largest
+bulk-vs-bilayer |t_s| spread this family's own table shows.
+*** chem-b0y (same module): the in-plane kagome exchange candidate is also now tested and KILLED --
+an in-plane J sourced from arXiv:2508.17352 Table 1 falls 35-9156x short of what the standard RPA
+self-consistency closure would need to explain the Tc miss alone. Only the cooperative/first-order
+structural transition remains untested (blocked on elastic/lattice free-energy data this repo does
+not vendor). ***
 """
 from __future__ import annotations
 
