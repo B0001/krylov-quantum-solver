@@ -17,6 +17,7 @@ import pytest
 from hf_overlap_certificate import REACHABLE_TOL_CERTIFIED, exact_reachable_overlap
 from hf_overlap_subspace import _REACHABLE_TOL, exact_hf_subspace_overlap
 from hybrid_quantum_solver.molecular_hamiltonian import build_molecular_hamiltonian
+from reachability import scf_symmetry_status
 
 # Verbatim from hf_overlap_subspace.py's own __main__ sweep -- atom ORDER matters (R2).
 def _square_h4(a):
@@ -190,10 +191,37 @@ def test_G8_neither_constant_is_safe():
     """The killer for 'just pick the right constant'. There is a geometry in the same family where
     the artifact exceeds even the LOOSER 1e-8 threshold, so no fixed tolerance separates physics
     from SCF residue. The fix has to be symmetry/sector-aware, not a better number.
+
+    Thread-pinned (chem-qhi): RHF branch selection on this near-degenerate family is sensitive to
+    PySCF's OpenMP thread count (not just OPENBLAS/BLAS threads -- see benchmark_nbn._tight_scf and
+    bd memory chem-7cx-root-cause), so without pinning which of these points is symmetric vs.
+    symmetry-broken is not reproducible. Pinned locally, not module-wide, so other gates in this
+    file are not disturbed.
+
+    Also requires (not just asserts) that at least one offender is a SYMMETRIC-SCF solve, not a
+    genuine symmetry-broken RHF solution -- the G8 weakness documented in
+    specs/SPEC_reachability_tolerance.md section 10: on macOS a=1.185 is symmetry-broken yet still
+    counts as an offender, so the un-strengthened gate would pass even if no symmetric offender
+    existed. a=1.22 is a Linux-verified symmetric-SCF offender (amp2[0] ~= 1.26e-8); see
+    sandbox-handoffs/chem-qhi.md for the sweep that found it.
     """
-    offenders = []
-    for a in (1.185, 1.190, 1.195):
-        _, amp2, _ = _amp2_and_spectrum(a)
-        if amp2[0] > 1e-8:
-            offenders.append((a, float(amp2[0])))
-    assert offenders, "no geometry breached 1e-8 -- the 'no safe constant' claim would die here"
+    import pyscf.lib
+
+    prev_threads = pyscf.lib.num_threads()
+    pyscf.lib.num_threads(1)
+    try:
+        offenders = []
+        for a in (1.185, 1.190, 1.195, 1.22):
+            _, amp2, _ = _amp2_and_spectrum(a)
+            if amp2[0] > 1e-8:
+                offenders.append((a, float(amp2[0])))
+        assert offenders, "no geometry breached 1e-8 -- the 'no safe constant' claim would die here"
+
+        symmetric_offenders = [
+            (a, p) for a, p in offenders if not scf_symmetry_status(_square_h4(a))[0]
+        ]
+        assert symmetric_offenders, (
+            offenders, "every offender was a symmetry-broken RHF solve, not SCF residue"
+        )
+    finally:
+        pyscf.lib.num_threads(prev_threads)
