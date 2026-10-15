@@ -1,190 +1,190 @@
 # chem-g14 — `_driver_orbitals` rebuild-reproducibility too strict for conv_tol=1e-9 SCFs
 
-Status: **left open, fix implemented and verified, but the bead's own regression gate
-(`tests/test_eigenstate_reachability_spec.py` fully green) does not hold** — see "Why this stays
-open" below.
+Status: **left open.** This session's job was to close chem-g14 once its two dependencies
+(chem-7cx, chem-0m8) landed and `tests/test_eigenstate_reachability_spec.py` is green on Linux.
+Both dependencies' fix branches (plus three further branches they themselves spawned:
+chem-s6c, chem-0yh, chem-50w) are now merged into `sandbox/chem-g14`, and the file is fully
+**deterministic** again — but it is not green: **7/48 still fail**, stably, and root-cause to a
+different, still-open bead (chem-8ls) that is outside this one's scope. See "Why this stays open."
 
-## What changed
+Hardware: this container, `Linux f81d0d421506 7.0.14-linuxkit x86_64`, 8 vCPU, 16 GB RAM, pyscf
+2.13.1, qiskit-nature 0.8.0. Every run below is single-process (`uv run pytest <file>`), one gate
+file at a time, consistent with the block2/pyscf isolation rule — nothing here touches DMRG.
 
-- `reachability.py` — `_driver_orbitals(mh)`:
-  - `_SAME_OPERATOR_ATOL` loosened from `1e-12` to `1e-4` (the old bound rejected every rebuild on
-    this host/pyscf version; see the bead's own repro).
-  - New energy pre-filter: compares the rebuild's `drv._calc.e_tot` against `mh.hf_energy` to
-    `_ENERGY_MATCH_ATOL = 1e-6` Ha before trusting the operator comparison; on mismatch, retries the
-    SCF (new `PySCFDriver` run) up to `_MAX_REBUILD_RETRIES = 5` times rather than accepting or
-    gauge-searching a genuinely different local minimum.
-  - New bounded discrete sign-gauge search: if the energy matches but the unflipped operator
-    comparison still fails, searches `2**(k-1)` per-active-orbital sign-flip patterns (one column's
-    sign fixed as gauge redundancy) for `k - 1 <= _MAX_SIGN_SEARCH_ORBITALS = 10` active orbitals,
-    re-deriving the qubit operator from the sign-flipped `mo_coeff` (cheap: no new SCF) and
-    re-comparing.
-  - No change to the function's signature or return type.
-- `specs/SPEC_rebuild_gauge_search.md` — new spec (goal, root-cause analysis, approach, gates,
-  honestly revised status/G2, out-of-scope).
-- `tests/test_rebuild_gauge_search_spec.py` — new gate file, G3-G5 (cheap when unneeded, energy
-  pre-filter behavior, sign-search bound). 5 tests, all passing.
-- Two new beads filed for issues found but out of this bead's scope (see below): chem-7cx, chem-3fd.
+## What I did this session
 
-## Pre-registered acceptance criteria and pass/fail
+1. `bd show chem-g14` / `bd show chem-7cx` / `bd show chem-0m8`: both dependencies were marked
+   **closed**, but their actual code fixes lived only on their own branches
+   (`sandbox/chem-7cx`, `sandbox/chem-0m8`) — neither had been merged into `sandbox/chem-g14` or
+   `main`. The bead's own notes said "close once `tests/test_eigenstate_reachability_spec.py` is
+   green on Linux," so I merged the dependency branches in to actually get there.
+2. Baseline on `sandbox/chem-g14` HEAD (`9a3ac35`, before any merge this session):
+   `uv run pytest tests/test_eigenstate_reachability_spec.py -q` → **14 failed, 35 passed**
+   (matches the bead's own prior note of "14-15/45 still fail").
+3. Merged, one at a time, with `git merge --no-edit`:
+   - `sandbox/chem-7cx` (pins `pyscf.lib.num_threads(1)` around `build_molecular_hamiltonian`'s
+     free RHF solve — root cause: PySCF's OpenMP integral evaluation is not bit-associative).
+   - `sandbox/chem-0m8` (makes `test_G2`/`test_G4` branch-aware instead of asserting a hardcoded
+     SCF branch for square H4).
+   - `sandbox/chem-s6c` (same thread-pin pattern, applied to `reachability.py`'s own
+     `scf_symmetry_status`/`hf_orbital_irreps` RHF calls — a gap chem-7cx's fix didn't cover).
+   - `sandbox/chem-0yh` (same pattern, applied to the test file's own `_fci()` helper).
+   - `sandbox/chem-50w` (same pattern, applied to `_driver_orbitals`'s own, separately-unpinned
+     `run_pyscf()` call).
+   All five branch from the same commit (`9a3ac35`), so each merge was close to a fast-forward;
+   conflicts were only ever in `.beads/*.jsonl` (append-only interaction logs: unioned; issue
+   snapshots: kept whichever side had the more-advanced status, verified with `bd show`) and once
+   in `tests/test_eigenstate_reachability_spec.py` and `reachability.py`, both of which
+   auto-merged cleanly (no conflict markers). Merge commits:
+   `eb4b3ab`, `084c44d`, `6718e4b`, `d4f9ae7`, `71613e4`.
+4. Re-ran the gate file after all five merges, three times in a row.
 
-The bead (`bd show chem-g14`) frames the fix as closing the rebuild-reproducibility gap so the 17
-failures in `tests/test_eigenstate_reachability_spec.py` clear. Breaking that into checkable parts:
+## Evidence
 
-1. **The rebuild-reproducibility gap itself is closed** (direct `_driver_orbitals` calls succeed
-   where they used to always return `None`). ✅ **Pass.** Calling `reachability._driver_orbitals(mh)`
-   directly (bypassing the rest of the test file) for every `(bond length, conv_tol)` combination
-   the gate file exercises, 5-6 trials each: **35/36 successes**, vs. an unconditional `None` 5/5
-   times at the old `_SAME_OPERATOR_ATOL=1e-12` on the same witness (a=1.2).
-2. **No regression — every baseline-passing test still passes.** ✅ **Pass.** Diffed baseline
-   `main` (unmodified `reachability.py`, via `git stash`) against the fix across 3 repeated full
-   runs of `tests/test_eigenstate_reachability_spec.py`:
-   - Baseline: **17 failed, 28 passed** (stable across repeats, though the exact failing IDs
-     flicker — this instability is itself the bead's own prior finding).
-   - Fixed: **14, 15, 14 failed / 34, 35, 35 passed** across 3 runs.
-   - Every test passing on baseline still passes with the fix. Tests that newly pass:
-     `test_G4_broken_rhf_bit_is_excluded_and_nothing_is_flagged[1.4]`,
-     `test_G5_stale_build_args_disable_spatial_bits_but_a_shift_does_not`,
-     `test_G9_qksd_from_hf_converges_to_the_residue_level[1.19-None]`.
-3. **The test suite fully passes (45/45).** ❌ **Fail.** 14-15/45 still fail. This is the reason
-   the bead stays open — see below.
-4. **The fix's own mechanics are correctly bounded** (G3-G5 in the spec). ✅ **Pass.**
-   `uv run pytest tests/test_rebuild_gauge_search_spec.py -v` → **5 passed**.
-5. **Lint.** ✅ **Pass.** `uv run ruff check .` → `All checks passed!` (full repo, including the new
-   files).
+```bash
+cd /workspace
+uv sync --extra dmrg --extra test --extra dev
+uv run ruff check .                                           # -> All checks passed!
+uv run pytest tests/test_eigenstate_reachability_spec.py -q   # run 1
+uv run pytest tests/test_eigenstate_reachability_spec.py -q   # run 2
+uv run pytest tests/test_eigenstate_reachability_spec.py -q   # run 3
+```
+
+All three runs: **7 failed, 41 passed, 2 skipped** — identical failing node IDs every time:
+
+```
+test_G1_residue_level_identified_warned_and_kept[1.1-1e-06-1e-08]
+test_G1_residue_level_identified_warned_and_kept[1.1-1e-06-1e-10]
+test_G1_residue_level_identified_warned_and_kept[1.19-1e-06-1e-10]
+test_G7_threshold_sites_use_the_population_cut[1.19-1e-06]
+test_G9_qksd_from_hf_converges_to_the_residue_level[1.19-1e-06]
+test_G9_qksd_from_hf_converges_to_the_residue_level[1.19-None]
+test_G9_control_tight_scf_stays_on_the_ag_level[1.1]
+```
+
+That exact repeatability (vs. the pre-merge baseline's flicker, and vs. chem-7cx/chem-0m8's own
+notes about node IDs "flipping between pass and fail with zero code changes") is itself evidence
+that the determinism chain (chem-7cx + chem-s6c + chem-0yh + chem-50w) is complete: every
+previously-unpinned RHF/FCI call reachable from this test file is now pinned, so the suite's
+result no longer depends on ambient thread count or which run it is.
+
+Related gate files, each run in its own process, to confirm the merged fixes themselves are sound
+and to check for collateral regressions:
+
+```bash
+uv run pytest tests/test_scf_branch_determinism_spec.py -q            # 4 passed
+uv run pytest tests/test_reachability_scf_determinism_spec.py -q      # 5 passed
+uv run pytest tests/test_driver_orbitals_scf_determinism_spec.py -q   # 5 passed
+uv run pytest tests/test_rebuild_gauge_search_spec.py -q              # 5 passed  (chem-g14's own gate, unaffected)
+uv run pytest tests/test_reference_energies.py tests/test_krylov_convergence.py tests/test_noise_resilience.py -q
+                                                                        # 20 passed (core gates, unaffected)
+uv run pytest tests/test_scf_conv_tol_spec.py -q                      # 4 failed, 10 passed
+```
+
+The `test_scf_conv_tol_spec.py` failures (`test_G1[1.2]`, `test_G2[1.35]`, `test_G2[1.19]`,
+`test_G3[1.35]`) are **not new** — they match chem-8ls's own enumerated list for that file
+(`G1[1.0],G1[1.2], G2[1.35],G2[1.19], G3[1.35]`) and are the same branch-selection phenomenon
+discussed below, pre-existing and unrelated to this session's merges.
 
 ## Why this stays open
 
-Per this run's instructions, chem-g14 closes only when its acceptance criteria are met *and the
-test suite passes* — not just "moved the queue." Here, criterion 3 fails: 14-15/45 cases in
-`tests/test_eigenstate_reachability_spec.py` still fail after the fix. Root-causing each remaining
-failure (one by one, against an unmodified `main` checkout via `git stash` on `reachability.py`
-alone) shows **none of them are caused by this fix** — they were previously *masked* by the old
-atol always returning `None` (so the downstream code they exercise never ran), and now that the
-rebuild succeeds often enough to reach that downstream code, two independent, pre-existing bugs
-surface instead:
+The remaining 7 failures are not a reconciliation-gap or determinism problem — they're a
+*which-branch-is-the-witness* problem, which is explicitly chem-8ls's territory (open,
+in_progress): "Square-H4 witness specs don't reproduce their recorded Linux numbers; RHF branch
+selection is non-deterministic on this container." Direct confirmation:
 
-1. **`build_molecular_hamiltonian`'s own (first, non-rebuilt) free RHF solve is itself
-   nondeterministic run-to-run** on square H4 — confirmed directly: 10 fresh builds of the same
-   `(atom, conv_tol)` land on two different branches (9/10 at `hf_energy=-1.7825510081` with the
-   known residue population at 1.2e-6; 1/10 at `hf_energy=-1.7825511823`, residue at 2.4e-9, below
-   the gate's `tol=1e-8` cut). This explains `test_G1_residue_level_identified_warned_and_kept` and,
-   conclusively, `test_G9_control_tight_scf_stays_on_the_ag_level` — the latter's own source
-   (`tests/test_eigenstate_reachability_spec.py:320-325`) calls `build_molecular_hamiltonian`
-   directly and never reaches `_driver_orbitals` at all, so this fix cannot be responsible. **Filed
-   as chem-7cx** (already existed as a candidate before this session; updated with this evidence).
-2. **`orbital_parity_bounds`/`hf_symmetry_sector`'s square-H4 physics is independently wrong.**
-   `test_G2_decision_equals_symmetry_adapted_fci` already fails on unmodified `main` (e.g. a=1.35,
-   conv_tol=1e-9: baseline gives a 36-vs-10 "in Ag sector" mismatch against an independent
-   symmetry-adapted FCI; with this fix, 20-vs-10 — improved, since the computation now actually
-   runs instead of short-circuiting, but still wrong). `test_G4_broken_rhf_bit_is_excluded_and_nothing_is_flagged[1.2]`
-   also fails on baseline (`TypeError: 'NoneType' object is not iterable`, since
-   `orbital_parity_bounds` was always `None`); with the fix it fails differently — the rebuilt MOs
-   are confirmed to be a *genuine* match to `mh`'s own MOs (residual 1e-6 to 1e-5, deep in this
-   module's own noise floor, not a false-positive sign-gauge accept), but one bit's computed `beta`
-   comes out ~0.0008 instead of the expected `>= 1.0`. **Filed as chem-3fd.**
+```bash
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 \
+  uv run python -c "
+from reachability import scf_symmetry_status
+print('a=1.1 ', scf_symmetry_status('H 0 0 0; H 1.1 0 0; H 1.1 1.1 0; H 0 1.1 0'))
+print('a=1.19', scf_symmetry_status('H 0 0 0; H 1.19 0 0; H 1.19 1.19 0; H 0 1.19 0'))
+"
+# a=1.1  (True, -0.07159850480256758)   <- broken-symmetry branch
+# a=1.19 (False, -3.2862601528904634e-14)  <- symmetric branch
+```
 
-Both are confirmed present on baseline `main` (unmodified) too — this fix did not introduce either;
-it only stopped silently masking them by making the gap it targets actually close often enough for
-the downstream code to run.
+`a=1.1` landing on `(True, -0.0716...)` matches chem-8ls's own documented finding for that exact
+geometry on this exact container ("deterministically lands on the BROKEN-SYMMETRY branch...
+instead of the symmetric branch with the 5.07e-10 residue that specs/SPEC_reachability_tolerance.md
+...recorded on an earlier Linux run"). `test_G1`/`test_G9_control`/`test_G7`/`test_G9`'s hardcoded
+assertions were calibrated against whichever branch an earlier (likely macOS) session landed on,
+not this one — the same category of problem chem-0m8 just fixed for `test_G2`/`test_G4` in this
+same file, but for a different set of tests that chem-0m8 did not touch.
 
-### Cross-check against an independent gate file (same session)
+I did not fix this here: chem-8ls's own text calls this "a scientific decision (which geometries
+are stable witnesses here) requiring per-spec re-validation, not a tolerance edit" — exactly the
+kind of out-of-scope work this run's instructions say to file, not do. I:
 
-Before concluding, I also ran the broader spec suite
-(`tests/test_certified_gaps_spec.py tests/test_excited_bounds_spec.py
-tests/test_certified_dipole_spec.py tests/test_hf_overlap_certificate_spec.py
-tests/test_scf_conv_tol_spec.py`) to check for regressions elsewhere that import `reachability`.
-Result: **6 failed, 50 passed**, all 6 in `tests/test_scf_conv_tol_spec.py`
-(`test_G1_clean_geometry_does_not_move[1.0/1.2]`,
-`test_G2_witness_moves_but_the_eigenvalue_does_not[1.19/1.35]`,
-`test_G3_residue_collapses_at_the_tight_tolerance[1.19/1.35]`, the last with
-`p0=0.4621025036353699` where `<1e-20` was expected). Traced the call path
-(`_measure` → `_dense_hf_projection` / `reachable_eigenpairs` / `exact_reachable_overlap`) and
-confirmed **none of it calls `_driver_orbitals`, `hf_symmetry_sector`, or `symmetry_allowed`** —
-only `reachable_mask`'s diagnostic warning does, under a broad `try/except` that never changes the
-returned mask/measurement. A baseline run of just this file (`git stash` on `reachability.py` alone)
-reproduces the same shape of failure (5/14 failed, including `test_G3[1.35]`'s own
-`p0` anomaly) with zero changes to this fix. This is the same root cause as (1) above (the original,
-non-rebuilt SCF solve's branch nondeterminism), surfacing through a different gate file. Folded into
-chem-7cx as further confirming evidence rather than filed as a third bead.
-
-## Additional verification (not required by the acceptance criteria, done for confidence)
-
-- `uv run pytest tests/test_rebuild_gauge_search_spec.py -v` → `5 passed`.
-- `uv run ruff check reachability.py tests/test_rebuild_gauge_search_spec.py` → clean, and
-  `uv run ruff check .` (full repo) → clean.
-- Direct, instrumented reproduction of the sign-gauge search at the a=1.2 witness (5 trials):
-  unflipped residuals ranged 4.7e-6 to 1.18e-5; best-over-signs residuals ranged 1.9e-6 to 4.7e-6 —
-  both deep in the noise floor, confirming matches found by the search are genuine reconciliations
-  of the same MO basis, not false-positive accepts of a different one.
+- Added the 7 new/updated node IDs for `test_eigenstate_reachability_spec.py` to chem-8ls's notes
+  (`bd update chem-8ls --notes=...`) — its own enumerated list only had `test_G9[1.1]` for this
+  file, written before chem-0m8/chem-s6c/chem-0yh/chem-50w's merges changed which tests are
+  reachable.
+- Wired `chem-g14 → chem-8ls` as a new dependency (`bd dep add chem-g14 chem-8ls`), so this bead
+  isn't re-dispatched before chem-8ls actually lands.
+- Updated chem-g14's own notes (`bd update chem-g14 --notes=...`) with this session's findings.
 
 ## What I decided not to do, and why
 
-- Did not attempt to fix `build_molecular_hamiltonian`'s own SCF-branch nondeterminism (chem-7cx) or
-  `orbital_parity_bounds`/`hf_symmetry_sector`'s square-H4 sector physics (chem-3fd) as part of this
-  bead. Both are confirmed pre-existing and independent of `_driver_orbitals`'s rebuild-
-  reproducibility (chem-g14's actual, narrow scope); fixing them here would mean fixing problems
-  this bead didn't ask me to fix and that would need their own spec/investigation per this repo's
-  SDD convention. Filed as their own beads instead, per "work discovered outside this bead's scope
-  must be filed as a new bead, not fixed now."
-  - Note: both beads were originally filed in the segment before this one; this session's main
-    contribution to them is the additional cross-check evidence from `test_scf_conv_tol_spec.py`,
-    folded into chem-7cx's notes rather than opening a third bead for the same root cause.
-- Did not loosen `_SAME_OPERATOR_ATOL` further, or widen `_ENERGY_MATCH_ATOL`/retry counts, to try to
-  force the remaining 14-15 failures closed. They are not reconciliation-gap failures (the rebuild
-  itself now matches correctly, per the noise-floor residuals above) — loosening further would only
-  risk accepting a false-positive match on some other system, trading a correctness guarantee for a
-  cosmetic pass count.
-- Did not revise `specs/SPEC_eigenstate_reachability.md` itself (the file whose §9 pre-registered
-  this gap). This bead's own spec (`SPEC_rebuild_gauge_search.md`) is the right place to record the
-  honest, falsified-then-revised G2 gate; editing the original spec's historical claim seemed out of
-  scope and I didn't want to touch a file I wasn't asked to.
+- Did not touch chem-8ls itself. It's a pre-existing, separately-tracked, in_progress bead whose
+  own text frames the fix as a scientific witness-selection decision across *four* spec files, not
+  something to patch inline while closing out chem-g14.
+- Did not loosen any of the gate thresholds in `test_G1`/`test_G7`/`test_G9`/`test_G9_control` to
+  force a pass. They're not wrong about the physics; they're calibrated to a branch this container
+  doesn't reach. Changing the assertion without knowing the "platform-correct" answer is exactly
+  what chem-8ls exists to investigate properly.
+- Did not re-run the DMRG-isolated gate set (`make gates` / `scripts/run_gates.sh` across all ~117
+  spec files) — out of scope for a bead about one test file; ran only the gates that touch the
+  merged code paths (listed above) plus the three core validation gates, to bound regression risk
+  without spending the whole compute budget on unrelated specs.
 
 ## What I could not verify
 
-- Whether the `build_molecular_hamiltonian` branch nondeterminism (chem-7cx) and the
-  `orbital_parity_bounds` physics bug (chem-3fd) are platform-specific (this container's PySCF/BLAS
-  build) or would reproduce on the host the original `SPEC_eigenstate_reachability.md` baseline
-  ("45 passed") was recorded on. Both beads note this as an open question for whoever picks them up.
-- Whether `_MAX_SIGN_SEARCH_ORBITALS=10` / `_MAX_REBUILD_RETRIES=5` are the right bounds for systems
-  larger than this module's own gate file exercises (max observed need: `k-1=5` at the largest
-  gated system) — left as documented, un-exercised headroom per the spec's §7.
+- Whether chem-8ls's "platform-correct" witness branch for a=1.1/1.19 can be determined without
+  a cross-platform SCF audit (e.g., forcing a specific initial guess/DIIS seed and checking it's
+  stable on both macOS and this container) — that's the open question chem-8ls itself poses.
+- Whether the 5 merged branches' `.beads/issues.jsonl` conflict resolutions (always kept whichever
+  side's `status` field was more advanced, confirmed against `bd show <id>` each time) exactly
+  match what a `bd dolt pull`-based sync would have produced — I resolved them by hand since all
+  five source branches were never pushed/pulled through Dolt in this container.
 
 ## Commands to reproduce
 
 ```bash
 cd /workspace
 uv sync --extra dmrg --extra test --extra dev
-uv run ruff check .                                              # -> All checks passed!
-uv run pytest tests/test_rebuild_gauge_search_spec.py -v         # -> 5 passed
-
-# Regression check (takes ~2-3 min per run; results flicker run-to-run, see above):
-uv run pytest tests/test_eigenstate_reachability_spec.py -q      # -> 14-15 failed, 34-35 passed
-
-# Baseline comparison (reverts only reachability.py):
-git stash push -- reachability.py
-uv run pytest tests/test_eigenstate_reachability_spec.py -q      # -> 17 failed, 28 passed
-git stash pop
-
-# Cross-check gate file (unrelated to this fix, confirms the same upstream nondeterminism):
-uv run pytest tests/test_scf_conv_tol_spec.py -q                 # -> ~5-6 failed, ~8-9 passed
+uv run ruff check .                                                 # All checks passed!
+uv run pytest tests/test_eigenstate_reachability_spec.py -q         # 7 failed, 41 passed, 2 skipped (x3 repeats)
+uv run pytest tests/test_scf_branch_determinism_spec.py -q          # 4 passed
+uv run pytest tests/test_reachability_scf_determinism_spec.py -q    # 5 passed
+uv run pytest tests/test_driver_orbitals_scf_determinism_spec.py -q # 5 passed
+uv run pytest tests/test_rebuild_gauge_search_spec.py -q            # 5 passed
+uv run pytest tests/test_reference_energies.py tests/test_krylov_convergence.py tests/test_noise_resilience.py -q
+                                                                      # 20 passed
+uv run pytest tests/test_scf_conv_tol_spec.py -q                    # 4 failed, 10 passed (pre-existing, chem-8ls)
 ```
 
 ## Git
 
-Committed on `sandbox/chem-g14` (per this run's git policy, which authorizes committing — but not
-pushing or merging — to this branch):
+On `sandbox/chem-g14`, this session's commits (oldest first):
 
 ```
-<see `git log sandbox/chem-g14` for the commits made alongside this handoff>
+c849ee5  bd: claim chem-g14
+eb4b3ab  Merge branch 'sandbox/chem-7cx' into sandbox/chem-g14
+084c44d  Merge branch 'sandbox/chem-0m8' into sandbox/chem-g14
+6718e4b  Merge branch 'sandbox/chem-s6c' into sandbox/chem-g14
+d4f9ae7  Merge branch 'sandbox/chem-0yh' into sandbox/chem-g14
+71613e4  Merge branch 'sandbox/chem-50w' into sandbox/chem-g14
+20cc7c9  bd: add chem-g14 -> chem-8ls dependency; note chem-8ls's extended Linux failure list
+<this handoff + final bd notes commit>
 ```
 
-Tree otherwise clean. `.claude/settings.local.json` (untracked, pre-existing local tool-permission
-config, unrelated to this task) deliberately not committed. Per policy, not pushed.
+Tree otherwise clean except this handoff and the trailing bd-notes export. `.claude/settings.local.json`
+(untracked, pre-existing local tool-permission config, unrelated to this task) deliberately not
+committed. Per this run's git policy: committed, not pushed, not merged to `main` — a human merges.
 
 ## Bead
 
-Left **open** (`bd update chem-g14 --notes=...`, not closed) because
-`tests/test_eigenstate_reachability_spec.py` does not fully pass (criterion 3 above). The fix itself
-is implemented, gated, and verified to close chem-g14's actual, narrow claim (rebuild-
-reproducibility) without regression; the remaining failures are two separately-filed, pre-existing,
-out-of-scope bugs (chem-7cx, chem-3fd) that this bead's own fix does not touch and cannot close.
+Left **open**. `bd dep add chem-g14 chem-8ls` run so it depends on chem-8ls going forward. Close
+`chem-g14` once `tests/test_eigenstate_reachability_spec.py` is green — which now requires
+chem-8ls's witness-geometry work, not more work in chem-g14's own scope.
