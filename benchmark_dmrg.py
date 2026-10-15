@@ -23,7 +23,7 @@ active spaces where DMRG matters -- that gap (Trotter/qubitization for shallower
 circuits, and measurement rather than statevector inner products) is the remaining work in
 REFACTOR_PLAN.md, not something this script hides.
 
-Run:  python benchmark_dmrg.py   ->  prints a table and writes data/dmrg_ladder.csv
+Run:  uv run python benchmark_dmrg.py   ->  prints a table and writes data/dmrg_ladder.csv
 Requires: block2 (pip install block2).  Falls back to FCI-only with a warning if absent.
 """
 import csv

@@ -11,7 +11,7 @@ This is the honest Phase-4 benchmark rung above H2/LiH (see REFACTOR_PLAN.md). F
 small enough that FCI is exact, CASCI *is* the reference; DMRG becomes the reference only once the
 active space outgrows FCI (and, separately, once the system outgrows statevector simulation).
 
-Run:  python benchmark_n2.py   ->  prints a table and writes data/n2_dissociation.csv
+Run:  uv run python benchmark_n2.py   ->  prints a table and writes data/n2_dissociation.csv
 """
 import csv
 

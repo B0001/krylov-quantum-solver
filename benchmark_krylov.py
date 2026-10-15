@@ -6,7 +6,7 @@ Replaces the retracted README "Empirical Benchmarks" table (which reported machi
 collapse as a feature and energies that swung from +0.003 to -48.7 Ha). Every number here is
 the solver's error against an exact diagonalisation reference in the same energy frame.
 
-Run:  python benchmark_krylov.py   ->  prints a table and writes data/krylov_benchmark.csv
+Run:  uv run python benchmark_krylov.py   ->  prints a table and writes data/krylov_benchmark.csv
 """
 import csv
 
