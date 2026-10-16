@@ -51,7 +51,7 @@ sampled only the nearest neighbour; coordination and the full chain (above) move
 as the likely explanation for the 5.3x (Nb3Cl8) / 2.3x (Nb3Br8) overprediction of the singlet-formation
 Tc by the isolated-dimer J. Running ``coordination_spin_gap`` -- the IDENTICAL cluster topology as
 ``coordination_gap``, just measuring E(Sz=1 lowest) - E(Sz=0 lowest) at half-filling instead of the
-charge gap -- shows J_eff does NOT fall monotonically, for either halide (``python nb3x8_gaps.py``):
+charge gap -- shows J_eff does NOT fall monotonically, for either halide (``uv run python nb3x8_gaps.py``):
 
   Nb3Cl8: z=0 (isolated) 66.20 -> z=1 71.08 -> z=2 66.55 -> z=3 71.12 meV
   Nb3Br8: z=0 (isolated) 119.11 -> z=1 126.50 -> z=2 120.11 -> z=3 126.63 meV
