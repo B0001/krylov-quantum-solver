@@ -189,7 +189,7 @@ class QuantumKrylovSolver:
                 import cupyx.scipy.sparse as cxsp
             except Exception as exc:  # pragma: no cover - exercised only with a CuPy/GPU node
                 raise ImportError(
-                    "device='gpu' requires cupy (pip install cupy-cuda12x) and an NVIDIA GPU."
+                    "device='gpu' requires cupy (uv sync --inexact --extra gpu) and an NVIDIA GPU."
                 ) from exc
             self._cp = cp
             self._H = cxsp.csr_matrix(H_sparse.astype(complex))

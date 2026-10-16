@@ -106,8 +106,7 @@ with useful fidelity — which is exactly why the next research lever is shallow
 ## Installation
 
 ```bash
-conda create -n chem python=3.11 && conda activate chem
-pip install -r requirements.txt
+uv sync --extra dmrg --extra test --extra dev
 ```
 
 ## Quickstart
@@ -124,7 +123,7 @@ print(result.summary())   # E=-7.882... Ha (HF=-7.861..., ref=-7.882..., ...)
 From a CIF via CASCI active space (materials path):
 
 ```bash
-python run_hybrid_solver.py --input_file data/nb_structures/NbN_mp-2634.cif \
+uv run python run_hybrid_solver.py --input_file data/nb_structures/NbN_mp-2634.cif \
     --active_space 8,8 --krylov_dim 8           # add --shots 8192 to model sampling noise
 ```
 

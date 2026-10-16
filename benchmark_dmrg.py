@@ -24,7 +24,7 @@ circuits, and measurement rather than statevector inner products) is the remaini
 REFACTOR_PLAN.md, not something this script hides.
 
 Run:  python benchmark_dmrg.py   ->  prints a table and writes data/dmrg_ladder.csv
-Requires: block2 (pip install block2).  Falls back to FCI-only with a warning if absent.
+Requires: block2 (uv sync --inexact --extra dmrg).  Falls back to FCI-only with a warning if absent.
 """
 import csv
 import math
@@ -82,7 +82,7 @@ def krylov_energy(h1, eri, nelecas, e_core, reference, n_qubits):
 def main():
     if not dmrg_available():
         print("[WARN] block2 not importable -- DMRG column unavailable; install with "
-              "`pip install block2`. Falling back to FCI only where tractable.\n")
+              "`uv sync --inexact --extra dmrg`. Falling back to FCI only where tractable.\n")
 
     print(f"DMRG-backed ladder | N2 @ R={GEOMETRY_R} A | basis {BASIS} | quantum Krylov M={KRYLOV_DIM}")
     mol = gto.M(atom=f"N 0 0 0; N 0 0 {GEOMETRY_R}", basis=BASIS, verbose=0)

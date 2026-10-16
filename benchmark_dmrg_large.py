@@ -15,7 +15,7 @@ against exact FCI where tractable, and reports the correlation energy and energy
 it up by editing CHAIN_LENGTHS (n=50-100 on a GPU/big-RAM node; n<=~24 on a laptop). Threads via
 --threads; GPU via the block2-gpu build.
 
-Requires block2 (pip install block2).
+Requires block2 (uv sync --inexact --extra dmrg).
 Run:  python benchmark_dmrg_large.py [--threads N]   ->  table + data/dmrg_large_hchain.csv
 """
 import argparse
@@ -52,7 +52,7 @@ def main():
     args = ap.parse_args()
 
     if not dmrg_available():
-        print("[FATAL] block2 not importable -- pip install block2.")
+        print("[FATAL] block2 not importable -- run `uv sync --inexact --extra dmrg`.")
         return
 
     print(f"H_n chain DMRG | R={R} A | basis {BASIS} | bond dims {BOND_DIMS} | threads {args.threads}")
