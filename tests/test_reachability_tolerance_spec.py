@@ -138,9 +138,11 @@ def _p0_at_conv_tol(conv_tol):
     from qiskit_nature.second_q.drivers import PySCFDriver
     from qiskit_nature.second_q.mappers import JordanWignerMapper
 
+    from hybrid_quantum_solver.molecular_hamiltonian import map_canonical
+
     prob = PySCFDriver(atom=_square_h4(WITNESS_A), basis="sto-3g", conv_tol=conv_tol).run()
     mapper = JordanWignerMapper()
-    H = mapper.map(prob.hamiltonian.second_q_op()).to_matrix()
+    H = map_canonical(mapper, prob.hamiltonian.second_q_op()).to_matrix()
     w, V = np.linalg.eigh(H)
     hf = np.asarray(Statevector(HartreeFock(prob.num_spatial_orbitals, prob.num_particles,
                                             mapper)).data, dtype=complex)
