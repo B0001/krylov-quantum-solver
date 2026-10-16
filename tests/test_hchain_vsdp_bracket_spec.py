@@ -129,3 +129,49 @@ def test_g5_t2_tightens_and_stays_valid():
         prob, _ = V.hchain_problem(4, t2)
         lbs.append(V.certify(prob, V.solve(prob)[1], e_nuc)[0])
     assert lbs[0] < lbs[1] <= e0
+
+
+def test_g6_recertify_from_stored_dual_without_resolving():
+    """chem-66q: a dual vector saved from a previous solve (as `main()` now writes into every row's
+    `dual_y`) recertifies to the same bound through `recertify()`, which rebuilds only the cheap
+    `build()` step and never calls `solve()` again -- the mechanism that lets a 2-4h SCS re-solve at
+    n = 10/12 be skipped when a bound just needs re-checking. The stored dual is round-tripped
+    through a plain list, as it would be via JSON."""
+    from hybrid_quantum_solver.dmrg_reference import fci_energy
+
+    n = 4
+    h1, eri, ne, e_nuc, _ = integrals(n, localize=True)
+    e0 = fci_energy(h1, eri, ne, e_core=e_nuc)
+    prob, e_nuc_built = V.hchain_problem(n)
+    assert e_nuc_built == e_nuc
+    _, y, _ = V.solve(prob)
+    expected, _ = V.certify(prob, y, e_nuc)
+
+    stored_dual_y = y.tolist()  # what main() now persists to JSON per row
+    recertified, _ = V.recertify(n, False, stored_dual_y, e_nuc)
+
+    assert recertified == expected
+    assert recertified <= e0
+
+
+def test_g6b_recertify_rejects_mismatched_e_nuc():
+    """A dual stored against the wrong (n, t2, e_nuc) must not silently recertify."""
+    prob, e_nuc = V.hchain_problem(4)
+    _, y, _ = V.solve(prob)
+    with pytest.raises(ValueError, match="does not match"):
+        V.recertify(4, False, y.tolist(), e_nuc + 1.0)
+
+
+def test_g7_hard_solver_failure_raises_clearly():
+    """chem-66q: a failed solve (no value, or an unrecognized/non-finite status) must raise a
+    labeled RuntimeError from require_solved, not silently reach `val + e_nuc` downstream in
+    main() as an opaque `TypeError: unsupported operand type(s) for +: 'NoneType' and 'float'`."""
+    with pytest.raises(RuntimeError, match="did not produce a usable solution"):
+        V.require_solved(None, None, "solver_error", "test")
+    with pytest.raises(RuntimeError, match="did not produce a usable solution"):
+        V.require_solved(float("inf"), np.zeros(3), "infeasible", "test")
+    with pytest.raises(RuntimeError, match="did not produce a usable solution"):
+        V.require_solved(1.0, None, "optimal", "test")
+    # a genuinely solved status still passes through unchanged
+    val, y, status = V.require_solved(1.0, np.zeros(2), "optimal", "test")
+    assert val == 1.0 and np.array_equal(y, np.zeros(2)) and status == "optimal"
