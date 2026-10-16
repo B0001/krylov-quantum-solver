@@ -17,7 +17,7 @@ HONEST CAVEATS:
   * At 16 qubits FCI is exact and classically trivial -- there is NO quantum advantage here. This
     independently REPRODUCES the physics that resolved the controversy; it is not a new result.
 
-Run:  python study_be2.py   ->  prints the curve + binding energies, writes data/be2_curve.csv
+Run:  uv run python study_be2.py   ->  prints the curve + binding energies, writes data/be2_curve.csv
 """
 import csv
 import os

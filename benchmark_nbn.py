@@ -22,7 +22,7 @@ HONEST CAVEATS (see also REFACTOR_PLAN.md):
     advantage here; this is a methodology study, not a discovery.
   * block2 (DMRG) required: uv sync --inexact --extra dmrg.
 
-Run:  python benchmark_nbn.py   ->  prints a table and writes data/nbn_active_space.csv
+Run:  uv run python benchmark_nbn.py   ->  prints a table and writes data/nbn_active_space.csv
 """
 import csv
 import math

@@ -15,7 +15,7 @@ HONEST SCOPE (see SPEC §2, §7): minimal-basis MODEL at a fixed geometry, open 
 reproduces benchmark physics (cf. Motta et al., PRX 7, 031059, 2017), it does not extend it, and
 the quantum/statevector solver plays no role at these n.
 
-Run:  python benchmark_hchain_tdl.py [--threads N] [--localize] [--R bohr]
+Run:  uv run python benchmark_hchain_tdl.py [--threads N] [--localize] [--R bohr]
       ->  data/hchain_tdl[_localized][_R<r>].csv + e_inf
 """
 import argparse

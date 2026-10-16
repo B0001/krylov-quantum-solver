@@ -16,7 +16,7 @@ it up by editing CHAIN_LENGTHS (n=50-100 on a GPU/big-RAM node; n<=~24 on a lapt
 --threads; GPU via the block2-gpu build.
 
 Requires block2 (uv sync --inexact --extra dmrg).
-Run:  python benchmark_dmrg_large.py [--threads N]   ->  table + data/dmrg_large_hchain.csv
+Run:  uv run python benchmark_dmrg_large.py [--threads N]   ->  table + data/dmrg_large_hchain.csv
 """
 import argparse
 import csv
