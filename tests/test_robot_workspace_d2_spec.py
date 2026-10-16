@@ -9,9 +9,9 @@ if importlib.util.find_spec("certkit") is None:
     if os.environ.get("CI"):
         raise RuntimeError(
             "certkit is not installed: the workspace D2 gate cannot run. "
-            'Install the pinned checker with `uv pip install -e ".[certkit]"`.'
+            'Install the pinned checker with `uv sync --inexact --extra certkit`.'
         )
-    pytest.skip('certkit extra not installed (uv pip install -e ".[certkit]")',
+    pytest.skip('certkit extra not installed (uv sync --inexact --extra certkit)',
                 allow_module_level=True)
 
 from certkit.interval import Iv  # noqa: E402

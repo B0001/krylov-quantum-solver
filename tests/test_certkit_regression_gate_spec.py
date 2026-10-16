@@ -19,7 +19,7 @@ Electronic frame throughout: certificates are about the qubit matrix, and mh.ene
 a trusted addition made outside it. The references below are therefore NOT the total energies
 the rest of the suite asserts.
 
-Needs the pinned checker (`uv pip install -e ".[certkit]"`). PySCF/qiskit, no block2;
+Needs the pinned checker (`uv sync --inexact --extra certkit`). PySCF/qiskit, no block2;
 `make gates` runs it in its own process.
 """
 import importlib.util
@@ -36,9 +36,9 @@ if importlib.util.find_spec("certkit") is None:
     if os.environ.get("CI"):
         raise RuntimeError(
             "certkit is not installed: the regression-certificate gate cannot run. "
-            'Install the pinned checker with `uv pip install -e ".[certkit]"`.'
+            'Install the pinned checker with `uv sync --inexact --extra certkit`.'
         )
-    pytest.skip('certkit extra not installed (uv pip install -e ".[certkit]")',
+    pytest.skip('certkit extra not installed (uv sync --inexact --extra certkit)',
                 allow_module_level=True)
 
 from certkit.producer import pad_claim  # noqa: E402  -- only once the checker is present
