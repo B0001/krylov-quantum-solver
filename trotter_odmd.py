@@ -36,7 +36,7 @@ from scipy.linalg import expm
 from hybrid_quantum_solver.molecular_hamiltonian import MolecularHamiltonian
 from hybrid_quantum_solver.trotter_krylov import build_trotter_step
 from odmd import ODMDProblem
-from reachability import _dense_hf_projection, reachable_mask
+from reachability import reachable_frame
 
 
 @dataclass
@@ -85,11 +85,9 @@ def build_trotter_odmd_problem(mh: MolecularHamiltonian, n: int = 24, reps: int 
     nq = mh.num_qubits
     H_dense = np.asarray(mh.qubit_hamiltonian.to_matrix())
     psi0 = np.asarray(mh.hf_state().data, dtype=complex)
-    w_eig, V, pops = _dense_hf_projection(mh)       # shared eigh: macOS ZHEEVD fallback
-    reach = w_eig[reachable_mask(mh, w_eig, V, pops, 1e-8)].real    # population cut (chem-obf)
-    width = float(reach.max() - reach.min())
-    mu = float(0.5 * (reach.max() + reach.min()))
-    tau = float(np.pi / width)
+    # pass H_dense in: avoids a second to_matrix() build (+268 MB at 12 qubits, chem-mg8)
+    frame = reachable_frame(mh, H=H_dense)
+    width, mu, tau, reach = frame.width, frame.mu, frame.tau, frame.reach
 
     H_s = (mh.qubit_hamiltonian - SparsePauliOp("I" * nq, coeffs=[mu])).simplify()
     step = build_trotter_step(H_s, tau, order=order, reps=reps)

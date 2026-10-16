@@ -43,18 +43,16 @@ from scipy.linalg import expm
 
 from hybrid_quantum_solver.molecular_hamiltonian import MolecularHamiltonian
 from hybrid_quantum_solver.trotter_krylov import build_trotter_step
-from reachability import _dense_hf_projection, reachable_mask
+from reachability import reachable_frame, reachable_mask
 
 
 def _centered(mh: MolecularHamiltonian):
     """The centered frame of trotter_odmd.build_trotter_odmd_problem: (H_dense, psi0, mu, tau)."""
     H_dense = np.asarray(mh.qubit_hamiltonian.to_matrix())
     psi0 = np.asarray(mh.hf_state().data, dtype=complex)
-    w_eig, V, pops = _dense_hf_projection(mh)       # shared eigh: macOS ZHEEVD fallback
-    reach = w_eig[reachable_mask(mh, w_eig, V, pops, 1e-8)].real    # population cut (chem-obf)
-    mu = float(0.5 * (reach.max() + reach.min()))
-    tau = float(np.pi / (reach.max() - reach.min()))
-    return H_dense, psi0, mu, tau, w_eig, V, pops
+    # pass H_dense in: avoids a second to_matrix() build (+268 MB at 12 qubits, chem-mg8)
+    frame = reachable_frame(mh, H=H_dense)
+    return H_dense, psi0, frame.mu, frame.tau, frame.w, frame.V, frame.pops
 
 
 def reference_population(mh: MolecularHamiltonian) -> float:

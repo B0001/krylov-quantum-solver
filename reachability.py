@@ -29,6 +29,7 @@ the reference genuinely overlaps that level (population ~0.45, not ~1e-10) AND l
 from __future__ import annotations
 
 import warnings
+from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import numpy as np
@@ -137,9 +138,15 @@ def symmetry_filter_available(atom: str, basis: str = "sto-3g",
     return hf_orbital_irreps(atom, basis=basis, conv_tol=conv_tol) is not None
 
 
-def _dense_hf_projection(mh):
-    """(eigenvalues ascending, eigenvectors, HF populations) -- dense, O(2^n)."""
-    h = mh.qubit_hamiltonian.to_matrix()
+def _dense_hf_projection(mh, H: Optional[np.ndarray] = None):
+    """(eigenvalues ascending, eigenvectors, HF populations) -- dense, O(2^n).
+
+    Pass ``H`` (an already-built ``mh.qubit_hamiltonian.to_matrix()``) to reuse it instead of
+    building the dense matrix a second time -- the extra build cost 268 MB at 12 qubits for
+    callers (trotter_odmd.py, trotter_resolution_floor.py) that also need the raw matrix for
+    ``expm``/circuit eigendecomposition (chem-mg8).
+    """
+    h = mh.qubit_hamiltonian.to_matrix() if H is None else H
     try:
         w, vecs = np.linalg.eigh(h)
     except np.linalg.LinAlgError:
@@ -490,6 +497,41 @@ def reachable_mask(mh, w, vecs, pops, tol: float) -> np.ndarray:
                       f"({TIGHT_SCF_CONV_TOL:g}) to remove the residue.",
                       RuntimeWarning, stacklevel=2)
     return keep
+
+
+@dataclass
+class ReachableFrame:
+    """The odmd.py/msd.py/trotter_odmd.py/trotter_resolution_floor.py/device_odmd.py centered-
+    frame convention: ``mu`` centers the HF-reachable spectrum, ``tau = pi/width`` keeps every
+    reachable eigenphase inside the closed band ``[-width/2, width/2]``. ``w``/``V``/``pops`` are
+    the FULL (unmasked) dense spectrum -- callers that need the global ground or the raw
+    population array (e.g. a drift-prone ``ref``, or a second reachability cut at a different
+    ``tol``) still have it; ``reach`` is ``w`` restricted to the reachable mask.
+    """
+    mu: float
+    tau: float
+    width: float
+    reach: np.ndarray
+    w: np.ndarray
+    V: np.ndarray
+    pops: np.ndarray
+
+
+def reachable_frame(mh, tol: float = 1e-8, H: Optional[np.ndarray] = None) -> ReachableFrame:
+    """mu/tau centering frame from the HF-reachable sector, from ONE dense eigh.
+
+    Replaces the five copies of ``eigh + reachable_mask + mu/tau`` that used to be pasted into
+    odmd.py, msd.py, trotter_odmd.py, trotter_resolution_floor.py and device_odmd.py (chem-mg8).
+    Pass ``H`` (an already-built ``mh.qubit_hamiltonian.to_matrix()``) when the caller also needs
+    the raw dense matrix for something else -- that is what used to force a second ``to_matrix()``
+    build (+268 MB at 12 qubits) in trotter_odmd.py / trotter_resolution_floor.py.
+    """
+    w, V, pops = _dense_hf_projection(mh, H=H)
+    reach = w[reachable_mask(mh, w, V, pops, tol)].real
+    width = float(reach.max() - reach.min())
+    mu = float(0.5 * (reach.max() + reach.min()))
+    tau = float(np.pi / width)
+    return ReachableFrame(mu=mu, tau=tau, width=width, reach=reach, w=w, V=V, pops=pops)
 
 
 def reachable_eigenpairs(mh, tol: float = REACHABLE_TOL_CERTIFIED):
