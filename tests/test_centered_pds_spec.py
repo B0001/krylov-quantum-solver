@@ -14,6 +14,11 @@ centering shift need not be known accurately: mu = <H> (free: it is mu_1) works 
 Reuse only: hamiltonian_moments, pds_energy, device_odmd.centered_frame. ``_shifted`` below is the
 same dataclasses.replace shift centered_frame performs, at an arbitrary mu (test-only, for G5).
 
+Every ``hamiltonian_moments`` call below passes ``centered=False``: this file's "raw" and
+explicitly-shifted frames must stay exactly what their names say, not get a second, implicit
+mu=<H> shift from `moment_expansion.hamiltonian_moments`'s new default (chem-nxn,
+specs/SPEC_centered_moments_default.md).
+
 Thread pinning (same as tests/test_pds_excited_roots_spec.py): raw-frame M at K>=6 is past 1/eps
 and BLAS thread count picks the floating-point path. Centered results were identical across 1/2/4
 threads; raw results were not (recorded in the spec, which is why G4 asserts only the robust part).
@@ -65,7 +70,8 @@ def _system(name):
     mh = build_molecular_hamiltonian(**GEOMETRIES[name])
     mh_c, _, mu_c = centered_frame(mh)
     return (mh, mh.ground_state_energy(), mu_c,
-            hamiltonian_moments(mh, 2 * MAX_K), hamiltonian_moments(mh_c, 2 * MAX_K))
+            hamiltonian_moments(mh, 2 * MAX_K, centered=False),
+            hamiltonian_moments(mh_c, 2 * MAX_K, centered=False))
 
 
 def test_G1_centered_equals_raw_where_raw_is_trustworthy():
@@ -133,13 +139,13 @@ def test_G5_insensitive_to_a_badly_estimated_center():
         K <= 8 to < 1e-6 Ha and still cuts cond(M) at K=8 by >= 8 orders (measured 9.5 / 12.2 / 14.1)."""
     mh, _, mu_c, _, (cen, off_c) = _system("N2")
     for delta in (-2.0, -1.0, -0.5, 0.5, 1.0, 2.0):
-        mom, off = hamiltonian_moments(_shifted(mh, mu_c + delta), 2 * MAX_K)
+        mom, off = hamiltonian_moments(_shifted(mh, mu_c + delta), 2 * MAX_K, centered=False)
         for K in (7, 8):
             assert abs(pds_energy(mom, K, off) - pds_energy(cen, K, off_c)) < 1e-6, (delta, K)
 
     for name in DEEP:
         mh, fci, _, (raw, _), (cen, off_c) = _system(name)
-        mom, off = hamiltonian_moments(_shifted(mh, raw[1]), 2 * MAX_K)
+        mom, off = hamiltonian_moments(_shifted(mh, raw[1]), 2 * MAX_K, centered=False)
         for K in range(1, MAX_K + 1):
             assert abs(pds_energy(mom, K, off) - pds_energy(cen, K, off_c)) < 1e-6, (name, K)
         assert np.log10(_cond(raw, MAX_K)) - np.log10(_cond(mom, MAX_K)) >= 8.0, name

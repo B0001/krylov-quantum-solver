@@ -25,28 +25,71 @@ of the same operator).
 from __future__ import annotations
 
 import numpy as np
+import scipy.sparse as sp
 
 from hybrid_quantum_solver.molecular_hamiltonian import MolecularHamiltonian
 
 
-def hamiltonian_moments(mh: MolecularHamiltonian, max_order: int):
-    """Hamiltonian moments ``mu_n = <phi|H^n|phi>`` (n = 0..max_order) of the Hartree-Fock reference.
-
-    Returns ``(moments, offset)`` with ``moments`` in the electronic frame (``mu_0 = 1``) and
-    ``offset = energy_offset``; a physical energy estimate adds ``offset`` to the electronic-frame
-    result. Moments come from repeated sparse mat-vec (``w_k = H w_{k-1}``), real because H is
-    Hermitian.
-    """
-    if max_order < 1:
-        raise ValueError("max_order must be >= 1")
-    H = mh.qubit_hamiltonian.to_matrix(sparse=True).tocsc()
-    phi = np.asarray(mh.hf_state().data, dtype=complex)
+def _raw_moments(H, phi: np.ndarray, max_order: int) -> np.ndarray:
     moments = [1.0]
     w = phi.copy()
     for _ in range(max_order):
         w = H.dot(w)
         moments.append(float(np.real(phi.conj() @ w)))
-    return np.array(moments), float(mh.energy_offset)
+    return np.array(moments)
+
+
+def _hankel_cond(moments: np.ndarray, K: int) -> float:
+    M = np.array([[moments[2 * K - i - j] for j in range(1, K + 1)] for i in range(1, K + 1)])
+    return float(np.linalg.cond(M))
+
+
+def hamiltonian_moments(mh: MolecularHamiltonian, max_order: int, centered: bool = True):
+    """Hamiltonian moments ``mu_n = <phi|H^n|phi>`` (n = 0..max_order) of the Hartree-Fock reference.
+
+    Returns ``(moments, offset)`` with ``moments`` in the electronic frame (``mu_0 = 1``) and a
+    physical energy estimate adds ``offset`` to the electronic-frame result. Moments come from
+    repeated sparse mat-vec (``w_k = H w_{k-1}``), real because H is Hermitian.
+
+    ``centered=True`` (default, chem-nxn, specs/SPEC_centered_moments_default.md): before taking
+    moments, shift ``H -> H - mu_1*I`` with ``mu_1 = <phi|H|phi>`` (the free first moment -- no
+    diagonalization) and fold ``mu_1`` into ``offset``. This is the same shift validated by
+    `specs/SPEC_centered_pds.md` G5 (``mu = <H>`` reproduces dense-diagonalization centering to
+    < 1e-6 Ha and keeps an >= 8-order cond(M) cut at K=8): it makes PDS(K) safe out to K=8 by
+    default, with no caller-side centering.
+
+    The shift is applied only if it actually helps: `specs/SPEC_centered_pds.md` G2b found that past
+    Krylov exhaustion (K > the number of HF-reachable eigenstates, e.g. H2's K=2) ``det M -> 0`` is
+    fundamental in *every* frame, and centering can leave M *more* ill-conditioned there than the raw
+    frame happens to be. So this computes the raw moments (needed anyway for ``mu_1``) and, only if
+    the centered Hankel matrix at the deepest K this ``max_order`` supports is no worse conditioned
+    than the raw one, returns the centered moments; otherwise it falls back to raw. This reproduces
+    the pre-chem-nxn raw-only numbers on small/exhausted systems (`specs/SPEC_moment_pds.md`'s own
+    gates) while unlocking the centered default where it helps (`specs/SPEC_centered_pds.md`'s DEEP
+    systems, H4/LiH/N2 at K<=8).
+
+    ``centered=False`` always returns the raw electronic-frame moments (the API
+    `specs/SPEC_moment_pds.md` was validated against; needed by callers that specifically study the
+    raw frame's ill-conditioning, e.g. `specs/SPEC_pds_excited_roots.md` and
+    `specs/SPEC_centered_pds.md`'s own raw-vs-centered comparisons).
+    """
+    if max_order < 1:
+        raise ValueError("max_order must be >= 1")
+    H = mh.qubit_hamiltonian.to_matrix(sparse=True).tocsc()
+    phi = np.asarray(mh.hf_state().data, dtype=complex)
+    offset = float(mh.energy_offset)
+    moments_raw = _raw_moments(H, phi, max_order)
+    if not centered:
+        return moments_raw, offset
+
+    mu1 = float(moments_raw[1])
+    H_shifted = H - mu1 * sp.identity(H.shape[0], format="csc")
+    moments_cent = _raw_moments(H_shifted, phi, max_order)
+
+    K_max = len(moments_raw) // 2
+    if _hankel_cond(moments_cent, K_max) <= _hankel_cond(moments_raw, K_max):
+        return moments_cent, offset + mu1
+    return moments_raw, offset
 
 
 def pds_roots(moments: np.ndarray, order: int, offset: float = 0.0) -> np.ndarray:

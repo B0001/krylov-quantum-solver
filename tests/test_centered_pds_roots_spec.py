@@ -13,6 +13,10 @@ process (this file as __main__) with hash seed and BLAS/OpenMP threads pinned; g
 deterministic. WHICH path violates is platform-specific (spec R1), so G1 asserts on the worst of
 these pre-registered paths, not on one hard-coded shuffle.
 
+Both ``hamiltonian_moments`` calls pass ``centered=False``: "raw" must stay the raw frame, and
+``centered_frame`` already centers the other one, which the chem-nxn default
+(specs/SPEC_centered_moments_default.md) would otherwise shift a second time.
+
 PySCF/qiskit only (no block2); `make gates` runs it in its own process.
 """
 import hashlib
@@ -59,8 +63,8 @@ def _child():
             np.array([[mom[2 * K - i - j] for j in range(1, K + 1)] for i in range(1, K + 1)])))
 
     def path(m):
-        raw, off = hamiltonian_moments(m, 2 * max(KS))
-        cen, off_c = hamiltonian_moments(centered_frame(m)[0], 2 * max(KS))
+        raw, off = hamiltonian_moments(m, 2 * max(KS), centered=False)
+        cen, off_c = hamiltonian_moments(centered_frame(m)[0], 2 * max(KS), centered=False)
         return {
             "raw_hash": hashlib.sha1(raw.tobytes()).hexdigest(),
             "raw": {K: margin(raw, off, K) for K in KS},
