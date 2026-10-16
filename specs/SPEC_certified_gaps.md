@@ -57,6 +57,7 @@ certified_gaps.gap_bracket(mh, m, e1=None, solver=None) -> GapBracket
 certified_gaps.gap_bracket_ladder(mh, dims, e1=None, solver=None) -> list[GapBracket]
 certified_gaps.reachable_gap(mh) -> float          # dense, reference/validation only
 GapBracket(m, gap_lower, gap_upper, width, theta0, theta1, sigma1, eps1, eps1_source)
+GapBracket.premise_refuted -> bool                 # oracle-free; see SPEC_odmd_depth_convergence.md
 certified_gaps (CLI)                               # per-system M-ladder + inside? column
 ```
 
@@ -102,3 +103,11 @@ certified_gaps (CLI)                               # per-system M-ladder + insid
 - `tests/test_certified_gaps_spec.py` — gates G1–G4.
 - `specs/SPEC_certified_gaps.md` — this spec.
 - `specs/BACKLOG.md` — entry with the finding recorded.
+
+## 10. Addendum (chem-36m)
+
+`GapBracket` gained a `premise_refuted` property (ε₁ > θ₁ + 1e-9), an oracle-free proof that the
+lower certificate's premise failed — mirroring `temple_bounds.EnergyBracket.premise_refuted`
+exactly, including the shot-noise guard (`theta1` left at `+inf`, so the flag is `False` by
+construction under noise). Gated by G1 of `SPEC_odmd_depth_convergence.md`, not re-gated here;
+see that spec for the depth-convergence check it was added alongside.

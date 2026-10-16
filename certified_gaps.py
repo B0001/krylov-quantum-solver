@@ -56,10 +56,23 @@ class GapBracket:
     gap_upper: float        # upper certificate theta_1 - tau_0 (+inf when Temple is vacuous)
     width: float            # gap_upper - gap_lower
     theta0: float           # ground Ritz value (>= E_0)
-    theta1: float           # first-excited Ritz value (>= E_1, Cauchy interlacing)
+    theta1: float           # first-excited Ritz value (>= E_1, Cauchy interlacing); +inf under
+                            #   shot noise, where theta1 is no longer a variational bound (mirrors
+                            #   temple_bounds.EnergyBracket.theta1) -- used for gap_upper BEFORE
+                            #   this guard, so noisy gap_upper is unaffected by this field
     sigma1: float           # sqrt(variance) of the first-excited Ritz state
     eps1: float             # theta_1 - sigma_1, the self lower estimate of E_1
     eps1_source: str        # "self" (theta_1 - sigma_1) | "oracle" (caller-supplied E_1)
+
+    @property
+    def premise_refuted(self) -> bool:
+        """Oracle-free PROOF that the lower certificate's premise (eps1 <= E_1) failed, mirroring
+        ``temple_bounds.EnergyBracket.premise_refuted`` exactly: eps1 > theta1 >= E_1 (Cauchy
+        interlacing), 1e-9 Ha margin. One-sided -- an eps1 in (E_1, theta1] passes undetected, and
+        self mode (eps1 = theta1 - sigma1 <= theta1) can never trip it; only a bad oracle ``e1``
+        can. Rank-1 subspaces and shot noise both leave ``theta1`` at +inf, so this is False by
+        construction in either case -- the premise check needs a noiseless variational theta1."""
+        return self.eps1 > self.theta1 + 1e-9
 
 
 def gap_bracket(mh: MolecularHamiltonian, m: int, e1: Optional[float] = None,
@@ -88,7 +101,8 @@ def gap_bracket(mh: MolecularHamiltonian, m: int, e1: Optional[float] = None,
     gap_upper = th1 - tau0 if np.isfinite(tau0) else np.inf
     gap_lower = eps1 - th0                                 # (theta_1 - sigma_1) - theta_0
     return GapBracket(m=m, gap_lower=gap_lower, gap_upper=gap_upper,
-                      width=gap_upper - gap_lower, theta0=th0, theta1=th1, sigma1=sig1,
+                      width=gap_upper - gap_lower, theta0=th0,
+                      theta1=th1 if not solver.noise_sigma else np.inf, sigma1=sig1,
                       eps1=eps1, eps1_source=eps1_source)
 
 

@@ -2038,6 +2038,28 @@ hypothesis whose death is informative is worth more here than a safe one.
   this proves the specced leak does not occur here, NOT that no leak can ever exist, which is the
   natural follow-up; phase window calibrated, not derived).
 
+- [x] **CLOSED (chem-36m, follow-up to chem-z3h) — `GapBracket` gains the same oracle-free premise
+  flag `EnergyBracket` had, and a depth-convergence check on ODMD's ε(K) buys real (if partial)
+  safety: it never green-lights a K that the gated (M, K) map shows actually breaks the bracket,
+  but convergence is NOT correctness.** *G1:* `certified_gaps.GapBracket.premise_refuted`
+  (ε₁ > θ₁ + 1e-9, identical form/margin to `EnergyBracket`'s) never fires without a genuine
+  oracle overshoot, never in self mode, fires on a deliberately-bad oracle, and — like
+  `EnergyBracket`'s — is forced off under shot noise because `θ₁` is left at `+inf` there (a
+  latent noise-soundness gap in `gap_bracket`'s `theta1` field, fixed alongside the new property;
+  no existing caller passes a noisy solver, so this is a no-op everywhere today). *G2:* across H₄,
+  N₂ CAS(6,6), LiH CAS(2,5) and full-space LiH, requiring `odmd_depth_convergence.depth_converged`
+  (stable within 2 mHa over a trailing window of 3 already-measured K, no look-ahead) before
+  trusting ε(K) never coincides with a K that chem-z3h's gated map records as an actual containment
+  escape (`lower > E₀ + TOL`) at that K, for any base depth M — e.g. full-space LiH's escapes at
+  K=12,14,16 (M=6) sit inside a 280–700 mHa swing between adjacent grid points, nowhere near
+  converged. *G3, the honest boundary:* convergence is necessary, not sufficient — N₂'s ε(K) is
+  stable within ~1 mHa at K=28 while sitting +34.5 mHa *above* E₁ the whole time (a
+  stable-but-biased fixed point, not a transient); LiH CAS(2,5) similarly "converges" at K≥22 on
+  the premise-satisfying side. `depth_converged=True` means "stopped moving," never "verified."
+  → [`SPEC_odmd_depth_convergence.md`](SPEC_odmd_depth_convergence.md); `odmd_depth_convergence.py`;
+  `tests/test_odmd_depth_convergence_spec.py` (5/5, reuses chem-z3h's gated map, no new Krylov/ODMD
+  machinery). Lehmann/Kato rigorous E₁ floors remain out of scope, as chem-z3h already deferred.
+
 ## Killed
 
 - [-] **Certified PQG bracket for Hₙ ≤ 1 mHa/atom at n=12** (chem-3z8) — →
