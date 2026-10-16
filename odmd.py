@@ -40,9 +40,12 @@ class ODMDProblem:
     """Noiseless survival amplitudes in the centered frame (H - mu), msd.py conventions.
 
     Energies from :func:`odmd_energy` are in this frame; add ``offset`` to recover the total
-    energy. ``ref`` is the exact HF-reachable ground energy in the frame (the lowest eigenvalue
-    ODMD's HF-overlap signal can actually see -- the global FCI ground only when HF reaches it),
-    so ``ref + offset`` is the total energy ODMD is being checked against.
+    energy. ``ref`` is the exact HF-reachable ground energy in the frame (the lowest
+    population-admitted eigenvalue, `reachable_mask`'s cut -- see specs/SPEC_odmd.md's reachability
+    addendum): the signal `s_k` is built from `|phi_0>` alone, so it can only ever resolve states
+    HF overlaps, and `ref` must track what the signal can converge to, not a global FCI ground the
+    signal has no amplitude on. ``ref + offset`` is the total HF-reachable energy; this equals the
+    total FCI energy except on geometries where HF cannot reach the true ground (chem-1x3).
     """
     n: int
     tau: float             # pi / W, W = HF-reachable spectral width
