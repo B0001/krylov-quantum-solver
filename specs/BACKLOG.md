@@ -256,6 +256,17 @@ hypothesis whose death is informative is worth more here than a safe one.
   the cluster boundary") is **accurate as written** and needs no correction. Its conclusion was never
   contingent on this either way — a spurious level breaks a floor guard just as effectively as a real
   one — so this confirms the description, it does not reopen the finding.
+  **Extended 2026-10-15 (chem-5fs) — the asymmetric-H₆ witness and the irrep filter agree.** The
+  entry above checked linear H₆ only. `scripts/chem_5fs_floor_guard_mechanism_check.py` adds the
+  third recorded escape witness, asym H₆ [0.9, 0.9, 2.2, 0.9, 0.9] Å, and applies the
+  `SPEC_symmetry_reachability` irrep filter to all four geometries. Asym H₆: 62 in-band levels at
+  both the default and `conv_tol=1e-13`, top population 9.400e-4 at both, largest relative
+  difference 1.8e-6. The irrep filter (available on all four, SCF symmetric) flags **0** in-band
+  levels as symmetry-forbidden. So the ~1e-4 level is physical on the asymmetric witness too.
+  *Precision correction to "identical to 6 significant figures":* populations above 1e-5 agree to
+  ≤ 2.6e-6 relative, but the smallest in-band levels (~4e-6) differ by up to 5.9e-6 relative
+  (linear R = 1.2: 14 of 65 levels past 1e-6). That is the 6th–7th digit and changes nothing above,
+  but "identical to 6 sig figs" holds only for the larger levels. macOS 27; Linux not re-run.
 
 - [ ] ~~**UPDATE 2026-07-30 — the math is VERIFIED, the "moots the block certificate" half is
   BLOCKED, and the attempt found a defect one rung lower.** Independent check of the chained bound
