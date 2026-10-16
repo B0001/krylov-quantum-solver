@@ -9,6 +9,18 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
 
 ## Open
 
+- [x] **chem-j71 — does an HF-weighted band-edge gap predict the Krylov depth M the chem-pm3 η-bound
+  needs, where the overshoot β − E_d demonstrably does not?** **DONE 2026-10-15.** On a 10-witness
+  set (chem-pm3's original 3 + 7 new guard-passing/invalid-floor escapes found by the same R-sweep/
+  asym-sweep procedure `SPEC_subspace_floor_resolvability.md` used), the weighted-gap predictor
+  `WG = min(gap_lo,gap_hi)/η` beats the overshoot at tracking `b_min`: Spearman ρ(WG, b_min) = −0.867
+  vs ρ(overshoot, b_min) = −0.758 (n=10) — **supports** the pre-registered rule (`|ρ_WG| ≥ 0.7` and
+  `> |ρ_overshoot|`). Second half (measured noise sensitivity): the bound is **~100% unsound** under
+  realistic shot noise on `S_0k` at *every* tested shot count from 1e2 to 1e8 (far beyond any
+  near-term budget), at a magnitude matching chem-pm3's own analytic worst-case slope
+  `(2M−1)·cap·σ` rather than beating it — a load-bearing caveat that this LP bound is a
+  noiseless-only certificate. → [`SPEC_pm3_depth_predictor.md`](SPEC_pm3_depth_predictor.md) §10.
+
 Generated 2026-07-28 by a five-way parallel scout over the whole tree (certified arc · method rungs ·
 Nb₃X₈ · FT stack · scale/refs). Every entry names existing primitives — nothing here needs new
 machinery to *start*. Four entries below rest on a defect **verified in code** during generation;
