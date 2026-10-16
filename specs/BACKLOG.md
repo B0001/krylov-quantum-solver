@@ -566,6 +566,48 @@ hypothesis whose death is informative is worth more here than a safe one.
   `candidate1_verdict`); follow-up bead chem-b0y (in-plane kagome exchange data) remains open, now
   with the WebFetch note.
 
+- [x] **CLOSED 2026-10-15 (chem-b0y) — candidate 2 (in-plane kagome exchange), the last of
+  chem-phh's two pre-registered-but-blocked candidates with a sourceable constant, is now sourced
+  and KILLED.** [SPEC](SPEC_nb3x8_tc_attribution.md) G8–G9. *Process correction first:* chem-phh and
+  chem-a04 both concluded "no working internet access" from `WebSearch` alone, which genuinely is
+  broken in this sandbox (returns generic non-answers). Direct bash `curl` to `export.arxiv.org`
+  (following its 301→HTTPS redirect) works and returns real content — the arXiv API plus direct PDF
+  download and `pypdf` text extraction (ad hoc, not a project dependency, matching the chem-jiy
+  precedent of verifying against primary-source PDF text rather than a search-engine/AI summary)
+  found and verified a real in-plane exchange constant. *Source:* Zhang, Dai, Wang, Cheng & Ji,
+  "Robust Mottness and tunable interlayer magnetism in Nb3X8 (X = F, Cl, Br, I) bilayers"
+  (`arXiv:2508.17352`), Table 1, DFT+U total-energy-mapped in-plane NN/NNN exchange between Nb₃
+  trimers (meV/trimer, "positive = AFM"): Nb3Cl8 J1=+0.12, J2=−0.24; Nb3Br8 J1=−2.74, J2=−0.37 —
+  verified against the downloaded PDF text directly, not a summary. *Two premise corrections found
+  before any suppression arithmetic:* (a) the paper's own in-plane lattice of Nb₃ trimers is
+  **triangular**, not kagome — "kagome" in this bead's name and the magnetometry spec's §7 is this
+  repo's geometric shorthand, not what the source paper reports; (b) the coupling is not robustly
+  antiferromagnetic — Nb3Br8's J1 is FM by the paper's own sign convention, and Nb3Cl8's J1 is a
+  tiny near-degenerate AFM/FM difference (the paper: "Nb3Cl8 has nearly degenerate FM, ZZ-AFM and
+  Stripe-AFM configurations") — frustration-driven Tc suppression needs a dominant, genuinely
+  antiferromagnetic coupling on a frustrated net, which neither halide's sourced coupling clearly
+  is. *Quantitative check run anyway* (steelmanning past the premise problem, per the pre-registered
+  condition in `UNTESTED_CANDIDATES`): the standard RPA/mean-field self-consistency closure for
+  weakly-coupled quantum dimers, `J'_eff * chi_dimer(Tc) = 1` (`chi_dimer` from the already-validated
+  `nb3x8_susceptibility.susceptibility`), gives the effective in-plane coupling that WOULD be needed
+  to pull the isolated-dimer crossover down to measured Tc: **19776 meV (Cl), 663 meV (Br)**.
+  Compared to the most generous possible reading of the sourced J1/J2 — full triangular-lattice
+  coordination (z1=z2=6), absolute values, no cancellation — **2.16 meV (Cl), 18.66 meV (Br)**: the
+  needed coupling exceeds even this generous bound by **9156× (Cl) / 35.5× (Br)**, and exceeds
+  `J_interlayer` itself (66.2 meV Cl, 119.1 meV Br, from the already-validated
+  `odmd_spin.dimer_exchange_analytic`) by **298.7× (Cl) / 5.6× (Br)** — well past the pre-registered
+  kill bar ("requires J' unphysically close to or exceeding J_interlayer"). **KILLED** for both
+  halides. *Caveat, stated up front:* this only rules out the in-plane coupling acting ALONE via the
+  standard weak-coupling mean-field mechanism at the sourced scale — it does not address a small
+  in-plane contribution combined with a lattice relaxation (candidate 1, which survives its own check -- chem-cfl, entry above). The margin
+  (>35×, and exceeding `J_interlayer` itself) is large enough that this is not a close call. Gates G8 (sourced-data regression pin) and G9 (kill verdict, both halides) in
+  `tests/test_nb3x8_tc_attribution_spec.py`; G4 now asserts `UNTESTED_CANDIDATES` is empty.
+  *What remains open:* none of the three named candidates -- chem-cfl tested candidate 1 in
+  parallel (entry above) and it SURVIVES.
+  → [`SPEC_nb3x8_tc_attribution.md`](SPEC_nb3x8_tc_attribution.md); `nb3x8_tc_attribution.py`
+  (`NB3X8_INPLANE_EXCHANGE`, `required_inplane_coupling`, `sourced_inplane_bound`,
+  `candidate2_verdict`).
+
 - [x] **CLOSED 2026-09-30 (chem-a04) — re-verified, both kill conditions survive; the scale-agreement
   caveat still applies up front.** [SPEC](SPEC_odmd_optical.md), LT Cl +1.59%, family spread 44.3%,
   `coordination_gap` z=3 872.9 meV. *Original claim:* `odmd_optical.dimer_optical_gap` on LT cRPA

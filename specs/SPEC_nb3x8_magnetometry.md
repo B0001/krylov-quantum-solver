@@ -137,9 +137,16 @@ nb3x8_magnetometry (CLI)                                          # family table
   work in this sandbox) gives a physically-plausible exfoliation-energy bound on `E_lattice`
   (596.9 meV Cl / 740.1 meV Br) that comfortably covers the `E_lattice` the pre-registered F_phase(T)
   crossing needs to match measured Tc (9.94 meV Cl / 41.61 meV Br, 1.7%/5.6% of the bound) — not
-  proof the transition IS the mechanism, but not ruled out either. In-plane kagome exchange remains
-  pre-registered but untested — it needs a constant neither vendored source reports; worth
-  re-attempting with `WebFetch` (not just `WebSearch`) before assuming it is permanently blocked.
+  proof the transition IS the mechanism, but not ruled out either.
+  **Update (chem-b0y, `SPEC_nb3x8_tc_attribution.md` G8–G9):** the second candidate (in-plane kagome
+  exchange) is also now tested and **killed**. An in-plane exchange constant was sourced from Zhang,
+  Dai, Wang, Cheng & Ji, `arXiv:2508.17352` Table 1 (Nb3Cl8 J1=+0.12/J2=−0.24 meV, Nb3Br8
+  J1=−2.74/J2=−0.37 meV, verified against the downloaded PDF text) — correcting two premises along
+  the way: the paper's in-plane net is triangular, not kagome, and the coupling is not robustly
+  antiferromagnetic for either halide. The standard RPA self-consistency closure
+  (`J'_eff * chi_dimer(Tc) = 1`) gives the in-plane coupling needed to explain the full Tc miss
+  alone; it exceeds even the most generous reading of the sourced value by 35.5× (Br) / 9156× (Cl),
+  and exceeds `J_interlayer` itself by 5.6× (Br) / 298.7× (Cl). With candidate 1 tested in parallel by chem-cfl (above), all three candidates now have a verdict.
 
 ## 8. Caveats and risks
 

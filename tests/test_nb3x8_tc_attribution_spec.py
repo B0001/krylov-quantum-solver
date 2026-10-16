@@ -1,5 +1,5 @@
 """
-Acceptance gates G1-G7 for specs/SPEC_nb3x8_tc_attribution.md (beads chem-phh, chem-cfl).
+Acceptance gates G1-G9 for specs/SPEC_nb3x8_tc_attribution.md (beads chem-phh, chem-cfl, chem-b0y).
 
 chem-g78 killed the "coordination/mean-field reduction" attribution for the Nb3X8 5.3x (Cl) /
 2.3x (Br) Tc overprediction (tests/test_nb3x8_gaps_spec.py::test_G8_*), leaving the attribution
@@ -8,7 +8,8 @@ order structural transition, in-plane kagome exchange, and a direct lattice reno
 t_s_perp. This module pre-registers a killable check for each. chem-phh executed candidate 3 from
 data already vendored in this repo; chem-cfl executed candidate 1, sourcing elastic/lattice data
 from a second primary reference (arXiv:2412.03360) this sandbox could fetch via WebFetch (unlike
-WebSearch).
+WebSearch); chem-b0y executed candidate 2 with an in-plane exchange constant from a third
+(arXiv:2508.17352). All three are now tested.
 
 Gates:
   * G1 -- machinery anchor: at eta=1 (no rescaling) the module's own predicted-Tc machinery
@@ -21,9 +22,8 @@ Gates:
   * G3 -- candidate 3 (DEFINITION OF DONE): the rescaling required to match measured Tc is more
     than 10x the largest same-structural-motif |t_s_perp| spread this family's own vendored data
     shows (bulk vs bilayer, both LT/dimerized) -- KILLED for both Cl and Br.
-  * G4 -- honest boundary: candidate 2 is named as UNTESTED, with a non-empty pre-registered
-    check and a stated reason it is blocked (so a silent "tested and passed" claim would fail
-    this gate).
+  * G4 -- honest boundary: UNTESTED_CANDIDATES is empty now that all three candidates have a
+    verdict function -- a candidate claimed both tested and untested would fail this gate.
   * G5 -- candidate 1 (DEFINITION OF DONE, chem-cfl): the E_lattice needed to make the F_phase(T)
     HT/LT crossing land on the measured Tc is positive and well below the sourced exfoliation-
     energy-per-formula-unit upper bound (arXiv:2412.03360) for both halides -- SURVIVES, not
@@ -33,6 +33,11 @@ Gates:
   * G7 -- the crossing is unique: the E_lattice needed to put the crossing at temperature T is
     non-decreasing in T across a wide range, so a fixed E_lattice cannot cross F_HT-F_LT more than
     once near the measured Tc.
+  * G8 -- candidate 2 sourced-data pin (chem-b0y): NB3X8_INPLANE_EXCHANGE matches
+    arXiv:2508.17352 Table 1.
+  * G9 -- candidate 2 (DEFINITION OF DONE, chem-b0y): the RPA-required in-plane coupling exceeds
+    the most generous sourced bound by orders of magnitude, and J_interlayer itself -- KILLED for
+    both halides.
 
 PySCF/NumPy/SciPy only (no block2); `make gates` runs it in its own process.
 """
@@ -42,7 +47,9 @@ import pytest
 from nb3x8_gaps import NB3X8_HT_BULK, NB3X8_LT_BULK
 from nb3x8_magnetometry import EXPERIMENT, MEV_PER_K, overprediction_factor, predicted_transition_K
 from nb3x8_tc_attribution import (
+    NB3X8_INPLANE_EXCHANGE,
     UNTESTED_CANDIDATES,
+    candidate2_verdict,
     candidate1_verdict,
     candidate3_verdict,
     exfoliation_energy_per_fu,
@@ -50,8 +57,10 @@ from nb3x8_tc_attribution import (
     max_family_same_motif_t_spread,
     mean_energy,
     required_e_lattice,
+    required_inplane_coupling,
     required_t_rescale,
     same_motif_t_spread,
+    sourced_inplane_bound,
 )
 from nb3x8_thermo import entropy
 
@@ -104,19 +113,13 @@ def test_G4_candidate3_killed_for_both_halides(name, min_needed_pct):
     assert abs(1.0 - ht_lt_t_ratio(name)) > v["needed_pct"] / 100.0
 
 
-def test_G4_candidate_2_is_honestly_untested():
-    """Candidate 2 (in-plane kagome exchange) must be named as untested, with a concrete
-    pre-registered check and a stated reason it is blocked -- guards against this module (or a
-    future edit) silently claiming it was tested without the data existing. Candidate 1 has moved
-    OUT of this dict (chem-cfl tested it, see test_G5_* below) -- a regression that left it in here
-    too would mean the module claims it both tested and untested at once."""
-    assert set(UNTESTED_CANDIDATES) == {"in_plane_kagome_exchange"}
-    for key, v in UNTESTED_CANDIDATES.items():
-        assert v["description"].strip(), key
-        assert v["pre_registered_check"].strip(), key
-        assert v["blocked_on"].strip(), key
-        assert v["follow_up_bead"].strip(), key
-        assert "KILL" in v["pre_registered_check"], key
+def test_G4_no_candidate_left_untested():
+    """All three candidates chem-g78 named now have a verdict function (candidate3_verdict,
+    candidate1_verdict, candidate2_verdict), so none may still be listed as untested -- a candidate
+    in both places would mean the module claims it tested and untested at once. chem-cfl and
+    chem-b0y each emptied this dict of the other candidate's entry in parallel; this pins the
+    merged state."""
+    assert UNTESTED_CANDIDATES == {}
 
 
 @pytest.mark.parametrize("name,max_frac", [("Nb3Cl8", 0.1), ("Nb3Br8", 0.1)])
@@ -164,3 +167,32 @@ def test_G7_required_e_lattice_is_monotone_in_target_temperature(name):
     dS = entropy(**ht, T=T) - entropy(**lt, T=T)
     needed = T * dS - dE
     assert np.all(np.diff(needed) >= -1e-9)
+
+
+@pytest.mark.parametrize(
+    "name,j1,j2",
+    [("Nb3Cl8", 0.12, -0.24), ("Nb3Br8", -2.74, -0.37)],
+)
+def test_G8_candidate2_sourced_data_matches_primary_source(name, j1, j2):
+    """Regression pin: NB3X8_INPLANE_EXCHANGE must match arXiv:2508.17352 Table 1 exactly (meV
+    per Nb3 trimer, 'positive = AFM' convention), verified against the downloaded PDF text."""
+    c = NB3X8_INPLANE_EXCHANGE[name]
+    assert c["J1"] == pytest.approx(j1)
+    assert c["J2"] == pytest.approx(j2)
+    assert "2508.17352" in c["source"]
+
+
+@pytest.mark.parametrize("name,min_needed_over_bound", [("Nb3Cl8", 1000.0), ("Nb3Br8", 10.0)])
+def test_G9_candidate2_killed_for_both_halides(name, min_needed_over_bound):
+    """DEFINITION OF DONE for candidate 2: the RPA-required effective in-plane coupling
+    (steelmanning the conjecture with the exact self-consistency closure J'_eff*chi_dimer(Tc)=1)
+    exceeds even the most generous sourced bound (full triangular coordination, |J1|+|J2|, no
+    cancellation) by orders of magnitude for both halides -- and exceeds J_interlayer itself,
+    which is the literal pre-registered kill condition in UNTESTED_CANDIDATES before chem-b0y
+    resolved it ('requires J' unphysically close to or exceeding J_interlayer')."""
+    v = candidate2_verdict(name)
+    assert v["needed_meV"] == pytest.approx(required_inplane_coupling(name))
+    assert v["bound_meV"] == pytest.approx(sourced_inplane_bound(name))
+    assert v["needed_over_bound"] > min_needed_over_bound
+    assert v["needed_over_j_interlayer"] > 1.0
+    assert v["killed"] is True
