@@ -53,8 +53,12 @@ def _scratch_dir(scratch):
     An explicit ``scratch`` string is passed straight to the driver, untouched and NOT cleaned up
     here -- callers that already namespace their own scratch (e.g. per-PID, per-case subdirectories
     in nbn_dmrg_reference.py / benchmark_hubbard_lieb_wu.py) are relying on it surviving the call.
+    It IS created here if missing (chem-qqu): block2 opens scratch files by path and fails with a
+    RuntimeError rather than creating missing parent directories, so a fresh checkout (no
+    ``.dmrg_tmp/`` yet) fails the first call with any explicit, not-yet-existing scratch path.
     """
     if scratch is not None:
+        os.makedirs(scratch, exist_ok=True)
         yield scratch
         return
     os.makedirs(DEFAULT_SCRATCH_ROOT, exist_ok=True)
