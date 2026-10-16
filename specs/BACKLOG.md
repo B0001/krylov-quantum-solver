@@ -534,6 +534,38 @@ hypothesis whose death is informative is worth more here than a safe one.
   follow-up beads chem-cfl (structural-transition data sourcing) and chem-b0y (in-plane kagome
   exchange data sourcing) filed for whenever that data becomes reachable.
 
+- [x] **CLOSED 2026-10-15 (chem-cfl) — candidate 1 (cooperative/first-order structural transition,
+  pre-registered by chem-phh above) is now tested and SURVIVES; chem-phh/chem-a04's "no internet
+  access" finding did not hold for `WebFetch` on direct URLs.** [SPEC](SPEC_nb3x8_tc_attribution.md)
+  G5–G7. *Data sourced:* Mortazavi, Zhuang & Rabczuk, "A first-principles study on the physical
+  properties of two-dimensional Nb3Cl8, Nb3Br8 and Nb3I8," `arXiv:2412.03360v1` — fetched via
+  `WebFetch` on the arXiv PDF URL and read in full with the `Read` tool (not a search-engine
+  summary, per the chem-jiy lesson); reports DFT exfoliation energies and monolayer lattice
+  constants, independent of `arXiv:2501.10320`. *Check (exactly the one chem-phh pre-registered):*
+  build `F_phase(T) = E_mag,phase(T) - T*S_mag,phase(T) + E_lattice,phase` for HT vs LT using the
+  already-validated N=2 Boltzmann trace (`nb3x8_susceptibility.n2_spectrum`, via a new
+  `nb3x8_tc_attribution.mean_energy` accessor) on `NB3X8_HT_BULK`/`NB3X8_LT_BULK`; because
+  `E_lattice` enters linearly, the value that puts the crossing exactly at the measured Tc is solved
+  directly (`required_e_lattice`); compare to the sourced exfoliation energy per formula unit as a
+  loose, physically-plausible upper bound (`exfoliation_energy_per_fu`; a partial HT<->LT relaxation
+  cannot plausibly cost more than full layer separation). *Result:* needed `E_lattice` = **9.94 meV
+  (Nb3Cl8, 1.7% of the 596.9 meV bound) / 41.61 meV (Nb3Br8, 5.6% of the 740.1 meV bound)** — both
+  positive (correct sign) and small fractions of the bound, robust even to a 2× tightening of the
+  bound (1-vs-2-formula-units-per-cell ambiguity). **SURVIVES**: a modest, physically plausible
+  lattice energy reproduces the measured Tc without extreme tuning. *Caveat, stated up front (not
+  rounded into the verdict):* this is a plausibility bound, not confirmation — `arXiv:2412.03360`
+  does not resolve an HT phase at all, so the exfoliation energy is a generous upper bound on *any*
+  structural relaxation, not a measured HT/LT energy difference; `NB3X8_HT_BULK`/`NB3X8_LT_BULK` are
+  single-dimer electronic parameters with no lattice feedback. Surviving this check means candidate
+  1 is not ruled out on energetic grounds, not that it is confirmed as the mechanism. Candidate 2
+  (in-plane kagome exchange) remains untested — `arXiv:2412.03360` has no magnetic exchange data
+  either — but the `WebSearch`-only "no internet access" finding is now known to be wrong; a future
+  session should retry sourcing it with `WebFetch` before assuming it is unreachable.
+  → [`SPEC_nb3x8_tc_attribution.md`](SPEC_nb3x8_tc_attribution.md) §3b, G5–G7;
+  `nb3x8_tc_attribution.py` (`mean_energy`, `exfoliation_energy_per_fu`, `required_e_lattice`,
+  `candidate1_verdict`); follow-up bead chem-b0y (in-plane kagome exchange data) remains open, now
+  with the WebFetch note.
+
 - [x] **CLOSED 2026-09-30 (chem-a04) — re-verified, both kill conditions survive; the scale-agreement
   caveat still applies up front.** [SPEC](SPEC_odmd_optical.md), LT Cl +1.59%, family spread 44.3%,
   `coordination_gap` z=3 872.9 meV. *Original claim:* `odmd_optical.dimer_optical_gap` on LT cRPA

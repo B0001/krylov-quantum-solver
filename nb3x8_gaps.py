@@ -78,8 +78,11 @@ kagome exchange, or a lattice renormalization of t_s directly. See ``coordinatio
 *** chem-phh (nb3x8_tc_attribution.py, SPEC_nb3x8_tc_attribution.md): the "lattice renormalization of
 t_s directly" candidate above is now tested too, and also KILLED in its narrow (same dimerized
 structural motif) form -- the t_s shrinkage needed to match measured Tc is 17-600x the largest
-bulk-vs-bilayer |t_s| spread this family's own table shows. The structural-transition and in-plane
-kagome candidates remain untested (blocked on data this sandbox cannot source). ***
+bulk-vs-bilayer |t_s| spread this family's own table shows. chem-cfl (same module): the cooperative
+structural-transition candidate is now tested too, sourcing elastic/lattice data from a second
+primary reference (arXiv:2412.03360) via WebFetch -- and SURVIVES (the E_lattice needed to match
+measured Tc is a small fraction of the sourced exfoliation-energy bound). The in-plane kagome
+candidate remains untested (no magnetic exchange data in either vendored source yet). ***
 """
 from __future__ import annotations
 
