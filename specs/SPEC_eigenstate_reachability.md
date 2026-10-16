@@ -285,11 +285,24 @@ the upgrade path.
   to the true 10-level Ag sector. Not a defect in the projector or budget math (both are correct
   given the bits available); D2h genuinely does not have a third independent generator for this
   geometry/basis class. Out of scope to fix without a basis- or geometry-dependent bit set beyond
-  `_BIT_OPERATION["D2h"]`'s three names — not attempted here.
+  `_BIT_OPERATION["D2h"]`'s three names — not attempted here. `test_G2`'s square-H4 cases check
+  `orbital_parity_bounds`'s own C2y-bit trust on the run at hand and assert exact FCI agreement when
+  it is trusted, containment of the true Ag levels (the conservative direction) when it is not,
+  instead of assuming either outcome is fixed for a given bond length (chem-0m8, replacing an
+  earlier `xfail`-based version — see R5 below and `sandbox-handoffs/chem-0m8.md`).
 - **R3 — cost.** One extra SCF + JW map per Hamiltonian (cached on the instance), as in PR #62.
 - **R4 — Linux.** With the population cut restored, the Linux-only failures PR #62 predicted for
   `test_reachability_tolerance_spec` G2 and G5 (`constant_governs_the_certified_reference`) should
   not happen: those gates pin the residue the cut keeps. Not verifiable on this macOS host.
+- **R5 — superseded (chem-0m8, 2026-10-13).** A first chem-0m8 pass claimed the sq-H4 bit
+  degeneracy above made the 20-vs-10 over-inclusion a geometry/basis constant "regardless of RHF
+  branch" and marked `test_G2`'s square-H4 cases `xfail` on that basis. A later review on macOS 27
+  found all 8 of those cases `xpass` there (`41 passed, 8 xpassed`): the C2y bit (D2h bit 0) was
+  trusted on that host/branch, FCI agreement was exact, and the claim was wrong — R2 above already
+  had the correct, branch-dependent mechanism (the degeneracy only bites when the C2y bit itself is
+  excluded). The `xfail` is dropped; `test_G2` now checks `orbital_parity_bounds`'s C2y-bit trust
+  directly per R2's note above instead of assuming either outcome. Left here, not deleted, so the
+  wrong claim and why it was wrong both stay on the record (`sandbox-handoffs/chem-0m8.md`).
 
 ## 9. Results (macOS 27, Apple M3, 2 BLAS/OMP threads, unless an entry says otherwise)
 

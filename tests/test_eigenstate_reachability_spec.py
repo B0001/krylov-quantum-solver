@@ -31,6 +31,7 @@ from reachability import (
     orbital_parity_bounds,
     reachable_eigenpairs,
     reachable_mask,
+    scf_symmetry_status,
     symmetry_allowed,
 )
 
@@ -65,21 +66,62 @@ def _system(atom, conv_tol=1e-9, **kw):
 
 @lru_cache(maxsize=None)
 def _fci(atom, wfnsym, symmetry="D2h"):
-    """PySCF symmetry-adapted FCI, S_z = 0, tight symmetric SCF -- independent of the qubit path."""
-    from pyscf import fci, gto, scf
+    """PySCF symmetry-adapted FCI, S_z = 0, tight symmetric SCF -- independent of the qubit path.
+
+    chem-0yh: pyscf's own multi-threaded integral evaluation is not bit-associative, so an
+    unpinned scf.RHF/fci.FCI call can land on ~1e-13-level noise in mf.e_tot that a near-degenerate
+    geometry (square H4 at a=1.19) amplifies through the Davidson solve enough to occasionally flip
+    which side of test_G2's classification boundary this reference lands on. Same mechanism and fix
+    as chem-7cx (build_molecular_hamiltonian) and chem-y6w (benchmark_nbn._tight_scf): pin
+    pyscf.lib.num_threads(1) around the call, restore the ambient count in a finally so this cached,
+    module-level helper does not leave other callers in the same process pinned to 1.
+    """
+    from pyscf import fci, gto, lib, scf
 
     mol = gto.M(atom=atom, basis="sto3g", symmetry=symmetry, verbose=0)
-    mf = scf.RHF(mol)
-    mf.conv_tol = 1e-13
-    mf.kernel()
-    solver = fci.FCI(mf)
-    solver.wfnsym, solver.nroots = wfnsym, 1000
-    e, _ = solver.kernel()
+    ambient_threads = lib.num_threads()
+    lib.num_threads(1)
+    try:
+        mf = scf.RHF(mol)
+        mf.conv_tol = 1e-13
+        mf.kernel()
+        solver = fci.FCI(mf)
+        solver.wfnsym, solver.nroots = wfnsym, 1000
+        e, _ = solver.kernel()
+    finally:
+        lib.num_threads(ambient_threads)
     if not np.all(solver.converged):
         raise RuntimeError(f"FCI Davidson did not converge for all roots: atom={atom!r} "
                             f"wfnsym={wfnsym!r} converged={solver.converged} "
                             f"(chem-60i: an unchecked Davidson call can silently report a wrong energy)")
     return np.sort(np.atleast_1d(e)) - mol.energy_nuc()
+
+
+def test_fci_helper_is_deterministic_across_ambient_thread_counts():
+    """chem-0yh regression floor for the lib.num_threads(1) pin above. Before the fix, _fci's own
+    unpinned scf.RHF+FCI call picked up ~1e-13-level bit noise from pyscf's multi-threaded integral
+    evaluation depending on the ambient thread count the caller happened to leave in place -- at
+    square H4's near-degenerate a=1.19 geometry, that noise occasionally flipped which FCI level
+    this reference landed on (the chem-0yh repro: 3 full-file runs post chem-7cx's fix still showed
+    test_G2[1.19] flipping). This reproduces that repro directly: fresh calls at ambient thread
+    counts 2 and 8 (bypassing lru_cache, which would otherwise mask the recompute) must agree
+    bit-for-bit, and the ambient setting the caller had before calling _fci must be restored."""
+    from pyscf import lib
+
+    atom = _sq(1.19)
+    ambient = lib.num_threads()
+    try:
+        lib.num_threads(2)
+        _fci.cache_clear()
+        e_2 = _fci(atom, "Ag")
+        lib.num_threads(8)
+        _fci.cache_clear()
+        e_8 = _fci(atom, "Ag")
+    finally:
+        lib.num_threads(ambient)
+        _fci.cache_clear()
+    assert np.array_equal(e_2, e_8), (e_2, e_8)
+    assert lib.num_threads() == ambient
 
 
 def _weights(mh, V):
@@ -110,6 +152,20 @@ def test_G1_residue_level_identified_warned_and_kept(a, conv_tol, tol):
 
 # --- G2: brute force against an independent symmetry-adapted FCI, every populated level -----------
 
+# sq-H4/sto-3g is planar with an all-s-orbital basis: sigma_xy (z -> -z) fixes every atom and maps
+# every s AO to itself, so it acts as the IDENTITY operator on the AO space, independent of bond
+# length and of which RHF branch built the orbitals. D2h's group relation i = sigma_xy . C2z then
+# forces rep(i) == rep(C2z) EXACTLY in any MO basis -- _BIT_OPERATION["D2h"] = (C2y, C2z, i) carries
+# only 2 independent constraints here, not 3, so sigma_xy == identity alone does not determine
+# whether the decision matches FCI: with only C2z/i usable, sq-H4 is D2h-degenerate in the (N_a, N_b)
+# sector between {Ag, B1g} and {B2u, B3u} (sigma_xy = +1 for every level, so C2z alone splits the 8
+# irreps into only 4 distinguishable pairs) UNLESS the C2y bit (bit 0, excluded only when the free
+# RHF breaks symmetry or an exactly-degenerate pair rotates arbitrarily -- chem-7cx, SPEC section 8
+# R2) is also trusted, in which case C2y and C2z together isolate Ag exactly. So G2 branches on
+# whether orbital_parity_bounds trusts the C2y bit on THIS run, instead of assuming either outcome
+# (chem-0m8, after a macOS review of the prior xfail/R5-based version found it xpassed there: the
+# over-inclusion is RHF-branch-dependent after all, see SPEC section 8 R2, not a geometry/basis
+# constant as R5 claimed -- R5 is dropped, superseded by this branch-aware check and R2).
 G2_CASES = [(_sq(a), ct) for a in (1.05, 1.10, 1.19, 1.35) for ct in (1e-6, 1e-9)]
 G2_CASES += [(LIN_H4, 1e-9), (H2, 1e-9)]
 
@@ -119,12 +175,29 @@ def test_G2_decision_equals_symmetry_adapted_fci(atom, conv_tol):
     mh, w, V, pops = _system(atom, conv_tol)
     ref = _fci(atom, "Ag")
     in_sector = np.sort(w[_weights(mh, V) > 0.5])          # the sector itself, every eigenvector
-    assert len(in_sector) == len(ref), (len(in_sector), len(ref))
-    assert np.abs(in_sector - ref).max() < 1e-8
     defined = pops > DEFINED
     in_ag = np.array([np.abs(ref - e).min() < 1e-8 for e in w[defined]])
+    allowed = symmetry_allowed(mh, w, V)
+
+    bounds = orbital_parity_bounds(mh)
+    # D2h bit 0 is C2y (_BIT_OPERATION["D2h"][0]); untrustworthy is reported as beta == inf, a large
+    # finite beta (chem-7cx's degenerate-pair-rotation case) is just as unusable by the >= 1.0 greedy
+    # budget in hf_symmetry_sector, so both are "not trusted" here.
+    c2y_trusted = bounds is not None and bounds[0][1] < 1.0
+    if c2y_trusted:
+        assert len(in_sector) == len(ref), (len(in_sector), len(ref))
+        assert np.abs(in_sector - ref).max() < 1e-8
+        assert np.array_equal(allowed[defined], in_ag)
+    else:
+        # C2y not trusted: C2z/i alone cannot separate Ag from the other D2h irrep sharing sigma_xy
+        # = +1 and HF's (N_a, N_b) -- over-inclusion is the conservative direction (SPEC section 8
+        # R2): every true Ag level must still appear, and never get flagged forbidden, but the
+        # sector/the "allowed" mask may keep extra, non-Ag levels too.
+        assert len(in_sector) >= len(ref)
+        for e in ref:
+            assert np.abs(in_sector - e).min() < 1e-8
+        assert allowed[defined][in_ag].all()
     assert in_ag.sum() >= 2                                 # above the minimum, not just the ground
-    assert np.array_equal(symmetry_allowed(mh, w, V)[defined], in_ag)
 
 
 # --- G3: no false alarm on the ordinary gated systems ---------------------------------------------
@@ -165,15 +238,37 @@ def _naive_weights(mh, V):
     return (V[sec] ** 2).sum(axis=0)
 
 
+def _require_broken_rhf(a):
+    """Skip with a clear reason unless THIS host's free RHF actually broke symmetry at a -- that
+    branch choice is platform/BLAS/LAPACK-dependent, not a function of the code (chem-7cx), so a
+    hardcoded a is not a guarantee. chem-0m8."""
+    broken, de = scf_symmetry_status(_sq(a))
+    if not broken:
+        pytest.skip(f"free RHF at a={a} did not land on the symmetry-broken branch on this host "
+                    f"(dE={de:.2e}, SYMMETRY_BREAK_TOL=1e-6) -- nothing broken to detect here "
+                    f"(chem-7cx: this branch choice is platform/BLAS/LAPACK-dependent; chem-0m8).")
+
+
 @pytest.mark.parametrize("a", (1.20, 1.40))
 def test_G4_broken_rhf_bit_is_excluded_and_nothing_is_flagged(a):
+    _require_broken_rhf(a)
     mh, w, V, pops = _system(_sq(a))
-    assert max(beta for _, beta in orbital_parity_bounds(mh)) >= 1.0
+    bounds = orbital_parity_bounds(mh)
+    assert bounds is not None, (
+        "scf_symmetry_status confirms a broken reference but orbital_parity_bounds returned None "
+        "-- this is chem-g14's _driver_orbitals rebuild-reproducibility issue, not a chem-0m8 "
+        "branch mismatch")
+    assert max(beta for _, beta in bounds) >= 1.0
     assert symmetry_allowed(mh, w, V)[pops > REACHABLE_TOL_CERTIFIED].all()
 
 
 def test_G4_naive_labels_would_flag_a_physical_level():
+    _require_broken_rhf(1.20)
     mh, w, V, pops = _system(_sq(1.20))
+    assert orbital_parity_bounds(mh) is not None, (
+        "scf_symmetry_status confirms a broken reference but orbital_parity_bounds returned None "
+        "-- this is chem-g14's _driver_orbitals rebuild-reproducibility issue, not a chem-0m8 "
+        "branch mismatch")
     flagged = (pops > 1e-3) & (_naive_weights(mh, V) < 0.5)
     assert flagged.any(), "naive labels flag nothing -- the bound would be untested"
 
