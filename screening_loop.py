@@ -122,7 +122,7 @@ def sweep_metrics(library: list[Candidate], max_m: int, pool_curve) -> dict:
                 pruned=sum(1 for c in library if not c.active))
 
 
-def h4_library(spacings, oracle: bool = False) -> list[Candidate]:
+def h4_library(spacings, oracle: bool = False, conv_tol: float = 1e-9) -> list[Candidate]:
     """Linear H4 chains at the given spacings -- the gated library.
 
     STO-3G H2 is deliberately not used: its Krylov space saturates at M = 2 (bracket width 0.00
@@ -134,7 +134,8 @@ def h4_library(spacings, oracle: bool = False) -> list[Candidate]:
     out = []
     for a in spacings:
         mh = build_molecular_hamiltonian(
-            atom=f"H 0 0 0; H 0 0 {a:.5f}; H 0 0 {2 * a:.5f}; H 0 0 {3 * a:.5f}")
+            atom=f"H 0 0 0; H 0 0 {a:.5f}; H 0 0 {2 * a:.5f}; H 0 0 {3 * a:.5f}",
+            conv_tol=conv_tol)
         eps = None
         if oracle:
             w = np.linalg.eigvalsh(mh.qubit_hamiltonian.to_matrix())

@@ -25,7 +25,7 @@ from hybrid_quantum_solver.certified_overlap.krylov_refine import (
 )
 from hybrid_quantum_solver.molecular_hamiltonian import build_molecular_hamiltonian
 from hybrid_quantum_solver.quantum_krylov_solver import QuantumKrylovSolver
-from reachability import _dense_hf_projection
+from reachability import TIGHT_SCF_CONV_TOL, _dense_hf_projection
 
 H2_EQ = "H 0 0 0; H 0 0 0.74"
 H2_STRETCHED = "H 0 0 0; H 0 0 2.0"
@@ -48,9 +48,18 @@ DIRECT_SURVIVES = (H2_EQ, H2_STRETCHED, H4_LINEAR)
 DIRECT_VACUOUS = (H4_SQUARE_105, H6_LINEAR)
 DEPTHS = (6, 8, 12)
 
+# Re-admitted per specs/SPEC_scf_conv_tol.md section 7 / specs/SPEC_chained_overlap.md section 2
+# (chem-qhi): square H4 a=1.35, but built at TIGHT_SCF_CONV_TOL rather than the default. At the
+# default this geometry carries the SCF-residue artifact (excluded above, and still exercised as
+# the G7 positive control at the DEFAULT build below -- that exclusion is unchanged). At
+# TIGHT_SCF_CONV_TOL the residue collapses (SPEC_scf_conv_tol.md S10: Ritz leakage 1.6e-6 -> 1.8e-14)
+# and the certified target becomes well-defined, so it joins the gated set as a SEPARATE, tight-only
+# case rather than altering the default-conv_tol entries above.
+H4_SQUARE_135_TIGHT = "H 0 0 0; H 1.35 0 0; H 1.35 1.35 0; H 0 1.35 0"
 
-def _setup(atom):
-    mh = build_molecular_hamiltonian(atom=atom)
+
+def _setup(atom, conv_tol=1e-9):
+    mh = build_molecular_hamiltonian(atom=atom, conv_tol=conv_tol)
     H = mh.qubit_hamiltonian.to_matrix()
     u = np.asarray(mh.hf_state().data, dtype=complex)
     w, V, pops = _dense_hf_projection(mh)       # shared eigh: macOS ZHEEVD fallback
@@ -63,9 +72,9 @@ def _ritz(mh, m, solver):
     return v / np.linalg.norm(v)
 
 
-def _both_modes(atom, m):
+def _both_modes(atom, m, conv_tol=1e-9):
     """(chained_oracle, chained_self, exact) at depth m."""
-    mh, H, u, e1_elec, exact = _setup(atom)
+    mh, H, u, e1_elec, exact = _setup(atom, conv_tol=conv_tol)
     solver = QuantumKrylovSolver(mh)
     v = _ritz(mh, m, solver)
     oracle = refine_via_lanczos(H, u, v, e1_elec)
@@ -88,6 +97,16 @@ def test_G1_chained_bound_never_exceeds_the_exact_overlap(atom, m):
     for label, g in (("oracle", oracle), ("self", self_mode)):
         if g is not None:
             assert g <= exact + SATURATION_SLACK, (label, atom, m, g, exact)
+
+
+@pytest.mark.parametrize("m", DEPTHS)
+def test_G1_chained_bound_never_exceeds_the_exact_overlap_tight_scf_square_h4_135(m):
+    """Same gate as above, for the re-admitted tight-build square-H4 a=1.35 case (chem-qhi)."""
+    oracle, self_mode, exact = _both_modes(H4_SQUARE_135_TIGHT, m, conv_tol=TIGHT_SCF_CONV_TOL)
+    assert oracle is not None, (H4_SQUARE_135_TIGHT, m, "oracle mode produced no bound")
+    for label, g in (("oracle", oracle), ("self", self_mode)):
+        if g is not None:
+            assert g <= exact + SATURATION_SLACK, (label, H4_SQUARE_135_TIGHT, m, g, exact)
 
 
 # --- G2: it strictly tightens the direct bound ----------------------------------------------------
@@ -117,6 +136,19 @@ def test_G3_chained_rescues_vacuous_direct_in_self_mode(atom, m):
     assert self_mode <= exact + SATURATION_SLACK, (atom, m, self_mode, exact)
 
 
+@pytest.mark.parametrize("m", (8, 12))
+def test_G3_chained_rescues_vacuous_direct_in_self_mode_tight_scf_square_h4_135(m):
+    """Same gate as above, for the re-admitted tight-build square-H4 a=1.35 case (chem-qhi): the
+    direct bound is vacuous there too (measured, not assumed -- see sandbox-handoffs/chem-qhi.md)."""
+    mh, H, u, e1_elec, exact = _setup(H4_SQUARE_135_TIGHT, conv_tol=TIGHT_SCF_CONV_TOL)
+    solver = QuantumKrylovSolver(mh)
+    direct = certify_hf_overlap(mh, m, e1=e1_elec + mh.energy_offset, solver=solver)
+    assert direct.vacuous, (H4_SQUARE_135_TIGHT, m, "direct was expected VACUOUS here")
+    _, self_mode, _ = _both_modes(H4_SQUARE_135_TIGHT, m, conv_tol=TIGHT_SCF_CONV_TOL)
+    assert self_mode is not None and self_mode > 0.0, (H4_SQUARE_135_TIGHT, m)
+    assert self_mode <= exact + SATURATION_SLACK, (H4_SQUARE_135_TIGHT, m, self_mode, exact)
+
+
 # --- G4: self mode is nearly free, and absorbs a loose floor far better than direct does -----------
 
 @pytest.mark.parametrize("atom", DIRECT_SURVIVES + DIRECT_VACUOUS)
@@ -126,6 +158,15 @@ def test_G4_self_mode_costs_little_against_oracle(atom, m):
     if oracle is None or self_mode is None:
         pytest.skip("vacuous in one mode -- covered by G3")
     assert self_mode / oracle >= 0.9, (atom, m, self_mode, oracle)
+
+
+@pytest.mark.parametrize("m", DEPTHS)
+def test_G4_self_mode_costs_little_against_oracle_tight_scf_square_h4_135(m):
+    """Same gate as above, for the re-admitted tight-build square-H4 a=1.35 case (chem-qhi)."""
+    oracle, self_mode, _ = _both_modes(H4_SQUARE_135_TIGHT, m, conv_tol=TIGHT_SCF_CONV_TOL)
+    if oracle is None or self_mode is None:
+        pytest.skip("vacuous in one mode -- covered by G3")
+    assert self_mode / oracle >= 0.9, (H4_SQUARE_135_TIGHT, m, self_mode, oracle)
 
 
 def test_G4_chained_absorbs_the_self_mode_floor_better_than_direct():
@@ -189,10 +230,10 @@ def test_G6_unnormalized_inputs_raise():
 LEAK_TOL = 1e-12
 
 
-def _leakage(atom, m):
+def _leakage(atom, m, conv_tol=1e-9):
     """(||P_unreach v||, #unreachable levels below E1_reach) -- u's unreachable components vanish by
     construction, v's only numerically, which is the whole content of R2b."""
-    mh = build_molecular_hamiltonian(atom=atom)
+    mh = build_molecular_hamiltonian(atom=atom, conv_tol=conv_tol)
     w, V, amp2 = _dense_hf_projection(mh)       # shared eigh: macOS ZHEEVD fallback
     reach = np.where(amp2 > REACHABLE_TOL_CERTIFIED)[0]
     unreach = np.where(amp2 <= REACHABLE_TOL_CERTIFIED)[0]
@@ -208,6 +249,15 @@ def test_G7_unreachable_leakage_is_negligible_on_the_gated_set(atom):
     # R2b should be deleted rather than carried.
     assert n_below > 0, (atom, "no unreachable level below E1_reach -- R2b would be vacuous")
     assert leak < LEAK_TOL, (atom, leak)
+
+
+def test_G7_unreachable_leakage_is_negligible_tight_scf_square_h4_135():
+    """Same gate as above, for the re-admitted tight-build square-H4 a=1.35 case (chem-qhi): this is
+    the measurement that makes re-admission valid -- at the default build this exact geometry is the
+    G7 positive control below and MUST breach LEAK_TOL; at TIGHT_SCF_CONV_TOL it must not."""
+    leak, n_below = _leakage(H4_SQUARE_135_TIGHT, 6, conv_tol=TIGHT_SCF_CONV_TOL)
+    assert n_below > 0, (H4_SQUARE_135_TIGHT, "no unreachable level below E1_reach")
+    assert leak < LEAK_TOL, (H4_SQUARE_135_TIGHT, leak)
 
 
 # a=1.10 pins a platform-specific SCF stopping point, so it is Linux-reference-only. Measured on

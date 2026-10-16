@@ -86,7 +86,7 @@ def floor_guard(best_estimate_hartree: float, floor_hartree: float, *, tol: floa
         )
 
 
-def _build_mh(molecule: Any, basis: str, cas: tuple[int, int]):
+def _build_mh(molecule: Any, basis: str, cas: tuple[int, int], conv_tol: float = 1e-9):
     """molecule (PySCF atom string) + basis + CAS → validated MolecularHamiltonian."""
     from hybrid_quantum_solver import build_molecular_hamiltonian
 
@@ -96,6 +96,7 @@ def _build_mh(molecule: Any, basis: str, cas: tuple[int, int]):
         basis=basis,
         active_electrons=n_electrons,
         active_orbitals=n_orbitals,
+        conv_tol=conv_tol,
     )
 
 
@@ -128,6 +129,7 @@ def certified_energy(
     *,
     krylov_dim: int = DEFAULT_KRYLOV_DIM,
     eps: float | None = None,
+    conv_tol: float = 1e-9,
 ) -> CertifiedResult | float:
     """Certified ground-state energy for ``molecule`` in ``basis`` over active space ``cas``.
 
@@ -138,7 +140,7 @@ def certified_energy(
     lower bound could be certified.
     """
     check_caps(molecule, basis, cas)
-    mh = _build_mh(molecule, basis, cas)
+    mh = _build_mh(molecule, basis, cas, conv_tol=conv_tol)
 
     if mode is Mode.FAST:
         from hybrid_quantum_solver import QuantumKrylovSolver
@@ -189,6 +191,7 @@ def certified_gap(
     *,
     krylov_dim: int = DEFAULT_KRYLOV_DIM,
     e1: float | None = None,
+    conv_tol: float = 1e-9,
 ) -> CertifiedResult | float:
     """Certified bracket on a spectral gap (excitation energy) of ``molecule``.
 
@@ -202,7 +205,7 @@ def certified_gap(
             f"gap_type {gap_type!r} not supported; M1 certifies {sorted(_SUPPORTED_GAP_TYPES)}"
         )
     check_caps(molecule, basis, cas)
-    mh = _build_mh(molecule, basis, cas)
+    mh = _build_mh(molecule, basis, cas, conv_tol=conv_tol)
 
     best, lower, upper = _estimate_gap(mh, krylov_dim, e1)
 
