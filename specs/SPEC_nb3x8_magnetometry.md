@@ -127,6 +127,14 @@ nb3x8_magnetometry (CLI)                                          # family table
   overprediction. What is left open: the cooperative structural transition, in-plane kagome
   exchange, or a direct lattice renormalization of t_s⊥ (candidates, none tested here) — this
   follow-up is closed as a negative result, not merely deferred.
+  **Update (chem-phh, `SPEC_nb3x8_tc_attribution.md`):** the third candidate (a direct lattice
+  renormalization of t_s⊥, within the *same* dimerized structural motif) is now tested and also
+  **killed** — the rescaling needed to match measured Tc (57.7% Cl / 35.8% Br) is 17–600× the
+  largest same-motif |t_s⊥| spread this family's own vendored table shows (bulk vs bilayer, ≤2.04%).
+  The cooperative structural transition and in-plane kagome exchange remain pre-registered but
+  untested — both need data (elastic/lattice free energies; an in-plane exchange constant) this repo
+  does not vendor and this sandbox cannot fetch (no working internet access, re-confirmed
+  2026-10-15).
 
 ## 8. Caveats and risks
 
