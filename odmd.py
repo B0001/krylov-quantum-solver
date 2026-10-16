@@ -40,8 +40,9 @@ class ODMDProblem:
     """Noiseless survival amplitudes in the centered frame (H - mu), msd.py conventions.
 
     Energies from :func:`odmd_energy` are in this frame; add ``offset`` to recover the total
-    energy. ``ref`` is the exact (FCI) ground energy in the frame, so ``ref + offset`` is the
-    total FCI energy.
+    energy. ``ref`` is the exact HF-reachable ground energy in the frame (the lowest eigenvalue
+    ODMD's HF-overlap signal can actually see -- the global FCI ground only when HF reaches it),
+    so ``ref + offset`` is the total energy ODMD is being checked against.
     """
     n: int
     tau: float             # pi / W, W = HF-reachable spectral width
@@ -49,7 +50,7 @@ class ODMDProblem:
     s: np.ndarray          # complex s_k, k = 0..n-1 (s[0] = 1)
     dim: int               # Hilbert-space dimension d (sets the Hadamard-test variance constant)
     offset: float          # mh.energy_offset + mu  -> total energy
-    ref: float             # exact ground energy in the centered frame
+    ref: float             # exact HF-reachable ground energy in the centered frame
 
 
 def build_odmd_problem(mh: MolecularHamiltonian, n: int = 20) -> ODMDProblem:
@@ -60,7 +61,7 @@ def build_odmd_problem(mh: MolecularHamiltonian, n: int = 20) -> ODMDProblem:
     H_s = (H_full - frame.mu * identity(H_full.shape[0], format="csc")).tocsc()
     s = np.array([psi0.conj() @ expm_multiply(-1j * (k * frame.tau) * H_s, psi0) for k in range(n)])
     return ODMDProblem(n=n, tau=frame.tau, mu=frame.mu, s=s, dim=int(H_full.shape[0]),
-                       offset=mh.energy_offset + frame.mu, ref=float(frame.w[0] - frame.mu))
+                       offset=mh.energy_offset + frame.mu, ref=float(frame.reach[0] - frame.mu))
 
 
 def _dmd_modes(s, tau, mod_window, cutoff_abs=0.0, cutoff_rel=0.0):

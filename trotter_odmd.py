@@ -44,9 +44,10 @@ class TrotterODMDProblem(ODMDProblem):
     """ODMD problem whose signal comes from a genuinely Trotterized circuit.
 
     Subclasses :class:`odmd.ODMDProblem`, so ``odmd.odmd_energy`` / ``odmd.sample_odmd_energy``
-    apply unchanged. ``ref`` stays the exact (FCI) centered ground energy; ``e_circuit`` is the
-    exact ground eigenphase of the circuit unitary -- the value ODMD actually estimates, whose
-    difference from ``ref`` is the Trotter bias.
+    apply unchanged. ``ref`` stays the exact HF-reachable centered ground energy (see
+    :class:`odmd.ODMDProblem`); ``e_circuit`` is the exact ground eigenphase of the circuit
+    unitary -- the value ODMD actually estimates, whose difference from ``ref`` is the Trotter
+    bias.
     """
     reps: int = 1
     order: int = 2
