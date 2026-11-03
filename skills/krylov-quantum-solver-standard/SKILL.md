@@ -3,7 +3,7 @@ name: krylov-quantum-solver-standard
 description: qDRIFT real-time quantum Krylov diagonalization for molecular ground states in a CAS active space (PySCF + Qiskit Nature), with mandatory self-checks against CASCI/FCI. Use when asked to estimate an active-space ground-state energy with a Krylov/qDRIFT quantum-subspace method, or to build, simulate, or review such a pipeline.
 version: 1.1.0
 author: Benjamin
-license: MIT
+license: Big Time Public License 2.0 (https://bigtimelicense.com/versions/2.0.0; see LICENSE.md)
 ---
 
 # Krylov Quantum Solver — Standard Tier
