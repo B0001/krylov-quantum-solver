@@ -2192,3 +2192,17 @@ hypothesis whose death is informative is worth more here than a safe one.
   *Killed:* D=400 truncates too hard as chain entanglement grows — stderr balloons to ~5 mHa, the
   discarded-weight extrapolation falls back to `invD` by n=30, and leave-one-out = 1.07 mHa/atom
   (gate < 0.1). The ramp protocol is fine; cheap bond dims are not. Superseded by "done right" above.
+
+- [x] **Can qDRIFT replace exact evolution in real-time Krylov without breaking the variational
+  floor?** *(qdrift_krylov; triggered by an external "SqDRIFT Krylov" skill template that repeated
+  every REFACTOR_PLAN §2 failure and raises `LinAlgError` on H₂O)* — **YES, if one random walk
+  supplies a whole basis and (H, S) are averaged over walks** (a Gram pair in an R-fold direct sum
+  ⇒ proven floor). H₂O/STO-3G, M=6, R=20: median error at L=50/400/2000 samples per step is
+  **0.28/0.037/0.009 mHa** for CAS(2,2) and **6.9/3.4/0.89 mHa** for CAS(4,4); 36/36 runs above
+  sector FCI. **THE FINDING:** single Pauli strings do not conserve N̂, so the floor is the
+  FOCK-space minimum — CAS(4,4) leaks up to 15 % of the norm per walk, and with H + μN̂ (μ = −2 Ha)
+  un-postselected runs land **10–42 mHa below** sector FCI while N-sector postselection keeps them
+  above. Boundary: required L grows with λ (2.44 vs 11.2; CAS(4,4) misses chemical accuracy at
+  L=400). Gates G1–G6 in `tests/test_qdrift_krylov_spec.py`; `qdrift_krylov.py`.
+  → [`SPEC_qdrift_krylov.md`](SPEC_qdrift_krylov.md) (exact statevector of the channel, no shot
+  noise; reproduction of Campbell 2019 + Klymko 2022, not novelty; ≤ 8 qubits).
