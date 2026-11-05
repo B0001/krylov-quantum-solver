@@ -163,39 +163,16 @@ def hf_population_spectrum(mh) -> np.ndarray:
     return _dense_hf_projection(mh)[2]
 
 
-# A rebuild from ``build_args``, AFTER its MO gauge is reconciled with ``mh`` (see
-# _ENERGY_MATCH_ATOL/_MAX_SIGN_SEARCH_ORBITALS below), must reproduce the operator to this.
-# Summation-order roundoff alone is ~1e-16 (measured: two gauge-matched rebuilds at
-# conv_tol=TIGHT_SCF_CONV_TOL=1e-13 differ by ~1e-16 to 3.5e-15, chem-g14). But at the conv_tol
-# values this module's gate file actually exercises (1e-6, 1e-9, the builder default), independent
-# SCF solves land on genuinely different last-few-digits of the SAME MO basis, not just roundoff:
-# measured max residual after gauge reconciliation is 8.1e-5 at conv_tol=1e-6 and 2.4e-6 at 1e-9
-# (square H4, a in {1.05, 1.10, 1.19, 1.35}). 1e-4 sits above that with >10x margin and more than
-# three orders of magnitude below the smallest genuinely-different-solution residual observed
-# (~0.067, see _ENERGY_MATCH_ATOL) -- a reproducibility check at the SCF's own convergence floor,
-# not a physics threshold.
-_SAME_OPERATOR_ATOL = 1e-4
-
-# PySCFDriver hardcodes symmetry=False, so a rebuild's free RHF is not pinned to the original run's
-# branch (chem-g14). Two failure modes, told apart by energy: a genuinely different, WORSE local
-# minimum (gap >= ~0.067 Ha on square H4) -- reject and retry -- or an exactly (or near-exactly)
-# energy-degenerate alternate MO gauge (gap as small as ~1e-11 at conv_tol=1e-9 -- a real
-# degeneracy, not SCF noise, consistent with PySCF's symmetry detector resolving square H4's true
-# D4h only as far as D2h). Measured (chem-g14): the unflipped rebuild of a gauge-degenerate branch
-# still differs from ``mh`` by ~0.068 (the SAME size as a genuinely different solution!) in most
-# such cases, but searching the discrete per-orbital sign gauge (A^T S B, the AO metric, not a plain
-# dot product) always finds a pattern bringing it down to the ordinary noise floor above --
-# confirming the degeneracy is a discrete sign choice, never a continuous rotation, once searched
-# correctly. 1e-6 Ha sits well above the conv_tol=1e-9 energy-noise floor (~1e-11) and four orders
-# of magnitude below the smallest observed wrong-branch energy gap.
-_ENERGY_MATCH_ATOL = 1e-6
-
-# 2**(k-1) sign patterns per retry (one column's sign is a global gauge redundancy for both the one-
-# and two-electron integrals, so it is fixed rather than searched). No system in this module's own
-# gate file needs more than 6 active orbitals; above the bound, fall through to None as before --
-# an honest refusal rather than an unbounded search.
-_MAX_SIGN_SEARCH_ORBITALS = 10
-_MAX_REBUILD_RETRIES = 5
+# The rebuild below IS the builder's computation (same _driver_problem, same map_canonical), so it
+# reproduces the operator exactly: residual 0.0 on all 45 builder configurations measured, and one
+# SCF every time (macOS arm64, chem-g14, specs/SPEC_rebuild_gauge_search.md section 9). 1e-12 keeps
+# headroom over summation-order roundoff (<= 5.3e-15 measured, from the unsorted mapping the rebuild
+# used to apply) and sits 360x below the smallest above-roundoff difference a SEPARATE SCF
+# trajectory to the same solution leaves (3.6e-10; up to 3.2e-6 at conv_tol=1e-9 and 8.1e-5 at
+# 1e-6) -- a provenance check (these are mh's own MO coefficients), not a closeness one. The 1e-4
+# this replaced absorbed exactly that trajectory noise, which PySCF's unpinned OpenMP threads used to
+# inject into the rebuild (chem-7cx/chem-50w pinned them at the source).
+_SAME_OPERATOR_ATOL = 1e-12
 
 
 def _driver_orbitals(mh):
@@ -203,88 +180,37 @@ def _driver_orbitals(mh):
     no ``build_args`` or rebuilding from them does not reproduce ``mh.qubit_hamiltonian`` (stale or
     edited operator). The identity term is ignored: a centered frame is the same operator.
 
-    Retries the SCF (bounded) past a different, worse local minimum, and -- once the energy
-    matches -- searches the discrete per-orbital sign gauge (bounded) past an exactly degenerate
-    alternate MO basis. See ``_ENERGY_MATCH_ATOL`` / ``_MAX_SIGN_SEARCH_ORBITALS`` above and
-    chem-g14 / specs/SPEC_rebuild_gauge_search.md. A rebuild whose plain, unflipped comparison
-    already matches costs exactly one PySCFDriver call, same as before this fix.
-
-    Each retry's ``drv.run_pyscf()`` runs with ``pyscf.lib.num_threads(1)`` pinned (ambient count
-    restored in a ``finally``) -- the same chem-7cx/chem-s6c fix for the same mechanism (PySCF's
-    multi-threaded integral evaluation is not bit-associative), applied here to this function's own
-    independent RHF solve (chem-50w, specs/SPEC_driver_orbitals_scf_determinism.md). The sign search
-    itself makes no new SCF call (just a fresh AO2MO transform on already-computed ``mo_coeff``), so
-    nothing else here touches thread count.
+    The rebuild replays ``build_args`` through the builder's own ``_driver_problem`` (same conv_tol
+    floor, same ``pyscf.lib.num_threads(1)`` pin) and ``map_canonical`` (same term order), so it is
+    the builder's computation, not a second SCF near it: one SCF, then match or refuse. It also
+    follows any later change to the builder's SCF path (chem-g14, specs/SPEC_rebuild_gauge_search.md;
+    that spec's section 10 records the SCF retry and sign-gauge search this replaced).
     """
     args = getattr(mh, "build_args", None)
     if not args:
         return None
-    from pyscf import lib
-    from qiskit_nature.second_q.drivers import PySCFDriver
     from qiskit_nature.second_q.mappers import JordanWignerMapper
     from qiskit_nature.second_q.transformers import ActiveSpaceTransformer
 
-    mapper = JordanWignerMapper()
+    from hybrid_quantum_solver.molecular_hamiltonian import _driver_problem, map_canonical
+
+    problem, _, drv = _driver_problem(args["atom"], args["basis"], args["charge"], args["spin"],
+                                      args["conv_tol"], args["symmetric_scf"])
+    mo = drv._calc.mo_coeff
     n_e, n_o = args["active_electrons"], args["active_orbitals"]
-    hf_energy = getattr(mh, "hf_energy", None)
-
-    def rebuild_from(drv):
-        """(operator or None, active MO slice, active window's start column) for drv's CURRENT
-        drv._calc.mo_coeff -- re-reads it fresh, so callers may flip signs in place first."""
-        problem = drv.to_problem()
-        mo = drv._calc.mo_coeff
-        window_start = 0
-        if n_e is not None:
-            problem = ActiveSpaceTransformer(n_e, n_o).transform(problem)
-            # the transformer's own active window; a tuple (n_alpha, n_beta) is summed, as it does
-            window_start = (drv._mol.nelectron - int(np.sum(n_e))) // 2
-            mo = mo[:, window_start:window_start + n_o]
-        if mh.qubit_hamiltonian.num_qubits != 2 * mo.shape[1]:
-            return None, mo, window_start
-        return mapper.map(problem.hamiltonian.second_q_op()), mo, window_start
-
-    def same_operator(op):
-        if op is None:
-            return False
-        diff = (op - mh.qubit_hamiltonian).simplify(atol=0)
-        non_identity = diff.paulis.x.any(axis=1) | diff.paulis.z.any(axis=1)
-        return np.abs(diff.coeffs[non_identity]).max(initial=0.0) <= _SAME_OPERATOR_ATOL
-
-    for _ in range(_MAX_REBUILD_RETRIES):
-        drv = PySCFDriver(atom=args["atom"], basis=args["basis"], charge=args["charge"],
-                          spin=args["spin"], conv_tol=args["conv_tol"])
-        # PySCFDriver hardcodes symmetry=False; its RHF solve shares chem-7cx/chem-s6c's
-        # non-bit-associative multi-threaded integral evaluation (chem-50w). Pin/restore around
-        # just this call -- the sign search below makes no further SCF call.
-        ambient_threads = lib.num_threads()
-        lib.num_threads(1)
-        try:
-            drv.run_pyscf()
-        finally:
-            lib.num_threads(ambient_threads)
-        if hf_energy is not None and abs(drv._calc.e_tot - hf_energy) > _ENERGY_MATCH_ATOL:
-            continue                            # a different, worse SCF local minimum -- retry
-
-        base_mo = drv._calc.mo_coeff.copy()
-        op, mo, window_start = rebuild_from(drv)
-        if same_operator(op):
-            return drv._mol, mo
-        if op is None:
-            continue                            # qubit-count mismatch -- not a gauge question
-
-        k = mo.shape[1]
-        if k - 1 > _MAX_SIGN_SEARCH_ORBITALS:
-            continue                            # too large to search; stay with the plain refusal
-        for pattern in range(1, 1 << (k - 1)):
-            signs = np.ones(k)
-            signs[1:] = [1.0 if (pattern >> b) & 1 == 0 else -1.0 for b in range(k - 1)]
-            flipped = base_mo.copy()
-            flipped[:, window_start:window_start + k] *= signs
-            drv._calc.mo_coeff = flipped
-            op, mo, _ = rebuild_from(drv)
-            if same_operator(op):
-                return drv._mol, mo
-    return None
+    if n_e is not None:
+        problem = ActiveSpaceTransformer(n_e, n_o).transform(problem)
+        # the transformer's own active window; a tuple (n_alpha, n_beta) is summed, as it does
+        start = (drv._mol.nelectron - int(np.sum(n_e))) // 2
+        mo = mo[:, start:start + n_o]
+    if mh.qubit_hamiltonian.num_qubits != 2 * mo.shape[1]:
+        return None
+    diff = (map_canonical(JordanWignerMapper(), problem.hamiltonian.second_q_op())
+            - mh.qubit_hamiltonian).simplify(atol=0)
+    non_identity = diff.paulis.x.any(axis=1) | diff.paulis.z.any(axis=1)
+    if np.abs(diff.coeffs[non_identity]).max(initial=0.0) > _SAME_OPERATOR_ATOL:
+        return None
+    return drv._mol, mo
 
 
 # D_b R_b bounds the Z-string error only where R_b (the point-group operation g_b restricted to the

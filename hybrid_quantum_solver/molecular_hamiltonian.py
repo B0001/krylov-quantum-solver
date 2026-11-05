@@ -101,21 +101,23 @@ def _point_group(atom: str, basis: str, charge: int, spin: int) -> str:
 
 def _driver_problem(atom: str, basis: str, charge: int, spin: int, conv_tol: float,
                     symmetric_scf: bool):
-    """``(PySCFDriver problem, effective conv_tol)`` -- the one SCF path shared by
-    ``build_molecular_hamiltonian`` and ``build_dipole_operators``, so a Hamiltonian and a dipole
-    built from the same arguments sit on bit-identical SCF orbitals (chem-9ud). It applies the
-    ``symmetric_scf`` conv_tol floor and the ``pyscf.lib.num_threads(1)`` pin (chem-7cx); see
-    ``build_molecular_hamiltonian`` for both."""
+    """``(PySCFDriver problem, effective conv_tol, driver)`` -- the one SCF path shared by
+    ``build_molecular_hamiltonian``, ``build_dipole_operators`` and the rebuild in
+    ``reachability._driver_orbitals``, so a Hamiltonian, its dipole and its verification rebuild
+    sit on bit-identical SCF orbitals (chem-9ud, chem-g14). It applies the ``symmetric_scf``
+    conv_tol floor and the ``pyscf.lib.num_threads(1)`` pin (chem-7cx) to the whole run, integral
+    transform included; see ``build_molecular_hamiltonian`` for both. ``driver`` holds the run's
+    ``_mol`` and ``_calc`` (MO coefficients)."""
     if symmetric_scf and _point_group(atom, basis, charge, spin) != "C1":
         conv_tol = min(conv_tol, _SYMMETRIC_TIGHT_CONV_TOL)
     ambient_threads = lib.num_threads()
     lib.num_threads(1)
     try:
-        problem = PySCFDriver(atom=atom, basis=basis, charge=charge, spin=spin,
-                              conv_tol=conv_tol).run()
+        driver = PySCFDriver(atom=atom, basis=basis, charge=charge, spin=spin, conv_tol=conv_tol)
+        problem = driver.run()
     finally:
         lib.num_threads(ambient_threads)
-    return problem, conv_tol
+    return problem, conv_tol, driver
 
 
 def map_canonical(mapper, fermionic_op: FermionicOp) -> SparsePauliOp:
@@ -194,12 +196,12 @@ def build_molecular_hamiltonian(
         makes a given (atom, basis, charge, spin, conv_tol) build bit-identical across repeated
         calls and across ambient thread counts on this host/pyscf build -- see
         ``specs/SPEC_scf_branch_determinism.md``. It does NOT make the result match a different
-        host/platform/pyscf-version's branch choice (chem-g14 is the open, separate issue tracking
-        that cross-platform divergence).
+        host/platform/pyscf-version's branch choice (chem-8ls tracks that cross-platform
+        divergence).
     """
     mapper = mapper or JordanWignerMapper()
-    problem, effective_conv_tol = _driver_problem(atom, basis, charge, spin, conv_tol,
-                                                  symmetric_scf)
+    problem, effective_conv_tol, _ = _driver_problem(atom, basis, charge, spin, conv_tol,
+                                                     symmetric_scf)
 
     if active_electrons is not None and active_orbitals is not None:
         problem = ActiveSpaceTransformer(active_electrons, active_orbitals).transform(problem)
@@ -225,8 +227,9 @@ def build_molecular_hamiltonian(
         num_spatial_orbitals=problem.num_spatial_orbitals,
         hf_energy=hf_energy,
         build_args=dict(atom=atom, basis=basis, charge=charge, spin=spin,
-                        conv_tol=effective_conv_tol, active_electrons=active_electrons,
-                        active_orbitals=active_orbitals, mapper=type(mapper).__name__),
+                        conv_tol=effective_conv_tol, symmetric_scf=symmetric_scf,
+                        active_electrons=active_electrons, active_orbitals=active_orbitals,
+                        mapper=type(mapper).__name__),
     )
 
 
@@ -310,7 +313,7 @@ def build_dipole_operators(
     pin), so matching arguments give bit-identical orbitals.
     """
     mapper = mapper or JordanWignerMapper()
-    problem, _ = _driver_problem(atom, basis, charge, spin, conv_tol, symmetric_scf)
+    problem, _, _ = _driver_problem(atom, basis, charge, spin, conv_tol, symmetric_scf)
     dipole = problem.properties.electronic_dipole_moment
     elec_ops = dipole.second_q_ops()                 # {'XDipole', 'YDipole', 'ZDipole'}
     nuclear = np.asarray(dipole.nuclear_dipole_moment, dtype=float)

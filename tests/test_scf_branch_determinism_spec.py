@@ -114,7 +114,7 @@ def _outcomes():
 def test_G4_known_flipping_witnesses_stabilize_pass_or_fail():
     """The two tests chem-7cx found flipping pass/fail across repeated full-suite runs now give
     the SAME outcome every time -- five separate pytest subprocess invocations. This does NOT
-    assert which outcome: chem-g14 (a separate, pre-existing cross-platform/version divergence)
+    assert which outcome: chem-8ls (a separate, pre-existing cross-platform/version divergence)
     governs whether these should be green on this host. It only asserts they stop being a coin
     flip."""
     runs = [_outcomes() for _ in range(5)]

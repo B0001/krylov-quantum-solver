@@ -1,6 +1,24 @@
 # chem-g14 — `_driver_orbitals` rebuild-reproducibility too strict for conv_tol=1e-9 SCFs
 
-Status: **left open.** This session's job was to close chem-g14 once its two dependencies
+## Update 2026-11-05 (portfolio worker, macOS arm64): root cause fixed, bead closed
+
+**Starting point.** Branch `sandbox/chem-g14`, cut from `origin/sandbox/chem-9ud` (`5460d0d`), which adds `molecular_hamiltonian._driver_problem`. On this host the description's failures do not reproduce: `tests/test_eigenstate_reachability_spec.py` passes 50/50 before the change.
+
+**What I found.** The rebuild in `_driver_orbitals` was a hand-copy of the builder's recipe, not the builder's computation. It summed Pauli terms in hash order where the builder uses `map_canonical`, and its `to_problem()` ran outside the thread pin. It also could not see `symmetric_scf`, or any future change to the builder's SCF path, which matters for chem-8ls. The 1e-4 tolerance, energy retry and sign search absorbed separate-trajectory noise, 3.6e-10 to 8.1e-5. The thread pins have since removed that noise at its source.
+
+**What I changed.**
+- The rebuild now calls `_driver_problem` with `build_args` and maps with `map_canonical`. It reproduces the builder bit-for-bit: residual 0.0 in 45 of 45 configurations.
+- The tolerance is back to 1e-12.
+- The retry and the sign search are deleted.
+- `build_args` records `symmetric_scf`.
+
+**Evidence.** `specs/SPEC_rebuild_gauge_search.md` §9 has the measurement table and the before/after gate table. It also has an initial-guess branch scan for chem-8ls: the square-H4 RHF branch depends on the initial guess, and not monotonically in side length. Linux was not run, because Docker is down. Spec R1 records why bit-identity should hold there, and what a G1 failure would mean.
+
+The 2026-10-15 session below is kept as written.
+
+---
+
+Status (2026-10-15): **left open.** This session's job was to close chem-g14 once its two dependencies
 (chem-7cx, chem-0m8) landed and `tests/test_eigenstate_reachability_spec.py` is green on Linux.
 Both dependencies' fix branches (plus three further branches they themselves spawned:
 chem-s6c, chem-0yh, chem-50w) are now merged into `sandbox/chem-g14`, and the file is fully

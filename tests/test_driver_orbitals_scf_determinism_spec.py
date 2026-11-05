@@ -139,7 +139,8 @@ def test_G4_exactly_one_run_pyscf_call_across_ambient_thread_counts():
     """The explicit before/after retry-count measurement chem-s6c's notes asked for: for a fixed
     mh, the retry loop makes exactly one run_pyscf call regardless of ambient thread count, for
     every witness this module's own gate file exercises. Before the fix this ranged 1-5 (spec
-    section 1/9's captured table)."""
+    section 1/9's captured table). chem-g14 (2026-11-05) later deleted the retry loop itself --
+    the rebuild now runs the builder's own SCF path once -- and this gate still pins that one call."""
     for a, conv_tol in (WITNESS_1_19, WITNESS_1_10, WITNESS_1_35):
         calls_by_threads = {n: _call_in_subprocess(a, conv_tol, n)[1] for n in (1, 2, 4, 8)}
         assert set(calls_by_threads.values()) == {1}, (a, conv_tol, calls_by_threads)
@@ -148,9 +149,9 @@ def test_G4_exactly_one_run_pyscf_call_across_ambient_thread_counts():
 # --- G5: no regression on SPEC_rebuild_gauge_search.md's own mechanics ----------------------------
 
 def test_G5_rebuild_gauge_search_gates_still_pass():
-    """tests/test_rebuild_gauge_search_spec.py's G3-G5 (cheap-when-unneeded call counting, the
-    energy pre-filter's retry-not-false-accept behavior, the oversized-active-space refusal) are
-    untouched by this fix -- run as a regression check in its own subprocess."""
+    """tests/test_rebuild_gauge_search_spec.py still passes -- run as a regression check in its own
+    subprocess. Since chem-g14's 2026-11-05 revision that file gates the rebuild's bit-for-bit
+    reproduction of the builder (its G1-G5), not the retry/sign-search mechanics this spec named."""
     out = subprocess.run(
         [sys.executable, "-m", "pytest", "-q", "--no-header",
          "tests/test_rebuild_gauge_search_spec.py"],

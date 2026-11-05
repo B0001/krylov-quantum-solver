@@ -129,7 +129,7 @@ def test_G4_affected_witnesses_stabilize_pass_or_fail():
     """The five test_symmetry_reachability_spec.py gates that call scf_symmetry_status/
     hf_orbital_irreps directly on the square-H4 family now give the SAME outcome every time --
     five separate pytest subprocess invocations of the whole file. Does NOT assert which outcome:
-    chem-g14 (a separate, pre-existing cross-platform/version divergence) governs whether these
+    chem-8ls (a separate, pre-existing cross-platform/version divergence) governs whether these
     should be green on this host (spec section 2). Only asserts they stop being a coin flip."""
     runs = [_outcomes() for _ in range(5)]
     for w in _AFFECTED_WITNESSES:

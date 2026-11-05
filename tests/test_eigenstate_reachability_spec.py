@@ -462,7 +462,9 @@ def test_G10_odd_electron_active_space_is_verified():
 # conv_tol=1e-13, because free (symmetry=False) SCF leaves an arbitrary, non-reproducible rotation
 # inside a geometrically-degenerate MO shell. Monkeypatching isolates the L1-L4 logic itself from
 # that unrelated bug so these gates are deterministic. L3 is the exception: it reproduces end-to-end
-# with no monkeypatch at all, since its witness has no degenerate-shell SCF involved.
+# with no monkeypatch at all, since its witness has no degenerate-shell SCF involved. (chem-g14 has
+# since made that rebuild the builder's own computation -- bit-identical on one host,
+# specs/SPEC_rebuild_gauge_search.md -- so the monkeypatch is now isolation only, not a workaround.)
 
 def _rhf(atom, conv_tol=1e-12):
     from pyscf import gto, scf

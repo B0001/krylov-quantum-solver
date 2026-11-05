@@ -2,6 +2,11 @@
 
 **Status:** IMPLEMENTED — gate green (`tests/test_driver_orbitals_scf_determinism_spec.py`).
 
+> **Later (chem-g14, 2026-11-05):** `_driver_orbitals` no longer has a retry loop or a sign search.
+> Its rebuild now runs the builder's own `_driver_problem`, which carries this spec's pin. G1–G4 still
+> hold as written: one `run_pyscf` call per rebuild. G5 now runs the revised
+> `tests/test_rebuild_gauge_search_spec.py`. See `SPEC_rebuild_gauge_search.md`.
+
 ---
 
 ## 1. Goal
