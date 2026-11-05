@@ -29,12 +29,13 @@ qDRIFT/Trotter circuit compilation and hardware-noise sampling are out of scope 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, List, Optional
+from pathlib import Path
+from typing import Any, Iterable, List, Optional
 
 import numpy as np
 
 from hybrid_quantum_solver.molecular_hamiltonian import MolecularHamiltonian
-from hybrid_quantum_solver.quantum_krylov_solver import QuantumKrylovSolver
+from hybrid_quantum_solver.quantum_krylov_solver import QuantumKrylovSolver, certify_state
 
 
 @dataclass
@@ -43,6 +44,7 @@ class SKQDStep:
     depth: int        # number of Krylov states sampled (k = 0 .. depth-1)
     n_dets: int       # determinants in the diagonalisation subspace (incl. HF)
     energy: float     # total energy in Ha (subspace eigenvalue + offset)
+    certificate: Any = None  # certkit_bridge.Verdict for ``energy`` when solved with certify=
 
 
 class SampleKrylovSolver:
@@ -98,24 +100,33 @@ class SampleKrylovSolver:
         return self._rng.choice(p.size, size=n_shots, p=p)
 
     # -- diagonalisation -----------------------------------------------------
-    def _diagonalize(self, dets: Iterable[int]) -> SKQDStep:
+    def _diagonalize(self, dets: Iterable[int], certify=None) -> SKQDStep:
         """Lowest eigenvalue of H restricted to the determinant subspace ``dets``."""
         idx = np.fromiter(sorted(dets), dtype=int)
         H_sub = self._H[idx][:, idx].toarray()
         H_sub = 0.5 * (H_sub + H_sub.conj().T)          # exact H is Hermitian; guard rounding
-        energy = float(np.linalg.eigvalsh(H_sub)[0].real)
-        return SKQDStep(depth=self.depth, n_dets=idx.size, energy=energy + self.offset)
+        vals, vecs = np.linalg.eigh(H_sub)
+        energy = float(vals[0].real)
+        cert = None
+        if certify is not None:                         # the eigenvector, embedded in full space
+            psi = np.zeros(self._H.shape[0], dtype=complex)
+            psi[idx] = vecs[:, 0]
+            cert = certify_state(self.mh, psi, energy, certify)
+        return SKQDStep(depth=self.depth, n_dets=idx.size, energy=energy + self.offset,
+                        certificate=cert)
 
     # -- public API ----------------------------------------------------------
-    def solve(self) -> SKQDStep:
+    # ``certify``: as in ``QuantumKrylovSolver.solve`` (a directory for the certkit certificate).
+    def solve(self, certify: str | Path | None = None) -> SKQDStep:
         """Sample ``n_shots`` per Krylov state, union determinants, diagonalise."""
         self._krylov._ensure_basis(self.depth)
         dets = {self._hf_index}
         for k in range(self.depth):
             dets.update(int(b) for b in np.unique(self._draw(k, self.n_shots)))
-        return self._diagonalize(dets)
+        return self._diagonalize(dets, certify)
 
-    def convergence(self, shot_schedule: Iterable[int]) -> List[SKQDStep]:
+    def convergence(self, shot_schedule: Iterable[int],
+                    certify: str | Path | None = None) -> List[SKQDStep]:
         """Energies for an increasing shot budget at fixed depth.
 
         The draws are *nested*: the largest budget is sampled once and smaller budgets read a
@@ -134,7 +145,8 @@ class SampleKrylovSolver:
             dets = {self._hf_index}
             for d in draws:
                 dets.update(int(b) for b in np.unique(d[:s]))
-            steps.append(self._diagonalize(dets))
+            steps.append(self._diagonalize(
+                dets, None if certify is None else Path(certify) / f"shots{s}"))
         return steps
 
 

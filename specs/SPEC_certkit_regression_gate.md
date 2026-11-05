@@ -33,11 +33,11 @@ bound that drifts past 1.6 mHa fails the gate.
      demonstrates this rather than assuming it. Soundness comes from the checker; correctness
      comes from G3/G4 comparing against a reference. Neither is sufficient alone.
   2. **Coverage is the producer's four cases, not the test suite.** `certkit_bridge.py` emits
-     for H2, H4, H4-stretched and N2. No regression test in `tests/` emits a certificate,
-     because no solver return path produces one — that is `portfolio-cir` (emit for every
-     solved ground-state energy) and `portfolio-0pc` (certificate-or-abstention as a
-     non-bypassable invariant), both still open. This gate is written so those land *into* it:
-     new cases join `EXPECTED` and are gated on arrival.
+     for H2, H4, H4-stretched and N2. No regression test in `tests/` emits a certificate.
+     Since `portfolio-cir` every solver return path *can* (`certify=`), gated separately by
+     `SPEC_certkit_return_paths.md`, whose certificates also pin the ceiling to the returned
+     energy rather than to the witness's Rayleigh quotient. Making that non-bypassable is
+     `portfolio-0pc`, still open.
   3. **Electronic frame.** Certificates are about the qubit matrix; `mh.energy_offset` is a
      trusted addition made outside it. The pinned references here are therefore not the total
      energies the rest of the suite asserts.

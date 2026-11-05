@@ -1039,6 +1039,16 @@ hypothesis whose death is informative is worth more here than a safe one.
   reachable-sector one, coverage is the producer's four cases until certificate emission reaches
   the solver's return path).
 
+- [x] **portfolio-cir: does every ground-state energy the solver returns get a certificate
+  *about that energy*?** *(2026-11-05)* — **DONE.** Every energy-returning method now takes
+  `certify=<dir>`. Doing that showed the bridge's claim shape was the wrong one for a return
+  path: `[floor, ⟨x|H|x⟩]` puts the witness's quotient in the ceiling, not the returned energy.
+  With shot noise those differ, and a noisy H₂ energy **7.3 mHa below** the exact ground state
+  then gets a VERIFIED certificate. Claiming `[floor, E]` instead makes VERIFIED mean "E is a
+  proven upper bound". Six of twelve seeded noisy energies fall below λ_min, and all six now
+  ABSTAIN. → [`SPEC_certkit_return_paths.md`](SPEC_certkit_return_paths.md) (G1–G4 in
+  `tests/test_certkit_return_paths_spec.py`; opt-in until `portfolio-0pc`).
+
 - [x] **Falsifying my own guard: the self-mode subspace floor is heuristic, not rigorous, for
   d ≥ 2** *(a parallel adversarial falsification sweep auditing PRs #20/#21)* — the self-mode floor
   θ_d − σ_d can exceed the true reachable E_d (linear H₆ R=1.2 Å d=3: β_self=−2.251 > −2.583). A

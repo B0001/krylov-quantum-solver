@@ -40,7 +40,8 @@ this solver is the correct, validated target they must reproduce.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional
+from pathlib import Path
+from typing import Any, List, Optional
 
 import numpy as np
 from scipy.linalg import eigh
@@ -126,12 +127,28 @@ def solve_generalized_eig(H, S, threshold: float = 1e-10, noise_floor: float = 0
     return float(ritz[0]), rank
 
 
+def certify_state(mh: MolecularHamiltonian, psi, energy: float, out) -> Any:
+    """certkit certificate for one returned ground-state energy, checked out of process.
+
+    ``energy`` is electronic-frame and ``psi`` the Hilbert-space state it is the Ritz value
+    of; returns the checker's ``certkit_bridge.Verdict`` (VERIFIED or ABSTAIN). Every
+    ``certify=`` argument in this package lands here (portfolio-cir). Needs the certkit extra
+    (``uv sync --inexact --extra certkit``), imported lazily so the solver imports without it.
+    """
+    # ponytail: the producer is top-level certkit_bridge (the repo root is on sys.path in the
+    # editable install, as for certchem -> temple_bounds); move it into this package if
+    # portfolio-0pc makes certification non-optional.
+    from certkit_bridge import certify_ground_state
+    return certify_ground_state(mh, psi, float(energy), Path(out))
+
+
 @dataclass
 class KrylovStep:
     """Result at one Krylov dimension."""
     dim: int          # requested Krylov dimension M
     rank: int         # effective subspace rank kept after thresholding
     energy: float     # total energy in Ha (electronic eigenvalue + offset)
+    certificate: Any = None  # certkit_bridge.Verdict for ``energy`` when solved with certify=
 
 
 @dataclass
@@ -140,6 +157,7 @@ class ExcitedKrylovStep:
     dim: int                # requested Krylov dimension M
     rank: int               # effective subspace rank kept after thresholding
     energies: List[float]   # ascending total energies in Ha (offset included); [0] is the ground
+    certificate: Any = None  # certkit_bridge.Verdict for ``energies[0]`` when certify= was given
 
 
 class QuantumKrylovSolver:
@@ -273,43 +291,61 @@ class QuantumKrylovSolver:
         return H, S
 
     # -- generalised eigenproblem -------------------------------------------
-    def _solve_generalized(self, H, S):
-        """Thresholded canonical orthogonalisation with a noise-aware overlap cutoff."""
-        return solve_generalized_eig(H, S, self.threshold, 5.0 * self.noise_sigma)
-
-    # -- public API ----------------------------------------------------------
-    def solve(self, krylov_dim: int) -> KrylovStep:
-        """Estimate the ground-state energy from an ``krylov_dim``-vector Krylov space."""
+    def _ritz(self, krylov_dim: int):
+        """(vals, C, rank) for one Krylov dimension, with the noise-aware overlap cutoff."""
         if krylov_dim < 1:
             raise ValueError("krylov_dim must be >= 1")
         H, S = self._subspace_matrices(krylov_dim)
-        energy, rank = self._solve_generalized(H, S)
-        return KrylovStep(dim=krylov_dim, rank=rank, energy=energy + self.offset)
+        return ritz_pairs(H, S, self.threshold, 5.0 * self.noise_sigma)
 
-    def convergence(self, max_dim: int) -> List[KrylovStep]:
-        """Energies for M = 1 .. max_dim (basis built once and reused)."""
+    def _basis_rows(self, krylov_dim: int) -> np.ndarray:
+        """The first ``krylov_dim`` Krylov vectors as host-array rows, shape (M, N)."""
+        if self.device == "gpu":
+            return np.asarray([self._cp.asnumpy(v) for v in self._basis[:krylov_dim]])
+        return np.asarray(self._basis[:krylov_dim])
+
+    def _certify(self, vals, C, krylov_dim: int, certify):
+        """Certificate for the ground Ritz pair, or None when none was asked for."""
+        if certify is None:
+            return None
+        return certify_state(self.mh, C[:, 0] @ self._basis_rows(krylov_dim), vals[0], certify)
+
+    # -- public API ----------------------------------------------------------
+    # ``certify`` (a directory) on every energy-returning method below emits the certkit
+    # certificate for the ground-state energy returned and has certkit check it out of process;
+    # see ``certify_state``. Off by default: each one costs a checker run.
+    def solve(self, krylov_dim: int, certify: str | Path | None = None) -> KrylovStep:
+        """Estimate the ground-state energy from an ``krylov_dim``-vector Krylov space."""
+        vals, C, rank = self._ritz(krylov_dim)
+        return KrylovStep(dim=krylov_dim, rank=rank, energy=float(vals[0]) + self.offset,
+                          certificate=self._certify(vals, C, krylov_dim, certify))
+
+    def convergence(self, max_dim: int, certify: str | Path | None = None) -> List[KrylovStep]:
+        """Energies for M = 1 .. max_dim (basis built once and reused); certificates in M<m>/."""
         self._ensure_basis(max_dim)
-        return [self.solve(m) for m in range(1, max_dim + 1)]
+        return [self.solve(m, None if certify is None else Path(certify) / f"M{m}")
+                for m in range(1, max_dim + 1)]
 
-    def solve_excited(self, krylov_dim: int, n_states: Optional[int] = None) -> ExcitedKrylovStep:
+    def solve_excited(self, krylov_dim: int, n_states: Optional[int] = None,
+                      certify: str | Path | None = None) -> ExcitedKrylovStep:
         """Estimate the low-lying spectrum (ground + excited) from a Krylov space.
 
         Returns the lowest ``n_states`` Ritz values (all of them if ``n_states`` is None) of the
         same subspace ``solve`` uses -- ``energies[0]`` is identical to ``solve(krylov_dim).energy``.
         Each Ritz value is variationally above the corresponding exact eigenvalue (Cauchy
         interlacing); excited states are reachable only insofar as |HF> overlaps them. See
-        specs/SPEC_qksd_excited.md.
+        specs/SPEC_qksd_excited.md. ``certify`` covers ``energies[0]`` only: certkit v1 has no
+        claim kind for excited levels.
         """
-        if krylov_dim < 1:
-            raise ValueError("krylov_dim must be >= 1")
-        H, S = self._subspace_matrices(krylov_dim)
-        ritz, rank = ritz_spectrum(H, S, self.threshold, 5.0 * self.noise_sigma)
+        vals, C, rank = self._ritz(krylov_dim)
+        cert = self._certify(vals, C, krylov_dim, certify)
         if n_states is not None:
-            ritz = ritz[:n_states]
-        energies = [float(e) + self.offset for e in ritz]
-        return ExcitedKrylovStep(dim=krylov_dim, rank=rank, energies=energies)
+            vals = vals[:n_states]
+        energies = [float(e) + self.offset for e in vals]
+        return ExcitedKrylovStep(dim=krylov_dim, rank=rank, energies=energies, certificate=cert)
 
-    def eigenstates(self, krylov_dim: int, n_states: Optional[int] = None):
+    def eigenstates(self, krylov_dim: int, n_states: Optional[int] = None,
+                    certify: str | Path | None = None):
         """Krylov eigen-energies and the corresponding Hilbert-space eigenvectors.
 
         Returns ``(energies, states)`` where ``energies`` is the ascending list of total energies
@@ -318,21 +354,17 @@ class QuantumKrylovSolver:
         statevector. These feed the property layer (``qksd_properties``): permanent and transition
         dipoles are ⟨Ψ_m|Ô|Ψ_n⟩ on these states. CPU path only (properties are a dense reference
         analysis; a GPU statevector is copied back to host). See specs/SPEC_qksd_properties.md.
+        With ``certify`` it returns ``(energies, states, certificate)`` instead, the certificate
+        covering ``energies[0]`` (the ``return_counts`` pattern of ``np.unique``).
         """
-        if krylov_dim < 1:
-            raise ValueError("krylov_dim must be >= 1")
-        H, S = self._subspace_matrices(krylov_dim)
-        vals, C, _ = ritz_pairs(H, S, self.threshold, 5.0 * self.noise_sigma)
+        vals, C, _ = self._ritz(krylov_dim)
         if n_states is not None:
             vals, C = vals[:n_states], C[:, :n_states]
-        if self.device == "gpu":
-            basis = [self._cp.asnumpy(v) for v in self._basis[:krylov_dim]]
-        else:
-            basis = self._basis[:krylov_dim]
-        B = np.asarray(basis)                         # (M, N): rows are the Krylov vectors
-        states = C.T @ B                              # (k, N): row m is |Ψ_m>
+        states = C.T @ self._basis_rows(krylov_dim)   # (k, N): row m is |Ψ_m>
         energies = [float(e) + self.offset for e in vals]
-        return energies, states
+        if certify is None:
+            return energies, states
+        return energies, states, certify_state(self.mh, states[0], vals[0], certify)
 
 
 if __name__ == "__main__":
