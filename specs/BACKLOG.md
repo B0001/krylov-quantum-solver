@@ -98,7 +98,8 @@ hypothesis whose death is informative is worth more here than a safe one.
   belongs, a tight/symmetric SCF in the builder. **Done (chem-n3w):**
   [SPEC](SPEC_symmetric_scf.md) — opt-in `symmetric_scf=True` on `build_molecular_hamiltonian`
   floors `conv_tol` to `TIGHT_SCF_CONV_TOL` on point-group-symmetric geometries; default build
-  (and every existing call site/gate) is unchanged.
+  (and every existing call site/gate) is unchanged. `build_dipole_operators` takes the same flag
+  and runs the same SCF path, thread pin included (chem-9ud, G8).
 
 - [ ] ~~**A symmetry/sector-aware reachability test**~~ *(superseded by the closed entry above;
   original text follows)* *(the fix the

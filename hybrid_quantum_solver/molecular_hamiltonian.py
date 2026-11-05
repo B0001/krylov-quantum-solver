@@ -99,6 +99,25 @@ def _point_group(atom: str, basis: str, charge: int, spin: int) -> str:
     return mol.groupname
 
 
+def _driver_problem(atom: str, basis: str, charge: int, spin: int, conv_tol: float,
+                    symmetric_scf: bool):
+    """``(PySCFDriver problem, effective conv_tol)`` -- the one SCF path shared by
+    ``build_molecular_hamiltonian`` and ``build_dipole_operators``, so a Hamiltonian and a dipole
+    built from the same arguments sit on bit-identical SCF orbitals (chem-9ud). It applies the
+    ``symmetric_scf`` conv_tol floor and the ``pyscf.lib.num_threads(1)`` pin (chem-7cx); see
+    ``build_molecular_hamiltonian`` for both."""
+    if symmetric_scf and _point_group(atom, basis, charge, spin) != "C1":
+        conv_tol = min(conv_tol, _SYMMETRIC_TIGHT_CONV_TOL)
+    ambient_threads = lib.num_threads()
+    lib.num_threads(1)
+    try:
+        problem = PySCFDriver(atom=atom, basis=basis, charge=charge, spin=spin,
+                              conv_tol=conv_tol).run()
+    finally:
+        lib.num_threads(ambient_threads)
+    return problem, conv_tol
+
+
 def map_canonical(mapper, fermionic_op: FermionicOp) -> SparsePauliOp:
     """Map a fermionic operator to qubits bit-for-bit independently of PYTHONHASHSEED.
 
@@ -179,18 +198,8 @@ def build_molecular_hamiltonian(
         that cross-platform divergence).
     """
     mapper = mapper or JordanWignerMapper()
-
-    effective_conv_tol = conv_tol
-    if symmetric_scf and _point_group(atom, basis, charge, spin) != "C1":
-        effective_conv_tol = min(conv_tol, _SYMMETRIC_TIGHT_CONV_TOL)
-
-    ambient_threads = lib.num_threads()
-    lib.num_threads(1)
-    try:
-        problem = PySCFDriver(atom=atom, basis=basis, charge=charge, spin=spin,
-                              conv_tol=effective_conv_tol).run()
-    finally:
-        lib.num_threads(ambient_threads)
+    problem, effective_conv_tol = _driver_problem(atom, basis, charge, spin, conv_tol,
+                                                  symmetric_scf)
 
     if active_electrons is not None and active_orbitals is not None:
         problem = ActiveSpaceTransformer(active_electrons, active_orbitals).transform(problem)
@@ -279,6 +288,7 @@ def build_dipole_operators(
     spin: int = 0,
     mapper: Optional[JordanWignerMapper] = None,
     conv_tol: float = 1e-9,
+    symmetric_scf: bool = False,
 ) -> list[SparsePauliOp]:
     """Total molecular dipole operator per Cartesian axis, on the same qubit basis as the
     Hamiltonian.
@@ -293,12 +303,14 @@ def build_dipole_operators(
     molecules, which keeps the dipole convention exactly as probed. An active-space dipole (with
     the frozen-core contribution folded in) is a follow-up. See specs/SPEC_qksd_properties.md.
 
-    ``conv_tol`` must match whatever was used to build the paired Hamiltonian (default 1e-9, same
-    as ``build_molecular_hamiltonian``) -- otherwise the dipole and the Hamiltonian are evaluated
-    on different SCF orbitals (chem-qhi).
+    ``conv_tol`` and ``symmetric_scf`` must match whatever was used to build the paired
+    Hamiltonian (defaults 1e-9 and ``False``, same as ``build_molecular_hamiltonian``) --
+    otherwise the dipole and the Hamiltonian are evaluated on different SCF orbitals (chem-qhi,
+    chem-9ud). Both builders run the same ``_driver_problem`` (same conv_tol floor, same thread
+    pin), so matching arguments give bit-identical orbitals.
     """
     mapper = mapper or JordanWignerMapper()
-    problem = PySCFDriver(atom=atom, basis=basis, charge=charge, spin=spin, conv_tol=conv_tol).run()
+    problem, _ = _driver_problem(atom, basis, charge, spin, conv_tol, symmetric_scf)
     dipole = problem.properties.electronic_dipole_moment
     elec_ops = dipole.second_q_ops()                 # {'XDipole', 'YDipole', 'ZDipole'}
     nuclear = np.asarray(dipole.nuclear_dipole_moment, dtype=float)

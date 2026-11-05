@@ -19,13 +19,16 @@ from functools import lru_cache
 
 import numpy as np
 import pytest
+from pyscf import lib
 
 sys.path.insert(0, "tests")
 import test_eigenstate_reachability_spec as ter  # noqa: E402  (path insert above)
 
+import hybrid_quantum_solver.molecular_hamiltonian as mham  # noqa: E402
 from hf_overlap_certificate import exact_reachable_overlap  # noqa: E402
 from hybrid_quantum_solver.molecular_hamiltonian import (  # noqa: E402
     _point_group,
+    build_dipole_operators,
     build_molecular_hamiltonian,
 )
 from reachability import (  # noqa: E402
@@ -79,6 +82,9 @@ def test_G1_defaults_are_pinned():
     params = inspect.signature(build_molecular_hamiltonian).parameters
     assert params["conv_tol"].default == 1e-9
     assert params["symmetric_scf"].default is False
+    dipole = inspect.signature(build_dipole_operators).parameters  # same defaults -> same SCF
+    assert dipole["conv_tol"].default == 1e-9
+    assert dipole["symmetric_scf"].default is False
 
 
 # --- G2: point-group detection matches PySCF, no SCF ----------------------------------------------
@@ -169,6 +175,42 @@ def test_G7_qksd_lands_on_the_physical_level_not_the_artifact():
     e_on_tail = ter._qksd_electronic(on)[[m - 1 for m in ter.G9_M]]
     assert np.abs(e_on_tail - e_ag).max() < 1e-8, e_on_tail - e_ag
     assert reachable_eigenpairs(on)[0][0] == pytest.approx(e_ag, abs=1e-8)
+
+
+# --- G8: the dipole runs H's SCF -- same conv_tol floor, same thread pin (chem-9ud) ---------------
+
+@pytest.mark.parametrize("a", SIDES)
+def test_G8_dipole_shares_the_hamiltonians_scf_orbitals(a, monkeypatch):
+    """H and dipole built with the same symmetric_scf=True arguments, at ambient PySCF thread
+    counts 2 and 8: every SCF runs at the floored conv_tol, on one thread, to bit-identical MO
+    coefficients. Before chem-9ud the dipole ignored the floor (raw 1e-9) and the pin; on macOS its
+    orbitals then differed from H's at 5 of these 6 sides (whole MO columns sign-flipped at
+    1.05/1.2/1.35, putting mu_x/mu_y 4.4-5.4 a.u. off in spectral norm). The thread leg can only
+    fail where PySCF has OpenMP (Linux): the macOS wheel has none, so lib.num_threads(n) is a
+    no-op there (spec R4)."""
+    runs = []  # (conv_tol, threads inside the SCF, mo_coeff), one per PySCFDriver run
+
+    class Recorder(mham.PySCFDriver):
+        def run(self):
+            problem = super().run()
+            runs.append((self.conv_tol, lib.num_threads(), self._calc.mo_coeff.copy()))
+            return problem
+
+    monkeypatch.setattr(mham, "PySCFDriver", Recorder)
+    ambient = lib.num_threads()
+    try:
+        for n in (2, 8):
+            lib.num_threads(n)
+            build_molecular_hamiltonian(atom=_square(a), symmetric_scf=True)
+            build_dipole_operators(atom=_square(a), symmetric_scf=True)
+    finally:
+        lib.num_threads(ambient)
+    assert len(runs) == 4                       # H, dipole, H, dipole
+    ref = runs[0][2]
+    assert all(mo.tobytes() == ref.tobytes() for *_, mo in runs), \
+        [float(np.abs(mo - ref).max()) for *_, mo in runs]
+    assert [ct for ct, _, _ in runs] == [TIGHT_SCF_CONV_TOL] * 4
+    assert [t for _, t, _ in runs] == [1] * 4
 
 
 def _child_pinned_check():

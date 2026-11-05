@@ -1,6 +1,7 @@
 # SPEC: fix the SCF-convergence residue at its source — opt-in symmetric/tight SCF in the builder
 
-**Status:** IMPLEMENTED. Gates in `tests/test_symmetric_scf_spec.py`. Results: §9.
+**Status:** IMPLEMENTED. Gates in `tests/test_symmetric_scf_spec.py`. Results: §9. G8 (chem-9ud)
+extends the flag to `build_dipole_operators`.
 
 ---
 
@@ -55,9 +56,13 @@ and an independent PySCF symmetry-adapted FCI (`test_eigenstate_reachability_spe
 hybrid_quantum_solver.molecular_hamiltonian.build_molecular_hamiltonian(
     ..., conv_tol: float = 1e-9, symmetric_scf: bool = False) -> MolecularHamiltonian
 hybrid_quantum_solver.molecular_hamiltonian._point_group(atom, basis, charge, spin) -> str
+hybrid_quantum_solver.molecular_hamiltonian.build_dipole_operators(
+    ..., conv_tol: float = 1e-9, symmetric_scf: bool = False) -> list[SparsePauliOp]   # chem-9ud
 ```
 
-No other module changes. `MolecularHamiltonian.build_args["conv_tol"]` now records the *effective*
+No other module changes. Since chem-9ud both builders run one private helper,
+`_driver_problem` (the conv_tol floor plus the `pyscf.lib.num_threads(1)` pin), so a dipole built
+with the Hamiltonian's arguments sits on the Hamiltonian's SCF orbitals. `MolecularHamiltonian.build_args["conv_tol"]` now records the *effective*
 tolerance (what was actually passed to `PySCFDriver`), not the caller's nominal input — load-bearing
 for `reachability._driver_orbitals`, which rebuilds from `build_args` and must reproduce the same
 MOs.
@@ -98,6 +103,12 @@ MOs.
 G6 and G7 together are "done": G6 shows the residue is gone from the diagnostic's point of view:
 G7 shows that absence is not cosmetic — it is the difference between the solver returning the right
 answer and the wrong one.
+
+- **G8 — the dipole runs the Hamiltonian's SCF (chem-9ud).** On square H₄ at every G5 side,
+  `build_molecular_hamiltonian` and `build_dipole_operators`, both with `symmetric_scf=True`, built
+  at ambient `pyscf.lib.num_threads` 2 and then 8: all four `PySCFDriver` runs (spied in place)
+  use the floored conv_tol 1e-13, run on one thread, and give bit-identical `mo_coeff`
+  (`tobytes()` equality). G1 also pins the dipole's defaults to the Hamiltonian's.
 
 ## 6. Implementation plan (test-first)
 
@@ -151,6 +162,11 @@ helper in `hybrid_quantum_solver/molecular_hamiltonian.py`); gates in
   side 1.2). Not a correctness bug in this change; G6 sidesteps it by pinning
   `OMP_NUM_THREADS=OPENBLAS_NUM_THREADS=MKL_NUM_THREADS=VECLIB_MAXIMUM_THREADS=1`, the established
   convention from `test_hamiltonian_determinism.py`.
+- **R4 — G8's thread leg can only fail where PySCF has OpenMP.** The macOS PySCF wheel is built
+  without it: `lib.num_threads(n)` warns "OpenMP is not available" and the count stays 1. On macOS
+  G8 therefore tests the floor only. Measured: a dipole that applies the floor but skips the pin
+  passes G8 there. The pin half of chem-9ud reuses chem-7cx's pin, which was verified on Linux
+  (`SPEC_scf_branch_determinism`). G8 has not yet been run on Linux.
 
 ## 9. Deliverables
 
@@ -159,3 +175,10 @@ helper in `hybrid_quantum_solver/molecular_hamiltonian.py`); gates in
 - Results: `uv run pytest tests/test_symmetric_scf_spec.py -v` — see `sandbox-handoffs/chem-n3w.md`
   for the verbatim pass/fail line and the full regression sweep over every spec file this change
   could plausibly move.
+- **G8 (chem-9ud), macOS 27 arm64, 2026-11-05:** with the fix the file gives 27 passed and 2 skipped
+  (G6/G7 are Linux-only). With the old dipole body put back (raw conv_tol, no pin), G8 fails at all
+  6 sides. MO bits differ at 5 of 6: whole MO columns sign-flipped at 1.05/1.2/1.35 (max |ΔC|
+  1.65/1.55/1.52), 6.9e-5 at 1.19 and 6.1e-9 at 1.4. At 1.1 the bits coincide and the conv_tol
+  check (1e-9 vs 1e-13) catches it. The flips matter: the dipole that pre-fix callers got, compared
+  with the one on the Hamiltonian's SCF, is off in spectral norm by ‖Δμ_x‖ = ‖Δμ_y‖ = 4.44, 4.99
+  and 5.36 a.u. at 1.05, 1.2 and 1.35. At side 1.0 (not a G8 side), ‖Δμ_x‖ is 8.59 a.u.
