@@ -3,7 +3,7 @@
 Square H4's D2h-symmetric RHF is a saddle point at every side. A free SCF from PySCF's symmetric
 minao guess keeps the symmetry up to rounding, so whether it stopped on the saddle or escaped to the
 stable broken-symmetry minimum depended on the platform: at the default conv_tol it stopped on the
-saddle at a = 1.05/1.10/1.19/1.22/1.35 on macOS arm64 and at 1.15/1.19/1.20/1.25/1.30 on Linux
+saddle at a = 1.05/1.10/1.19/1.22/1.35 on macOS arm64 and at 1.15/1.19/1.20/1.22/1.25/1.30 on Linux
 x86_64. molecular_hamiltonian._driver_problem now follows internal SCF instabilities to a stable
 minimum, so every builder lands on the same branch on both.
 """
@@ -65,7 +65,7 @@ def _lowest_hessian_eigenvalue(mf, mo, occ):
 @pytest.mark.parametrize("a", SIDES)
 def test_G1_builder_lands_on_the_recorded_minimum(a, conv_tol):
     """Killed by any side, conv_tol or platform whose build is not the recorded minimum. Before the
-    rule this failed at 4-5 sides per platform, a different 4-5 on each."""
+    rule this failed at 5 sides on macOS and 6 on Linux, sharing only 1.19 and 1.22."""
     e_ref, p0_ref = MINIMUM[a]
     mh = build_molecular_hamiltonian(atom=_sq(a), conv_tol=conv_tol)
     assert mh.hf_energy == pytest.approx(e_ref, abs=max(1e-8, 10 * conv_tol)), (a, conv_tol)

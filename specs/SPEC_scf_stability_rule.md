@@ -131,7 +131,7 @@ G1 is the definition of done.
 | 1.35 | **−1.67436361** | **−0.659** | −1.75677660 | +0.651 | −1.67436361 | −0.659 | −1.75677660 | +0.651 |
 | 1.40 | −1.74387673 | +0.661 | −1.74387673 | +0.661 | −1.65983984 | −0.672 | −1.74387673 | +0.661 |
 
-Bold marks the free SCF stopped on the saddle: macOS at 1.05/1.10/1.19/1.35 (and 1.22, which this scan omits), and Linux at 1.15/1.19/1.20/1.25/1.30.
+Bold marks the free SCF stopped on the saddle: macOS at 1.05/1.10/1.19/1.35, and Linux at 1.15/1.19/1.20/1.25/1.30. This scan omits 1.22, where it stops on the saddle on both platforms (the RED runs below).
 - The saddle and minimum energies agree between platforms to 8 digits.
 - Only the stopping point differs, and one step along the unstable mode always reaches the minimum.
 - At 1.05 and 1.35 the minimum exists although `SPEC_rebuild_gauge_search` §9's three-guess scan never found it. That scan sampled stopping points, not stationary points.
@@ -160,8 +160,36 @@ Bold marks the free SCF stopped on the saddle: macOS at 1.05/1.10/1.19/1.35 (and
 - On the macOS default build at a = 1.1, one excited level sits between the 1e-10 and 1e-8 cuts (6.3e-10); Linux has none.
 - None of this touches the lowest level, and `TIGHT_SCF_CONV_TOL` removes all of it on both platforms. So the gates pin lowest-level facts and tight-`conv_tol` leakage, never a default-`conv_tol` residue.
 
-**Gate runs (2026-11-05, incomplete).**
-- **macOS, one run each, final tree:** `test_scf_stability_rule_spec` 65 passed (32 failed with the rule switched off). `test_reachability_tolerance_spec` and `test_symmetry_reachability_spec` 29 passed together. `test_eigenstate_reachability_spec` and `test_scf_conv_tol_spec` 73 passed together. `test_symmetric_scf_spec` 29, `test_odmd_spec` 5, `test_scf_branch_determinism_spec` 4, `test_reachability_scf_determinism_spec` 5. `ruff check .` is clean.
-- **macOS, full sweep:** `scripts/run_gates.sh` on the unmodified start point bb2bba7: 118 files passed, 4 skipped for an optional dependency. With the rule alone (gates not yet re-pinned), 7 files failed, all re-pinned here: eigenstate, chained_overlap, odmd, reachability_tolerance, scf_conv_tol, symmetric_scf, symmetry_reachability.
-- **Linux:** one round of the four bead files plus this gate passed, 167 tests, before a test-only fix (`_saddle_witness` uncached).
-- **Not yet recorded:** the macOS sweep of the final tree, 5 repeated runs on each platform, `test_chained_overlap_spec` on the final tree, and Linux for the other re-pinned files and chemcheck.
+**Gate runs (2026-11-05/06, tree `f6a7c3f`).**
+
+*macOS 27.2 arm64, the full gate suite* (`GATE_NO_CACHE=1 GATE_JOBS=5 bash scripts/run_gates.sh`, i.e. `make gates-fresh`, each gate file in its own process):
+
+| tree | passed | failed | skipped (optional dependency) |
+|---|---|---|---|
+| start point `bb2bba7` | 118 | 0 | 4 |
+| the rule alone, gates not re-pinned | 111 | 7: eigenstate_reachability, chained_overlap, odmd, reachability_tolerance, scf_conv_tol, symmetric_scf, symmetry_reachability | 4 |
+| this tree (122 files + this gate) | **119** | **0** | 4 |
+
+The 7 failures are exactly the files re-pinned here (§6). Also on macOS:
+- The non-spec half of `make test` gives 60 passed and 4 skipped.
+- `tests/test_dmrg_reference.py`, in its own process, gives 2 passed and 1 skipped (the missing-dependency path, since block2 is installed).
+- `uv run ruff check .` is clean.
+
+*Repeats: no run-to-run variation.* These are the four bead files plus this gate.
+
+| platform | runs | reachability_tolerance | eigenstate_reachability | scf_conv_tol | symmetry_reachability | scf_stability_rule |
+|---|---|---|---|---|---|---|
+| macOS (full sweep + 5 rounds, each file its own process) | 6 | 11 passed every run | 57 | 16 | 18 | 65 |
+| Linux x86_64 (`claude-chem` image under emulation, OpenMP on, 8 threads; mayor's `chem-linux-tests.sh`, a fresh container and one pytest process per round) | 5 | 167 passed every run, the same five files together | | | | |
+
+*Linux, once, the other re-pinned files.* The run covered symmetric_scf, odmd, scf_branch_determinism, reachability_scf_determinism, rebuild_gauge_search, driver_orbitals_scf_determinism, hf_overlap_subspace, chained_overlap and chemcheck, plus the four core tests (reference_energies, krylov_convergence, noise_resilience, hamiltonian_determinism). Result: 198 passed and 3 failed.
+- **The 3 failures are pre-existing and unrelated to this change.** They are `test_chemcheck_spec`'s frozen-tier checks: the hash for T1 (H₄ chain) and T3 (N₂), and the CX count for T3.
+- **Why they are not from the rule.** With the rule switched off, the same 3 fail. A spy shows the rule takes zero extra SCF runs on every chemcheck tier on Linux, so those builds are bit-identical with and without it.
+- **Not pursued here.** The hashes are platform-specific by design (`chemcheck/tiers.py`). This container is not the platform that froze them.
+
+*RED.* With the rule switched off this gate fails:
+- **macOS, 32 of 65:** G1/G2 at 1.05, 1.10, 1.19, 1.22 and 1.35.
+- **Linux, 36 of 65:** G1/G2 at 1.15, 1.19, 1.20, 1.22, 1.25 and 1.30.
+- **On both:** all of G3(a), and G4.
+
+Those are each platform's own saddle stops. They share only 1.19 and 1.22, which is the cross-platform divergence chem-8ls reported.
