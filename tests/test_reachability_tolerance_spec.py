@@ -8,9 +8,13 @@ headline are certifying different targets.
 
 Found while verifying the krylov_refine chained-overlap bound: the bound appeared to violate its
 reference, and the cause was the reference, not the bound.
-"""
-import sys
 
+chem-8ls (2026-11-05): that residue level existed only while the free SCF stopped on square H4's
+D2h saddle point, and which sides it stopped on depended on the platform's rounding. The builder
+now follows the instability to the stable broken-symmetry minimum
+(specs/SPEC_scf_stability_rule.md). The lowest level is then physical at every side, so G1, G2, G6
+and G8 assert that the two cuts agree, and G3 is retired (SPEC section 11).
+"""
 import numpy as np
 import pytest
 
@@ -23,25 +27,12 @@ from reachability import scf_symmetry_status
 def _square_h4(a):
     return f"H 0 0 0; H {a} 0 0; H {a} {a} 0; H 0 {a} 0"
 
-WITNESS_A = 1.1                    # the geometry where the thresholds diverge
-AGREE_A = (1.0, 1.2, 1.3, 1.4)     # where they do not -- the boundary
+WITNESS_A = 1.1                    # the geometry where the thresholds diverged until chem-8ls
+AGREE_A = (1.0, 1.2, 1.3, 1.4)     # where they did not -- the boundary
 
-# G1-G3 pin a platform-specific SCF STOPPING POINT -- the residue that G6 shows is unphysical -- so
-# they are Linux-reference-only. Measured on macOS 27 (Apple M3, scipy 1.15.3/Accelerate, 2026-10-02),
-# a=1.1, default conv_tol=1e-9: the lowest level's HF population is ~1e-29 (machine zero; the Linux
-# freeze has 5.07e-10), so both thresholds select the Ag level (overlap 0.667), G1/G2 see a == b, and
-# G3's (1e-10, 1e-8) window is empty. No conv_tol reproduces it there: p0 = 2.7e-6 (1e-6), 1.3e-6
-# (1e-7), 8.7e-8 (1e-8), then ~1e-29 for every conv_tol <= 1e-9. The SCF is on the symmetric branch
-# (scf_symmetry_status = (False, -5e-15)), so this is not a symmetry-broken solve. G6-G8 carry the
-# platform-independent claim and pass everywhere. specs/SPEC_reachability_tolerance.md section 10.
-_LINUX_REFERENCE_ONLY = pytest.mark.skipif(
-    sys.platform != "linux",
-    reason="pins a platform-specific SCF stopping point: at a=1.1, conv_tol=1e-9 the lowest-level HF "
-           "population is ~1e-29 on macOS 27 (Linux freeze 5.07e-10), both thresholds pick the Ag "
-           "level (0.667), and no conv_tol in 1e-6..1e-13 lands in (1e-10, 1e-8) there "
-           "(2.7e-6, 1.3e-6, 8.7e-8, then ~1e-29). G6-G8 carry the platform-independent claim. "
-           "specs/SPEC_reachability_tolerance.md section 10.",
-)
+# G1-G3 used to pin a platform-specific SCF STOPPING POINT and were Linux-reference-only (macOS put
+# no residue on the a=1.1 lowest level, section 10). The stopping point was the D2h saddle; the
+# stability rule removed it on every platform, so G1-G2 now run everywhere (section 11).
 
 
 def _amp2_and_spectrum(a):
@@ -57,46 +48,31 @@ def _lowest_reachable_index(w, amp2, tol):
     return int(reach[0])
 
 
-# --- G1: the witness (DEFINITION OF DONE) ---------------------------------------------------------
+# --- G1: the former witness -- both cuts now select the same, physical ground state (chem-8ls) ----
 
-@_LINUX_REFERENCE_ONLY
-def test_G1_two_thresholds_select_different_ground_states():
+def test_G1_two_thresholds_select_the_same_ground_state():
+    """Was the witness (DEFINITION OF DONE): at a = 1.1 the cuts selected different ground states,
+    HF overlap 2.25e-5 vs 0.667 (Linux freeze, section 2). The 1e-10 cut's level carried SCF residue
+    from a free SCF stopped on the D2h saddle. With the stability rule the reference is the
+    broken-symmetry minimum on every platform, and both cuts select its lowest level, which HF
+    genuinely overlaps (0.685; section 11)."""
     w, amp2, _ = _amp2_and_spectrum(WITNESS_A)
-    i10 = _lowest_reachable_index(w, amp2, 1e-10)
-    i08 = _lowest_reachable_index(w, amp2, 1e-8)
-    assert i10 != i08, (i10, i08)
-    ov10, ov08 = np.sqrt(amp2[i10]), np.sqrt(amp2[i08])
-    assert ov08 / ov10 > 1000.0, (ov10, ov08)
-    # ov08 is physics -- the Ag ground state's HF weight -- so it is safe to pin.
-    assert ov08 == pytest.approx(0.667, rel=0.05), ov08
-    # ov10 is NOT pinned. The original version of this gate asserted ov10 ~ 2.25e-5, which pinned
-    # an SCF CONVERGENCE RESIDUE (see G6): it moves 19 orders of magnitude with PySCFDriver's
-    # conv_tol and would silently break on any pyscf/qiskit-nature bump. Assert only that it is
-    # far below the physical scale, which is the durable statement.
-    assert ov10 < 1e-3, ov10
+    assert _lowest_reachable_index(w, amp2, 1e-10) == _lowest_reachable_index(w, amp2, 1e-8) == 0
+    assert np.sqrt(amp2[0]) == pytest.approx(0.685, abs=0.005), amp2[0]
 
 
-# --- G2: the two SHIPPED modules disagree, measured through their public references ---------------
+# --- G2: the two SHIPPED modules now agree, measured through their public references --------------
 
-@_LINUX_REFERENCE_ONLY
-def test_G2_the_two_specs_d1_references_disagree():
+def test_G2_the_two_specs_d1_references_agree():
     """`exact_reachable_overlap` (SPEC_hf_overlap_certificate, 1e-10) vs
     `exact_hf_subspace_overlap(..., 1)` (SPEC_hf_overlap_subspace, 1e-8) -- the d=1 references of
-    the two specs whose comparison is the latter's headline finding.
+    the two specs whose comparison is the latter's headline finding. They differed by > 1000x here
+    until chem-8ls; the d=1 vs d=2 head-to-head now certifies one target at this geometry.
     """
     mh = build_molecular_hamiltonian(atom=_square_h4(WITNESS_A))
     a = exact_reachable_overlap(mh)                 # tol 1e-10
     b = exact_hf_subspace_overlap(mh, 1)            # tol _REACHABLE_TOL = 1e-8
-    assert b / max(a, 1e-300) > 1000.0, (a, b)
-
-
-# --- G3: the offending level really is between the thresholds -------------------------------------
-
-@_LINUX_REFERENCE_ONLY
-def test_G3_a_level_sits_between_the_two_thresholds():
-    _, amp2, _ = _amp2_and_spectrum(WITNESS_A)
-    between = np.where((amp2 > 1e-10) & (amp2 < 1e-8))[0]
-    assert between.size >= 1, amp2[amp2 > 1e-12]
+    assert a == pytest.approx(b, rel=1e-8), (a, b)
 
 
 # --- G4: the boundary -- near-threshold, not pervasive --------------------------------------------
@@ -126,39 +102,33 @@ def test_G5_constant_governs_the_certified_reference():
 
 
 # =================================================================================================
-# FALSIFICATION (2026-07-31). The gates above stand as OBSERVATION -- the two thresholds really do
+# FALSIFICATION (2026-07-31). The gates above stood as OBSERVATION -- the two thresholds really did
 # select different states. But this spec's original physics framing ("neither value is wrong, they
-# answer different questions") is FALSE, and the gates below are why. See §2b of the spec.
+# answer different questions") is FALSE, and the gates below are why. See §2b of the spec. Since
+# chem-8ls (section 11) G6 and G8 gate the remedy at the source: the builder's reference no longer
+# carries the residue.
 # =================================================================================================
 
 def _p0_at_conv_tol(conv_tol):
-    """Lowest-level HF population, as a function of how tightly the SCF was converged."""
-    from qiskit.quantum_info import Statevector
-    from qiskit_nature.second_q.circuit.library import HartreeFock
-    from qiskit_nature.second_q.drivers import PySCFDriver
-    from qiskit_nature.second_q.mappers import JordanWignerMapper
-
-    from hybrid_quantum_solver.molecular_hamiltonian import map_canonical
-
-    prob = PySCFDriver(atom=_square_h4(WITNESS_A), basis="sto-3g", conv_tol=conv_tol).run()
-    mapper = JordanWignerMapper()
-    H = map_canonical(mapper, prob.hamiltonian.second_q_op()).to_matrix()
-    w, V = np.linalg.eigh(H)
-    hf = np.asarray(Statevector(HartreeFock(prob.num_spatial_orbitals, prob.num_particles,
-                                            mapper)).data, dtype=complex)
+    """(lowest eigenvalue, its HF population) of the builder's reference at this conv_tol."""
+    mh = build_molecular_hamiltonian(atom=_square_h4(WITNESS_A), conv_tol=conv_tol)
+    w, V = np.linalg.eigh(mh.qubit_hamiltonian.to_matrix())
+    hf = np.asarray(mh.hf_state().data, dtype=complex)
     return float(w[0]), float((np.abs(V.conj().T @ hf) ** 2)[0])
 
 
-def test_G6_the_disputed_amplitude_is_an_SCF_convergence_residue():
-    """THE FALSIFIER. A physical overlap does not depend on how tightly the SCF was converged.
-    This one moves ~19 orders of magnitude while the eigenvalue is unchanged to 10 digits.
-    """
+def test_G6_the_lowest_population_does_not_depend_on_conv_tol():
+    """Was THE FALSIFIER: through a raw PySCFDriver this population moved ~19 orders of magnitude
+    with conv_tol while the eigenvalue stayed put (1.49e-9 at 1e-6, 1.53e-28 at 1e-13, Linux
+    freeze), so it was an SCF residue, not an overlap (section 2b(i)). That driver had neither the
+    thread pin nor the stability rule, so which side of the D2h saddle it stopped on varied by
+    platform and by run (chem-8ls). The builder's reference now has a physical overlap here, and a
+    physical overlap does not depend on how tightly the SCF was converged (section 11)."""
     e_loose, p_loose = _p0_at_conv_tol(1e-6)
     e_tight, p_tight = _p0_at_conv_tol(1e-13)
     assert e_loose == pytest.approx(e_tight, abs=1e-9), (e_loose, e_tight)   # same state
-    assert p_loose > 1e-9, p_loose                                            # admitted at 1e-10
-    assert p_tight < 1e-20, p_tight                                           # collapses to zero
-    assert p_loose / p_tight > 1e10, (p_loose, p_tight)
+    assert p_loose == pytest.approx(p_tight, abs=1e-4), (p_loose, p_tight)    # does not move
+    assert p_tight > 0.4, p_tight                                             # and is physical
 
 
 def test_G7_the_state_is_symmetry_forbidden_to_the_HF_determinant():
@@ -189,41 +159,15 @@ def test_G7_the_state_is_symmetry_forbidden_to_the_HF_determinant():
     assert coeffs["Ag"][1] == pytest.approx(0.4451, rel=0.05), coeffs["Ag"]
 
 
-def test_G8_neither_constant_is_safe():
-    """The killer for 'just pick the right constant'. There is a geometry in the same family where
-    the artifact exceeds even the LOOSER 1e-8 threshold, so no fixed tolerance separates physics
-    from SCF residue. The fix has to be symmetry/sector-aware, not a better number.
-
-    Thread-pinned (chem-qhi): RHF branch selection on this near-degenerate family is sensitive to
-    PySCF's OpenMP thread count (not just OPENBLAS/BLAS threads -- see benchmark_nbn._tight_scf and
-    bd memory chem-7cx-root-cause), so without pinning which of these points is symmetric vs.
-    symmetry-broken is not reproducible. Pinned locally, not module-wide, so other gates in this
-    file are not disturbed.
-
-    Also requires (not just asserts) that at least one offender is a SYMMETRIC-SCF solve, not a
-    genuine symmetry-broken RHF solution -- the G8 weakness documented in
-    specs/SPEC_reachability_tolerance.md section 10: on macOS a=1.185 is symmetry-broken yet still
-    counts as an offender, so the un-strengthened gate would pass even if no symmetric offender
-    existed. a=1.22 is a Linux-verified symmetric-SCF offender (amp2[0] ~= 1.26e-8); see
-    sandbox-handoffs/chem-qhi.md for the sweep that found it.
-    """
-    import pyscf.lib
-
-    prev_threads = pyscf.lib.num_threads()
-    pyscf.lib.num_threads(1)
-    try:
-        offenders = []
-        for a in (1.185, 1.190, 1.195, 1.22):
-            _, amp2, _ = _amp2_and_spectrum(a)
-            if amp2[0] > 1e-8:
-                offenders.append((a, float(amp2[0])))
-        assert offenders, "no geometry breached 1e-8 -- the 'no safe constant' claim would die here"
-
-        symmetric_offenders = [
-            (a, p) for a, p in offenders if not scf_symmetry_status(_square_h4(a))[0]
-        ]
-        assert symmetric_offenders, (
-            offenders, "every offender was a symmetry-broken RHF solve, not SCF residue"
-        )
-    finally:
-        pyscf.lib.num_threads(prev_threads)
+def test_G8_no_symmetric_offender_remains():
+    """Was 'neither constant is safe': some side in the family had a SYMMETRIC-SCF lowest level whose
+    residue cleared even the looser 1e-8 cut (a = 1.22: 1.26e-8 on Linux; chem-qhi), so no fixed
+    constant separated physics from SCF residue. Every such offender was the free SCF stopped on the
+    D2h saddle point. With the stability rule each candidate is the broken-symmetry minimum, whose
+    lowest level is physical, so there is no lowest-level residue left for a constant to separate.
+    Excited levels can still carry a conv_tol-dependent residue between the cuts (section 11); this
+    gate does not cover them."""
+    for a in (1.185, 1.190, 1.195, 1.22):
+        _, amp2, _ = _amp2_and_spectrum(a)
+        assert amp2[0] > 0.4, (a, float(amp2[0]))
+        assert scf_symmetry_status(_square_h4(a))[0], a

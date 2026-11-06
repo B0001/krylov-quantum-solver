@@ -90,13 +90,36 @@ def _point_group(atom: str, basis: str, charge: int, spin: int) -> str:
     """PySCF's point-group label for this geometry/basis (``"C1"`` if none detected).
 
     Geometry-only: this does not run SCF, so it says nothing about whether RHF will land on a
-    symmetric or a spontaneously symmetry-broken solution (square H4 does both, depending on
-    side length -- specs/SPEC_symmetry_reachability.md).
+    symmetric or a spontaneously symmetry-broken solution (square H4's symmetric solution is a
+    saddle point, which the builder leaves for the broken minimum -- specs/SPEC_scf_stability_rule.md).
     """
     from pyscf import gto
 
     mol = gto.M(atom=atom, basis=basis, charge=charge, spin=spin, symmetry=True, verbose=0)
     return mol.groupname
+
+
+def _follow_instabilities(mf, max_steps: int = 5) -> None:
+    """Descend from an SCF saddle point to a stable minimum, in place (chem-8ls).
+
+    A free SCF started from a symmetric guess keeps the symmetry up to rounding, so it can stop on
+    a symmetric SADDLE point, and whether it escapes depends on the platform's rounding. Square H4
+    (STO-3G) is the witness. Its D2h-symmetric RHF is a saddle at every side from 1.00 to 1.40 A,
+    with lowest orbital-Hessian eigenvalue -0.53 to -0.67 Ha. The free SCF stopped on it at
+    a = 1.05/1.10/1.19/1.22/1.35 on macOS and at a different set on Linux. One step along the
+    unstable mode reaches the stable broken-symmetry minimum, 0.066-0.084 Ha lower. A solution that
+    is already stable is left untouched: the check reads ``mf``, it does not move it.
+    Internal stability only (real, same RHF/ROHF space): what the qubit Hamiltonian can use.
+    specs/SPEC_scf_stability_rule.md."""
+    from pyscf.scf import rohf, stability
+
+    internal = stability.rohf_internal if isinstance(mf, rohf.ROHF) else stability.rhf_internal
+    for _ in range(max_steps):
+        mo, stable = internal(mf, with_symmetry=False, return_status=True)
+        if stable:
+            return
+        mf.kernel(dm0=mf.make_rdm1(mo, mf.mo_occ))
+    raise RuntimeError(f"SCF still has an internal instability after {max_steps} steps along it")
 
 
 def _driver_problem(atom: str, basis: str, charge: int, spin: int, conv_tol: float,
@@ -106,15 +129,18 @@ def _driver_problem(atom: str, basis: str, charge: int, spin: int, conv_tol: flo
     ``reachability._driver_orbitals``, so a Hamiltonian, its dipole and its verification rebuild
     sit on bit-identical SCF orbitals (chem-9ud, chem-g14). It applies the ``symmetric_scf``
     conv_tol floor and the ``pyscf.lib.num_threads(1)`` pin (chem-7cx) to the whole run, integral
-    transform included; see ``build_molecular_hamiltonian`` for both. ``driver`` holds the run's
-    ``_mol`` and ``_calc`` (MO coefficients)."""
+    transform included, and follows any internal SCF instability to a stable minimum before the
+    transform (chem-8ls, ``_follow_instabilities``); see ``build_molecular_hamiltonian``.
+    ``driver`` holds the run's ``_mol`` and ``_calc`` (MO coefficients)."""
     if symmetric_scf and _point_group(atom, basis, charge, spin) != "C1":
         conv_tol = min(conv_tol, _SYMMETRIC_TIGHT_CONV_TOL)
     ambient_threads = lib.num_threads()
     lib.num_threads(1)
     try:
         driver = PySCFDriver(atom=atom, basis=basis, charge=charge, spin=spin, conv_tol=conv_tol)
-        problem = driver.run()
+        driver.run_pyscf()
+        _follow_instabilities(driver._calc)
+        problem = driver.to_problem()
     finally:
         lib.num_threads(ambient_threads)
     return problem, conv_tol, driver
@@ -167,7 +193,10 @@ def build_molecular_hamiltonian(
             of magnitude between conv_tol=1e-9 and 1e-13 while the eigenvalue itself is
             unchanged to 10 digits. That artifact is specific to exact-symmetry
             geometries (e.g. square H4); it is not a general reason to tighten the
-            default.
+            default. On square H4 the lowest-level artifact came from an SCF stopped on a
+            saddle point, which the stability rule (see Note) now leaves. Tightening still
+            removes the smaller residue a loose SCF can leave on forbidden EXCITED levels
+            (``specs/SPEC_scf_conv_tol.md`` section 11).
         symmetric_scf: opt-in (default ``False``, so every existing call site is
             unaffected). When ``True`` and PySCF detects nontrivial point-group symmetry
             in ``atom``/``basis``/``charge``/``spin``, ``conv_tol`` is floored to
@@ -175,10 +204,10 @@ def build_molecular_hamiltonian(
             residue artifact above at its source (the loose SCF that creates it) rather
             than downstream, in whatever consumes the returned ``MolecularHamiltonian``.
             A no-op (bit-identical build) on geometries PySCF labels ``"C1"``. See
-            ``specs/SPEC_symmetric_scf.md`` for the blast-radius analysis of why this is
-            opt-in rather than the default: the gates in ``SPEC_scf_conv_tol`` and
-            ``SPEC_eigenstate_reachability`` deliberately pin the residue's presence in
-            the DEFAULT build, so flipping this on everywhere would move them.
+            ``specs/SPEC_symmetric_scf.md`` for why this is opt-in rather than the default.
+            Since chem-8ls's stability rule the default build carries no lowest-level
+            residue on square H4, so the flag now only removes the excited-level one
+            (``SPEC_symmetric_scf.md`` section 10).
 
     Returns:
         A populated :class:`MolecularHamiltonian`.
@@ -195,9 +224,11 @@ def build_molecular_hamiltonian(
         not, so the integral evaluation is the actual source, not the linear algebra). Pinning
         makes a given (atom, basis, charge, spin, conv_tol) build bit-identical across repeated
         calls and across ambient thread counts on this host/pyscf build -- see
-        ``specs/SPEC_scf_branch_determinism.md``. It does NOT make the result match a different
-        host/platform/pyscf-version's branch choice (chem-8ls tracks that cross-platform
-        divergence).
+        ``specs/SPEC_scf_branch_determinism.md``. Pinning alone did not make the branch match
+        another platform's, because one of square H4's two "solutions" is a saddle point that
+        the free SCF stopped on or escaped by rounding. The SCF now also follows any internal
+        instability to a stable minimum (``_follow_instabilities``, chem-8ls), so the branch is
+        the same on every platform measured (specs/SPEC_scf_stability_rule.md).
     """
     mapper = mapper or JordanWignerMapper()
     problem, effective_conv_tol, _ = _driver_problem(atom, basis, charge, spin, conv_tol,

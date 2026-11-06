@@ -11,8 +11,14 @@ version of this docstring claimed. The gated systems are insensitive to that cho
 6.8e-9 between 1e-9 and 1e-13; linear H6 was not re-measured). a=1.10/1.35 are excluded because at
 the default an SCF residue contaminates the reachable sector (specs/SPEC_reachability_tolerance.md)
 and the certified target is not well defined.
+
+chem-8ls (2026-11-05): the builder now follows SCF instabilities, so every square-H4 build is the
+broken-symmetry minimum (specs/SPEC_scf_stability_rule.md). Its lowest level is physical, but a
+default build can leave a residue on a forbidden EXCITED level, at sides that depend on the
+platform. Square H4 therefore enters the gated set only as TIGHT_SCF_CONV_TOL builds. G5 keeps its
+old witness, the exact saddle, built on purpose. G7's positive control is the family of default
+builds (specs/SPEC_chained_overlap.md section 11).
 """
-import sys
 
 import numpy as np
 import pytest
@@ -30,23 +36,24 @@ from reachability import TIGHT_SCF_CONV_TOL, _dense_hf_projection
 H2_EQ = "H 0 0 0; H 0 0 0.74"
 H2_STRETCHED = "H 0 0 0; H 0 0 2.0"
 H4_LINEAR = "H 0 0 0; H 0 0 1.0; H 0 0 2.0; H 0 0 3.0"
-# square H4 ONLY at its symmetric-SCF geometries -- elsewhere RHF breaks symmetry and there is no
-# well-defined target (specs/SPEC_symmetry_reachability.md).
+# square H4 a=1.05: until chem-8ls a symmetric-SCF geometry clean at the default conv_tol. Now its
+# build is the broken-symmetry minimum, which can leave an excited-level residue at the default
+# (Ritz leakage 2.7e-7 on macOS, 8.1e-15 on Linux), so it is built at TIGHT_SCF_CONV_TOL
+# (leakage <= 2.1e-14 on both; _CONV_TOL below).
 H4_SQUARE_105 = "H 0 0 0; H 1.05 0 0; H 1.05 1.05 0; H 0 1.05 0"
 H6_LINEAR = "H 0 0 0; H 0 0 1.0; H 0 0 2.0; H 0 0 3.0; H 0 0 4.0; H 0 0 5.0"
 
-# NOTE a=1.10 and a=1.35 are deliberately EXCLUDED. They are symmetric-SCF geometries and every
-# reference in this file is built at the builder's default conv_tol (1e-9). At the default a=1.35
-# carries the SCF-residue artifact (specs/SPEC_reachability_tolerance.md): its "exact reachable
-# overlap" is the residue (7.8e-5), not the physical overlap (0.613 at conv_tol=1e-13). a=1.10
-# carries it on the Linux freeze (residue 5.07e-10) but not on macOS (~1e-29); see G7 below.
-# a=1.05 is clean at the default. The builder DOES accept conv_tol (an earlier version of this note
-# said it could not), so re-admitting a=1.35 at TIGHT_SCF_CONV_TOL is possible -- a follow-up,
-# specs/SPEC_scf_conv_tol.md section 7.
+# NOTE a=1.10 and a=1.35 were EXCLUDED at the builder's default conv_tol (1e-9) because they carried
+# the SCF-residue artifact there (specs/SPEC_reachability_tolerance.md): a=1.35's "exact reachable
+# overlap" was the residue (7.8e-5), not the physical overlap (0.613 at conv_tol=1e-13); a=1.10
+# carried it on the Linux freeze (residue 5.07e-10) but not on macOS (~1e-29). That artifact was
+# the free SCF stopped on the D2h saddle, which chem-8ls removed; default builds stay excluded for
+# the excited-level residue above. a=1.35 is gated at TIGHT_SCF_CONV_TOL below.
 
 DIRECT_SURVIVES = (H2_EQ, H2_STRETCHED, H4_LINEAR)
 DIRECT_VACUOUS = (H4_SQUARE_105, H6_LINEAR)
 DEPTHS = (6, 8, 12)
+_CONV_TOL = {H4_SQUARE_105: TIGHT_SCF_CONV_TOL}     # per-system build tolerance; default 1e-9
 
 # Re-admitted per specs/SPEC_scf_conv_tol.md section 7 / specs/SPEC_chained_overlap.md section 2
 # (chem-qhi): square H4 a=1.35, but built at TIGHT_SCF_CONV_TOL rather than the default. At the
@@ -58,8 +65,10 @@ DEPTHS = (6, 8, 12)
 H4_SQUARE_135_TIGHT = "H 0 0 0; H 1.35 0 0; H 1.35 1.35 0; H 0 1.35 0"
 
 
-def _setup(atom, conv_tol=1e-9):
-    mh = build_molecular_hamiltonian(atom=atom, conv_tol=conv_tol)
+def _setup(atom, conv_tol=None, mh=None):
+    """mh: a reference built elsewhere (G5's saddle); otherwise the builder at _CONV_TOL's tolerance."""
+    if mh is None:
+        mh = build_molecular_hamiltonian(atom=atom, conv_tol=conv_tol or _CONV_TOL.get(atom, 1e-9))
     H = mh.qubit_hamiltonian.to_matrix()
     u = np.asarray(mh.hf_state().data, dtype=complex)
     w, V, pops = _dense_hf_projection(mh)       # shared eigh: macOS ZHEEVD fallback
@@ -72,9 +81,9 @@ def _ritz(mh, m, solver):
     return v / np.linalg.norm(v)
 
 
-def _both_modes(atom, m, conv_tol=1e-9):
+def _both_modes(atom, m, conv_tol=None, mh=None):
     """(chained_oracle, chained_self, exact) at depth m."""
-    mh, H, u, e1_elec, exact = _setup(atom, conv_tol=conv_tol)
+    mh, H, u, e1_elec, exact = _setup(atom, conv_tol=conv_tol, mh=mh)
     solver = QuantumKrylovSolver(mh)
     v = _ritz(mh, m, solver)
     oracle = refine_via_lanczos(H, u, v, e1_elec)
@@ -190,8 +199,17 @@ def test_G4_chained_absorbs_the_self_mode_floor_better_than_direct():
 
 def test_G5_chained_bound_is_not_monotone_in_krylov_depth():
     """Killed if the bound turns out monotone -- the caveat would be unnecessary and the spec should
-    drop it rather than carry a false warning."""
-    vals = [_both_modes(H4_SQUARE_105, m)[0] for m in (6, 8, 12)]
+    drop it rather than carry a false warning.
+
+    The witness is square H4 a = 1.05 on its exact D2h saddle point, which the default build used
+    to be (macOS). Since chem-8ls the builder gives the broken-symmetry minimum there, where the
+    bound rises monotonically (0.639, 0.684, 0.688 on both platforms). So the saddle is built on
+    purpose (test_eigenstate_reachability_spec._saddle_witness, theta = 0), the same everywhere.
+    """
+    from test_eigenstate_reachability_spec import _saddle_witness
+
+    saddle = _saddle_witness(1.05, 0.0)[0]
+    vals = [_both_modes(H4_SQUARE_105, m, mh=saddle)[0] for m in (6, 8, 12)]
     assert all(v is not None for v in vals), vals
     assert vals[1] < vals[0], vals        # M=8 is WORSE than M=6 -- that alone is the claim
     # Deliberately NOT asserting vals[2] > vals[1]: the recovery shape is incidental, no spec claim
@@ -230,10 +248,10 @@ def test_G6_unnormalized_inputs_raise():
 LEAK_TOL = 1e-12
 
 
-def _leakage(atom, m, conv_tol=1e-9):
+def _leakage(atom, m, conv_tol=None):
     """(||P_unreach v||, #unreachable levels below E1_reach) -- u's unreachable components vanish by
     construction, v's only numerically, which is the whole content of R2b."""
-    mh = build_molecular_hamiltonian(atom=atom, conv_tol=conv_tol)
+    mh = build_molecular_hamiltonian(atom=atom, conv_tol=conv_tol or _CONV_TOL.get(atom, 1e-9))
     w, V, amp2 = _dense_hf_projection(mh)       # shared eigh: macOS ZHEEVD fallback
     reach = np.where(amp2 > REACHABLE_TOL_CERTIFIED)[0]
     unreach = np.where(amp2 <= REACHABLE_TOL_CERTIFIED)[0]
@@ -253,32 +271,26 @@ def test_G7_unreachable_leakage_is_negligible_on_the_gated_set(atom):
 
 def test_G7_unreachable_leakage_is_negligible_tight_scf_square_h4_135():
     """Same gate as above, for the re-admitted tight-build square-H4 a=1.35 case (chem-qhi): this is
-    the measurement that makes re-admission valid -- at the default build this exact geometry is the
-    G7 positive control below and MUST breach LEAK_TOL; at TIGHT_SCF_CONV_TOL it must not."""
+    the measurement that makes re-admission valid -- at TIGHT_SCF_CONV_TOL it must not breach
+    LEAK_TOL, while default builds of this family must (the G7 positive control below)."""
     leak, n_below = _leakage(H4_SQUARE_135_TIGHT, 6, conv_tol=TIGHT_SCF_CONV_TOL)
     assert n_below > 0, (H4_SQUARE_135_TIGHT, "no unreachable level below E1_reach")
     assert leak < LEAK_TOL, (H4_SQUARE_135_TIGHT, leak)
 
 
-# a=1.10 pins a platform-specific SCF stopping point, so it is Linux-reference-only. Measured on
-# macOS 27 (Apple M3, scipy 1.15.3/Accelerate), default conv_tol=1e-9: the a=1.10 forbidden-level
-# residue is ~1e-29 (Linux freeze: 5.07e-10), so the Ritz leakage is 8.9e-15 < LEAK_TOL and the
-# positive control cannot fire; a=1.35 still does (1.6e-6). That is the finding, not a failure to fix:
-# specs/SPEC_reachability_tolerance.md section 10. The a=1.35 case carries the claim everywhere.
-_A110_LINUX_ONLY = pytest.mark.skipif(
-    sys.platform != "linux",
-    reason="a=1.10 residue is platform-dependent: 5.07e-10 on the Linux freeze, ~1e-29 on macOS 27 "
-           "(leakage 8.9e-15 < LEAK_TOL=1e-12 there); a=1.35 still fires (1.6e-6) on every platform. "
-           "specs/SPEC_reachability_tolerance.md section 10.",
-)
+# The positive control used to be one geometry per excluded default build: a=1.35 everywhere, and
+# a=1.10 on Linux only, whose residue was platform-specific. Since chem-8ls a default build is the
+# broken-symmetry minimum, and whether it leaves an excited-level residue depends on the SCF
+# trajectory, so on the platform. Default leakage on macOS / Linux: a=1.05 2.7e-7 / 8.1e-15,
+# a=1.00 1.4e-14 / 1.6e-7, a=1.10 - / 1.6e-14. Across the family some default build always leaked
+# on both: macOS at 1.05/1.19/1.20/1.35, Linux at 1.00/1.19/1.20/1.35 (spec section 11).
+_DEFAULT_BUILD_SIDES = (1.00, 1.05, 1.19, 1.20, 1.35)
 
 
-@pytest.mark.parametrize("a", (pytest.param(1.10, marks=_A110_LINUX_ONLY), 1.35))
-def test_G7_excluded_geometries_are_the_positive_control(a):
-    """The exclusion is load-bearing for R2b, not only for R3. These geometries must BREACH the
-    threshold -- if they passed it, excluding them would be unnecessary and R2b overstated."""
-    atom = f"H 0 0 0; H {a} 0 0; H {a} {a} 0; H 0 {a} 0"
-    leak, _ = _leakage(atom, 6)
-    assert leak > LEAK_TOL, (a, leak, "excluded geometry no longer breaches -- revisit R2b/R3")
-    # And it breaches by enough to actually matter: leak^2 above SATURATION_SLACK.
-    assert leak ** 2 > SATURATION_SLACK, (a, leak ** 2)
+def test_G7_default_builds_are_the_positive_control():
+    """The exclusion is load-bearing for R2b, not only for R3. Some default (conv_tol=1e-9) build in
+    the family must BREACH the threshold by enough to matter, leak^2 above SATURATION_SLACK. If none
+    did, building square H4 at TIGHT_SCF_CONV_TOL would be unnecessary and R2b overstated."""
+    leaks = {a: _leakage(f"H 0 0 0; H {a} 0 0; H {a} {a} 0; H 0 {a} 0", 6, conv_tol=1e-9)[0]
+             for a in _DEFAULT_BUILD_SIDES}
+    assert any(leak ** 2 > SATURATION_SLACK for leak in leaks.values()), leaks

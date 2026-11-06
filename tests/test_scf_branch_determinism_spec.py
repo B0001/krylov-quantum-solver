@@ -89,10 +89,14 @@ def test_G3_deterministic_across_repeats_same_process_and_threads_restored():
     assert len(set(digests)) == 1, digests
 
 
+# chem-7cx's two flipping witnesses were builder runs at square H4 a = 1.1: conv_tol 1e-6 (G1) and
+# TIGHT_SCF_CONV_TOL (G9's control). Since chem-8ls those two gates run on a residue reference built
+# without the builder, so the builder-side gate on the same two builds stands in for them.
 _FLIPPING_WITNESSES = (
     "tests/test_eigenstate_reachability_spec.py::"
-    "test_G1_residue_level_identified_warned_and_kept[1.1-1e-06-1e-08]",
-    "tests/test_eigenstate_reachability_spec.py::test_G9_control_tight_scf_stays_on_the_ag_level[1.1]",
+    "test_G9_builder_reference_reaches_the_b1g_level_at_every_conv_tol[1.1-1e-06]",
+    "tests/test_eigenstate_reachability_spec.py::"
+    "test_G9_builder_reference_reaches_the_b1g_level_at_every_conv_tol[1.1-1e-13]",
 )
 
 
@@ -114,9 +118,9 @@ def _outcomes():
 def test_G4_known_flipping_witnesses_stabilize_pass_or_fail():
     """The two tests chem-7cx found flipping pass/fail across repeated full-suite runs now give
     the SAME outcome every time -- five separate pytest subprocess invocations. This does NOT
-    assert which outcome: chem-8ls (a separate, pre-existing cross-platform/version divergence)
-    governs whether these should be green on this host. It only asserts they stop being a coin
-    flip."""
+    assert which outcome. When this was written, chem-8ls (the cross-platform branch divergence)
+    decided whether these were green on a given host. Since its stability rule they pass on macOS
+    and Linux alike, but this gate still only asserts that they stop being a coin flip."""
     runs = [_outcomes() for _ in range(5)]
     for w in _FLIPPING_WITNESSES:
         results = [r[w] for r in runs]

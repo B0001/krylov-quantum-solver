@@ -142,6 +142,8 @@ What the scan shows:
 
 So a platform's rounding can plausibly tip the same guess into the other basin. A branch-pinning fix needs a rule, such as stability analysis or a symmetric SCF, not a different tolerance.
 
+*Resolved by chem-8ls (2026-11-05).* The "0" entries are not a second minimum. They are the D2h saddle point, where the free SCF stopped: its lowest orbital-Hessian eigenvalue is −0.53 to −0.67 Ha at every side. The minimum exists at every side, including 1.05 and 1.35, where none of the three guesses found it. `_driver_problem` now follows the instability, and G4 above is what keeps `_driver_orbitals` in step (`SPEC_scf_stability_rule.md`).
+
 **Gate runs.** Each file ran in its own process (`uv run pytest <file> -q`), before (start point `5460d0d`) and after (this revision):
 
 | Gate file | Before | After |

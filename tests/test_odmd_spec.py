@@ -14,12 +14,11 @@ noise seeds. PySCF/qiskit, no block2; `make gates` runs it in its own process.
 """
 import numpy as np
 import pytest
-from pyscf import lib
 
 from hybrid_quantum_solver.molecular_hamiltonian import build_molecular_hamiltonian
 from msd import build_msd_problem, sample_ground_energy
 from odmd import build_odmd_problem, odmd_energy, sample_odmd_energy
-from reachability import TIGHT_SCF_CONV_TOL, _dense_hf_projection, reachable_mask
+from reachability import _dense_hf_projection, reachable_mask
 
 SYSTEMS = {
     "h2": dict(atom="H 0 0 0; H 0 0 0.74"),
@@ -89,24 +88,18 @@ def test_G5_ref_is_hf_reachable_not_global_fci_ground():
     """chem-1x3: none of G1-G4's systems (H2, H4 chain, N2 CAS(6,6)) separate the global FCI
     ground from the HF-reachable one -- HF reaches the true ground on all three, so
     ``build_odmd_problem``'s ``ref = reach[0] - mu`` (chem-3ds's fix, from the earlier
-    ``w_eig[0] - mu``) is unexercised by every existing gate. Square H4 at a = 1.19 Angstrom with
-    a symmetric SCF (``TIGHT_SCF_CONV_TOL``) is a witness where it is not: HF's determinant has
-    (numerically) zero population on the global ground (symmetry-forbidden, same family as
-    tests/test_eigenstate_reachability_spec.py's G9 control), so the survival-amplitude signal
+    ``w_eig[0] - mu``) is unexercised by every existing gate. HeH+ is a witness where it is not:
+    the global ground of its qubit Hamiltonian lies in another particle-number sector, so HF's
+    determinant has zero population there (7.9e-31), and the survival-amplitude signal
     s_k = <phi_0|e^{-ik tau H}|phi_0> has no component at that energy and can never converge to
     it -- `ref` must be the lower bound the signal actually targets, the HF-reachable level.
 
-    chem-7cx: the free-RHF branch on this near-degenerate geometry is nondeterministic across
-    ambient OpenMP thread counts; pin pyscf to 1 thread for the reproducible residue (same fix as
-    benchmark_nbn.py's `_tight_scf`, tests/test_nbn_scf_determinism_spec.py).
+    chem-8ls: the witness was square H4 a = 1.19 at TIGHT_SCF_CONV_TOL, a symmetric SCF whose
+    global ground HF could not reach. That SCF was the D2h saddle point. The builder now follows the
+    saddle's instability to the broken-symmetry minimum, whose ground state HF does reach (0.462),
+    so the witness moved to HeH+. Particle number is exact, so no SCF branch is involved.
     """
-    atom = "H 0 0 0; H 1.19 0 0; H 1.19 1.19 0; H 0 1.19 0"
-    ambient = lib.num_threads()
-    lib.num_threads(1)
-    try:
-        mh = build_molecular_hamiltonian(atom=atom, conv_tol=TIGHT_SCF_CONV_TOL)
-    finally:
-        lib.num_threads(ambient)
+    mh = build_molecular_hamiltonian(atom="He 0 0 0; H 0 0 0.772", charge=1)
 
     w_eig, V, pops = _dense_hf_projection(mh)
     reach = w_eig[reachable_mask(mh, w_eig, V, pops, 1e-8)].real

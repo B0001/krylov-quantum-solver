@@ -8,6 +8,8 @@ the population cut again; the decision survives only as a best-effort **diagnost
 never changes a mask and never raises. G1–G8 are re-pinned to those semantics and G9–G10 added —
 pre-registered in this revision, committed before the revised gate file ran. Results: §9.
 
+**Revised 2026-11-05 (chem-8ls, `SPEC_scf_stability_rule.md`):** §9: the residue witness is built on purpose; G4 and the new G9 builder case gate the stable branch.
+
 ---
 
 ## 0. The kill (post-merge review, 2026-10-03)
@@ -305,6 +307,43 @@ the upgrade path.
   wrong claim and why it was wrong both stay on the record (`sandbox-handoffs/chem-0m8.md`).
 
 ## 9. Results (macOS 27, Apple M3, 2 BLAS/OMP threads, unless an entry says otherwise)
+
+**chem-8ls (2026-11-05; macOS 27.2 arm64, and Linux x86_64 in the `claude-chem` image with OpenMP; pyscf 2.13.1, qiskit-nature 0.8.0, numpy 2.4.6 and scipy 1.15.3 on both).**
+
+*What changed.* Every builder now follows internal SCF instabilities to a stable minimum (`SPEC_scf_stability_rule.md`).
+- The residue references this spec gates came from the builder's free SCF stopping on square H₄'s D2h saddle point. That saddle has an orbital-Hessian eigenvalue of −0.57 Ha at a = 1.10 and −0.61 Ha at 1.19.
+- Which sides the SCF stopped on depended on the platform's rounding, so the builder no longer makes these references.
+- Before the change, the Linux container failed 7 gates here (the mayor's run of `sandbox/chem-g14`): G1 ×3, G7[1.19-1e-06], G9[1.19-1e-06], G9[1.19-None] and G9_control[1.1]. macOS failed none.
+- With the rule alone and this file unchanged, both platforms failed the same five: G1 ×3 and G9_control ×2.
+
+*Changes to the gates.*
+- **The residue witness is built on purpose** (`_saddle_witness`):
+  - Start from the symmetry-enforced RHF, which is the saddle, and rotate its HOMO/LUMO pair (the split e_u shell, B2u/B3u) by a fixed θ = 1e-3.
+  - Rotating that pair is one step along the saddle's unstable mode, the direction a free SCF used to drift in by rounding.
+  - B1g population is 1.874e-6 at a = 1.10 and 1.844e-6 at 1.19 (about 1.9 θ²). It is set by θ, not by rounding.
+  - The diagnostic reads it through a monkeypatched `_driver_orbitals`, as L1/L2 do.
+- **G1** runs on the witness at both sides and both cuts, 4 cases. It was 3 cases: a = 1.19 skipped the 1e-8 cut because its builder residue sat only 5.5× above it. The assertions are unchanged.
+- **G9** runs on the witness, with its assertions unchanged. Its control is now the exact saddle (θ = 0, B1g population ~1e-30), which stays on Ag. The control used to be the builder at `TIGHT_SCF_CONV_TOL`; that build stopped on the saddle then and reaches the minimum now.
+- **New G9 builder case:** the builder at (1.10, 1e-6), (1.19, 1e-6), (1.19, default), (1.10, tight) and (1.19, tight). At every one, p₀ > 0.4 and QKSD sits on B1g under G9's thresholds, so `conv_tol` no longer decides the level.
+- **G10** (any diagnostic failure means no diagnostic) runs on the witness, and first checks that the diagnostic does warn there. The builder reference it used would no longer warn, which would have made the check vacuous.
+- **G4** asserts the broken branch instead of skipping when the branch is symmetric (chem-0m8's guard). It also covers the former witnesses 1.10 and 1.19.
+- **G2, G6 and G7** are unchanged in code.
+  - Their square-H₄ cases are now on the minimum.
+  - G2 takes its conservative branch there, with the C2y bit excluded.
+  - G7's lowest level is the B1g ground state, now a physical overlap rather than a residue.
+
+*Witness numbers, old next to new.*
+
+| | a = 1.10 | a = 1.19 |
+|---|---|---|
+| builder residue at `conv_tol` 1e-6, before (macOS, §0 and §5) | 2.66e-6 | 5.48e-8 |
+| builder residue at the default 1e-9, before | macOS ~1e-29; Linux 5.07e-10 | 1.40e-8 (macOS) |
+| witness residue, θ = 1e-3, now (deterministic) | 1.874e-6 | 1.844e-6 |
+| builder p₀ now, at every `conv_tol` gated, both platforms | 0.4692 | 0.4621 |
+| G9: max over M = 28…32 of E − E_B1g, before (§9, 2026-10-03) | 3.0e-6 (at 1e-6) | 1.1e-3 (at 1e-6 and at the default) |
+| G9: the same on the witness, now (macOS) | 3.0e-6 | 4.9e-4 |
+
+*Gate run.* See `SPEC_scf_stability_rule` §9.
 
 **chem-648 (2026-10-09, Linux x86_64 container, pyscf 2.13.1; re-run on macOS 2026-10-10):** fixed
 L1–L4 (§8). Four new gates (`test_L1_*`..`test_L4_*`), each isolating the fix from the production

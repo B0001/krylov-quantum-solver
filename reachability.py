@@ -25,6 +25,9 @@ never changes the mask and never raises. Its known blind spots: the spec's secti
 The per-SYSTEM question (specs/SPEC_symmetry_reachability.md, ``symmetry_filter_available``): with
 a symmetric SCF the residue is present AND the irrep labelling succeeds; with a broken-symmetry SCF
 the reference genuinely overlaps that level (population ~0.45, not ~1e-10) AND labelling refuses.
+On square H4 the symmetric SCF is a saddle point. Since chem-8ls the builder follows its
+instability, so the builder's reference is always the broken-symmetry case there
+(specs/SPEC_scf_stability_rule.md).
 """
 from __future__ import annotations
 
@@ -47,11 +50,13 @@ TIGHT_SCF_CONV_TOL = 1e-13
 # The HF-reachable sector is defined by |<HF|psi_k>|^2 > tol. This is the CERTIFIED ARC's value,
 # shared by certified_gaps.py, certified_dipole.py, certified_noise.py and
 # hf_overlap_certificate.py -- but NOT by hf_overlap_subspace.py, which uses 1e-8. That divergence
-# is not cosmetic: at square H4 a = 1.1 A the two thresholds select DIFFERENT ground states (HF
+# was not cosmetic: at square H4 a = 1.1 A the two thresholds selected DIFFERENT ground states (HF
 # overlap 2.25e-5 vs 0.667), so the d=1 and d=2 certificates whose head-to-head is
-# SPEC_hf_overlap_subspace's headline are certifying different targets there. Named here so the
-# divergence is visible and gated (tests/test_reachability_tolerance_spec.py); unifying it decides
-# which of two recorded findings is right and is deliberately left to a follow-up.
+# SPEC_hf_overlap_subspace's headline certified different targets there. The residue behind it was
+# an SCF stopped on a saddle point, which chem-8ls's stability rule removed; the thresholds now agree
+# on the ground state and can still disagree on excited levels. Named here so the divergence is
+# visible and gated (tests/test_reachability_tolerance_spec.py); unifying it decides which of two
+# recorded findings is right and is deliberately left to a follow-up.
 # See specs/SPEC_reachability_tolerance.md. The sites cut through ``reachable_mask`` (this cut plus
 # a residue warning); SPEC_eigenstate_reachability G9 is why a symmetry veto cannot settle it.
 REACHABLE_TOL_CERTIFIED = 1e-10
@@ -59,32 +64,33 @@ REACHABLE_TOL_CERTIFIED = 1e-10
 
 def scf_symmetry_status(atom: str, basis: str = "sto-3g",
                         conv_tol: float = TIGHT_SCF_CONV_TOL) -> Tuple[bool, float]:
-    """(is_broken, dE) for the RHF reference: does the unsymmetrized solve find a LOWER solution?
+    """(is_broken, dE) for the builder's RHF reference: is it LOWER than the symmetry-enforced RHF?
 
-    ``dE = E_unsymmetrized - E_symmetry_enforced``; negative beyond SYMMETRY_BREAK_TOL means RHF
+    ``dE = E_reference - E_symmetry_enforced``; negative beyond SYMMETRY_BREAK_TOL means RHF
     broke symmetry. On square H4 this is textbook behaviour for a strongly-correlated square, not a
     defect -- the broken solution is variationally better by ~0.08 Ha.
 
-    Both RHF solves run with ``pyscf.lib.num_threads(1)`` pinned (ambient count restored in a
-    ``finally``), the same fix chem-7cx applied to ``build_molecular_hamiltonian``: PySCF's
-    multi-threaded integral evaluation is not bit-associative, which on a near-degenerate geometry
-    can tip the free (``symmetry=False``) solve onto a different locally-stable branch between
-    otherwise-identical calls (chem-s6c, specs/SPEC_reachability_scf_determinism.md).
+    The reference is the builder's own SCF (``molecular_hamiltonian._driver_problem``: thread pin,
+    chem-7cx/chem-s6c, and the stability rule, chem-8ls), so the answer describes the reference
+    ``build_molecular_hamiltonian`` builds. Before chem-8ls this was a separate free RHF that could
+    stop on the symmetric saddle point. Which sides it stopped on depended on the platform's
+    rounding: square H4 a = 1.1 gave (False, -5e-15) on macOS and (True, -0.0716) on Linux
+    (specs/SPEC_scf_stability_rule.md). The symmetry-enforced solve runs with the same thread pin.
     """
     from pyscf import gto, lib, scf
 
+    from hybrid_quantum_solver.molecular_hamiltonian import _driver_problem
+
+    _, _, drv = _driver_problem(atom, basis, 0, 0, conv_tol, False)
     ambient_threads = lib.num_threads()
     lib.num_threads(1)
     try:
-        free = scf.RHF(gto.M(atom=atom, basis=basis, symmetry=False, verbose=0))
-        free.conv_tol = conv_tol
-        free.kernel()
         enforced = scf.RHF(gto.M(atom=atom, basis=basis, symmetry=True, verbose=0))
         enforced.conv_tol = conv_tol
         enforced.kernel()
     finally:
         lib.num_threads(ambient_threads)
-    d_e = float(free.e_tot - enforced.e_tot)
+    d_e = float(drv._calc.e_tot - enforced.e_tot)
     return (d_e < -SYMMETRY_BREAK_TOL), d_e
 
 

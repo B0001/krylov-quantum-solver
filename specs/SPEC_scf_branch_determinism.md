@@ -168,6 +168,8 @@ sto-3g H4 builds plus five `pytest` subprocess spawns for G4).
   identical FAIL/FAIL outcome for `test_G9_control[1.1]`/`test_G1[1.1-1e-06-1e-08]` every time
   (chem-g14's territory, not this spec's to turn green — see §2, §7).
 
+**chem-8ls (2026-11-05).** The two witnesses' builds now carry no residue, because the builder follows SCF instabilities to a stable minimum (`SPEC_scf_stability_rule.md`). So `test_eigenstate_reachability_spec` G1 and G9's control run on a residue reference built without the builder. G4 replays the builder-side gate on the same two builds, square H₄ a = 1.1 at `conv_tol` 1e-6 and at `TIGHT_SCF_CONV_TOL`: `test_G9_builder_reference_reaches_the_b1g_level_at_every_conv_tol[1.1-1e-06]` and `[1.1-1e-13]`. G4 still asserts only that they stop flipping. They now pass on macOS and Linux alike.
+
 ## 10. Deliverables
 
 - `hybrid_quantum_solver/molecular_hamiltonian.py` — `build_molecular_hamiltonian` pins/restores

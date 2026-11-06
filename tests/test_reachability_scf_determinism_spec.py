@@ -93,17 +93,19 @@ def test_G3_hf_orbital_irreps_deterministic_same_process_and_threads_restored():
 
 # --- G4: the affected spec's gates stop flipping pass/fail -----------------------------------------
 
+# chem-8ls retired the "available" half of G3: its sides were the free SCF stopped on the D2h saddle.
+# The "unavailable" half now runs at those sides, calling the same scf_symmetry_status/hf_orbital_irreps.
 _AFFECTED_WITNESSES = (
     "tests/test_symmetry_reachability_spec.py::"
     "test_G1_filter_is_available_exactly_when_the_artifact_is_present",
     "tests/test_symmetry_reachability_spec.py::"
     "test_G3_unavailable_means_RHF_found_a_lower_solution[1.2]",
     "tests/test_symmetry_reachability_spec.py::"
-    "test_G3_available_means_the_symmetric_solution_is_the_RHF_solution[1.05]",
+    "test_G3_unavailable_means_RHF_found_a_lower_solution[1.05]",
     "tests/test_symmetry_reachability_spec.py::"
-    "test_G3_available_means_the_symmetric_solution_is_the_RHF_solution[1.1]",
+    "test_G3_unavailable_means_RHF_found_a_lower_solution[1.1]",
     "tests/test_symmetry_reachability_spec.py::"
-    "test_G3_available_means_the_symmetric_solution_is_the_RHF_solution[1.35]",
+    "test_G3_unavailable_means_RHF_found_a_lower_solution[1.35]",
 )
 
 
@@ -128,9 +130,10 @@ def _outcomes():
 def test_G4_affected_witnesses_stabilize_pass_or_fail():
     """The five test_symmetry_reachability_spec.py gates that call scf_symmetry_status/
     hf_orbital_irreps directly on the square-H4 family now give the SAME outcome every time --
-    five separate pytest subprocess invocations of the whole file. Does NOT assert which outcome:
-    chem-8ls (a separate, pre-existing cross-platform/version divergence) governs whether these
-    should be green on this host (spec section 2). Only asserts they stop being a coin flip."""
+    five separate pytest subprocess invocations of the whole file. Does NOT assert which outcome.
+    When this was written, chem-8ls (the cross-platform branch divergence) decided whether these
+    were green on a given host (spec section 2). Since its stability rule they pass on macOS and
+    Linux alike, but this gate still only asserts that they stop being a coin flip."""
     runs = [_outcomes() for _ in range(5)]
     for w in _AFFECTED_WITNESSES:
         results = [r[w] for r in runs]
