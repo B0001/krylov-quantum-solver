@@ -9,6 +9,13 @@ G8), the sites' population-cut frames (G7), the falsification (G9) and that it n
 
 Dense eigendecompositions here use the REAL matrix (these Hamiltonians are real): dsyevd is fast
 and not hit by the macOS Accelerate ZHEEVD bug, so the gate exercises the decision, not LAPACK.
+
+chem-8ls (2026-11-05): the residue references came from the builder's free SCF stopping on square
+H4's D2h saddle point, at sides that depended on the platform's rounding. The builder now follows
+that instability to the stable minimum (specs/SPEC_scf_stability_rule.md) and no longer makes them.
+G1, G9 and G10 therefore build the residue on purpose (`_saddle_witness`: the saddle displaced by a
+fixed angle along its unstable mode), G4 covers the former witnesses, and G9 also gates what the
+builder's reference does now (SPEC section 9, chem-8ls entry).
 """
 import dataclasses
 import warnings
@@ -46,12 +53,13 @@ def _sq(a):                          # atom ORDER is load-bearing (SPEC_reachabi
 
 LIN_H4 = "H 0 0 0; H 0 0 1.0; H 0 0 2.0; H 0 0 3.0"
 H2 = "H 0 0 0; H 0 0 0.74"
-# (side, conv_tol). a = 1.19 left the default conv_tol, where its 1.40e-8 residue cleared the 1e-8
-# cut by only 1.4x. At 1e-6 it is 5.48e-8 (macOS; 2.66e-6 at a = 1.10) -- still only 5.5x above 1e-8
-# on a platform-dependent number, so the 1e-8 checks use a = 1.10 only (code review; SPEC G1, G7).
+# (side, conv_tol): the builder geometries that carried the residue until chem-8ls (G7, G9).
 WITNESSES = [(1.10, 1e-6), (1.19, 1e-6)]
-WITNESS_CUTS = [(1.10, 1e-6, ODMD_TOL), (1.10, 1e-6, REACHABLE_TOL_CERTIFIED),
-                (1.19, 1e-6, REACHABLE_TOL_CERTIFIED)]
+# The residue the witnesses get on purpose: population 1.87e-6 at a = 1.10 and 1.84e-6 at 1.19,
+# about 1.9 theta**2, at least 180x above both cuts at both sides. So G1 runs every (side, cut);
+# before chem-8ls the 1e-8 cut skipped a = 1.19, whose builder residue (5.48e-8, macOS) was 5.5x above it.
+WITNESS_THETA = 1e-3
+WITNESS_CUTS = [(a, tol) for a in (1.10, 1.19) for tol in TOLS]
 
 
 @lru_cache(maxsize=None)
@@ -137,11 +145,46 @@ def _residue_warnings(mh, w, V, pops, tol):
                   and "SCF residue" in str(r.message)]
 
 
+def _saddle_witness(a, theta=WITNESS_THETA):
+    """A residue reference built on purpose, the same on every platform (chem-8ls).
+
+    Start from the saddle: the symmetry-enforced RHF, whose irrep-blocked SCF cannot leave it. Its
+    HOMO/LUMO pair is the split degenerate e_u shell (B2u/B3u in PySCF's frame). Rotate that pair by
+    the FIXED angle theta: one step along the saddle's unstable mode, the direction a free SCF used
+    to drift by rounding. |HF> then carries population ~1.9 theta**2 on the B1g ground state.
+    Returns (mh, w, V, pops, mol, mo). mh comes from integrals, so it has no build_args: give
+    (mol, mo) to the diagnostic by monkeypatching reachability._driver_orbitals, as L1/L2 do.
+    Deliberately NOT cached: hf_symmetry_sector caches its sector on the mh instance, so a shared
+    mh would carry an unpatched (N_alpha, N_beta)-only sector from one gate into a patched one.
+    """
+    from pyscf import ao2mo, gto, scf, symm
+
+    mol_sym = gto.M(atom=_sq(a), basis="sto3g", symmetry=True, verbose=0)
+    mf = scf.RHF(mol_sym)
+    mf.conv_tol = 1e-13
+    mf.kernel()
+    labels = symm.label_orb_symm(mol_sym, mol_sym.irrep_name, mol_sym.symm_orb, mf.mo_coeff)
+    assert sorted(labels[1:3]) == ["B2u", "B3u"], labels
+    c, s = np.cos(theta), np.sin(theta)
+    mo = mf.mo_coeff.copy()
+    mo[:, 1:3] = mf.mo_coeff[:, 1:3] @ np.array([[c, -s], [s, c]])
+    # STO-3G hydrogen has only s functions, so these AO coefficients mean the same thing in the
+    # unrotated frame that the symmetry=True build re-oriented away from.
+    mol = gto.M(atom=_sq(a), basis="sto3g", verbose=0)
+    eri = ao2mo.restore(1, ao2mo.full(mol, mo), mo.shape[1])
+    mh = build_hamiltonian_from_integrals(mo.T @ scf.hf.get_hcore(mol) @ mo, eri, (2, 2),
+                                          mol.energy_nuc())
+    w, V = np.linalg.eigh(mh.qubit_hamiltonian.to_matrix().real)
+    pops = (V.T @ np.asarray(mh.hf_state().data).real) ** 2
+    return mh, w, V, pops, mol, mo
+
+
 # --- G1: the witnesses -- identified, warned, kept ------------------------------------------------
 
-@pytest.mark.parametrize("a, conv_tol, tol", WITNESS_CUTS)
-def test_G1_residue_level_identified_warned_and_kept(a, conv_tol, tol):
-    mh, w, V, pops = _system(_sq(a), conv_tol)
+@pytest.mark.parametrize("a, tol", WITNESS_CUTS)
+def test_G1_residue_level_identified_warned_and_kept(a, tol, monkeypatch):
+    mh, w, V, pops, mol, mo = _saddle_witness(a)
+    monkeypatch.setattr(reachability, "_driver_orbitals", lambda _mh: (mol, mo))
     mask, rec = _residue_warnings(mh, w, V, pops, tol)
     cut = pops > tol
     assert np.array_equal(mask, cut) and len(rec) == 1, len(rec)
@@ -239,17 +282,15 @@ def _naive_weights(mh, V):
 
 
 def _require_broken_rhf(a):
-    """Skip with a clear reason unless THIS host's free RHF actually broke symmetry at a -- that
-    branch choice is platform/BLAS/LAPACK-dependent, not a function of the code (chem-7cx), so a
-    hardcoded a is not a guarantee. chem-0m8."""
+    """The builder's reference at side a is the broken-symmetry minimum. chem-0m8 made this a skip,
+    because the free SCF's branch was platform-dependent. chem-8ls's stability rule makes it the
+    branch at every side on every platform, so it is now an assertion."""
     broken, de = scf_symmetry_status(_sq(a))
-    if not broken:
-        pytest.skip(f"free RHF at a={a} did not land on the symmetry-broken branch on this host "
-                    f"(dE={de:.2e}, SYMMETRY_BREAK_TOL=1e-6) -- nothing broken to detect here "
-                    f"(chem-7cx: this branch choice is platform/BLAS/LAPACK-dependent; chem-0m8).")
+    assert broken, (a, de)
 
 
-@pytest.mark.parametrize("a", (1.20, 1.40))
+# 1.10 and 1.19: the former residue witnesses (G1, G9), now on the broken branch too (chem-8ls).
+@pytest.mark.parametrize("a", (1.10, 1.19, 1.20, 1.40))
 def test_G4_broken_rhf_bit_is_excluded_and_nothing_is_flagged(a):
     _require_broken_rhf(a)
     mh, w, V, pops = _system(_sq(a))
@@ -353,8 +394,8 @@ def test_G7_threshold_sites_use_the_population_cut(a, conv_tol):
 
     e_b1g = _fci(_sq(a), "B1g")[0]
     assert reachable_eigenpairs(mh)[0][0] == pytest.approx(e_b1g, abs=1e-8)   # certified arc
-    assert exact_reachable_overlap(mh) == pytest.approx(
-        lowest_overlap(REACHABLE_TOL_CERTIFIED), rel=1e-8)                  # = the residue level
+    assert exact_reachable_overlap(mh) == pytest.approx(                    # B1g: was the residue
+        lowest_overlap(REACHABLE_TOL_CERTIFIED), rel=1e-8)                  # level, now physical
     assert exact_hf_subspace_overlap(mh, 1) == pytest.approx(lowest_overlap(ODMD_TOL), rel=1e-8)
 
 
@@ -400,10 +441,7 @@ def _qksd_electronic(mh):
     return np.array([s.energy for s in steps]) - mh.energy_offset       # index M - 1
 
 
-@pytest.mark.parametrize("a, conv_tol", WITNESSES + [(1.19, None)])    # None: builder default
-def test_G9_qksd_from_hf_converges_to_the_residue_level(a, conv_tol):
-    mh = build_molecular_hamiltonian(atom=_sq(a), **({} if conv_tol is None
-                                                     else {"conv_tol": conv_tol}))
+def _assert_qksd_sits_on_b1g(mh, a):
     e_b1g, e_ag = _fci(_sq(a), "B1g")[0], _fci(_sq(a), "Ag")[0]
     e = _qksd_electronic(mh)[[m - 1 for m in G9_M]]
     assert (e - e_b1g).min() >= -1e-9, e - e_b1g            # the variational floor
@@ -413,12 +451,34 @@ def test_G9_qksd_from_hf_converges_to_the_residue_level(a, conv_tol):
 
 
 @pytest.mark.parametrize("a", (1.10, 1.19))
-def test_G9_control_tight_scf_stays_on_the_ag_level(a):
-    mh = build_molecular_hamiltonian(atom=_sq(a), conv_tol=TIGHT_SCF_CONV_TOL)
+def test_G9_qksd_from_hf_converges_to_the_residue_level(a):
+    """The kill of the veto, on the residue reference built on purpose (chem-8ls; until then on the
+    builder's own residue at the WITNESSES conv_tols and at a = 1.19's default)."""
+    _assert_qksd_sits_on_b1g(_saddle_witness(a)[0], a)
+
+
+@pytest.mark.parametrize("a", (1.10, 1.19))
+def test_G9_control_saddle_without_residue_stays_on_the_ag_level(a):
+    """theta = 0: the exact saddle, B1g population ~1e-30. Until chem-8ls the control was the
+    builder at TIGHT_SCF_CONV_TOL, which then stopped on the saddle; now it reaches the minimum
+    (next gate)."""
+    mh = _saddle_witness(a, 0.0)[0]
     e_ag = _fci(_sq(a), "Ag")[0]
     e = _qksd_electronic(mh)                                # every M <= 32
     assert e.min() >= e_ag - 1e-8, e.min() - e_ag
     assert reachable_eigenpairs(mh)[0][0] == pytest.approx(e_ag, abs=1e-8)
+
+
+@pytest.mark.parametrize("a, conv_tol", WITNESSES + [(1.19, None), (1.10, TIGHT_SCF_CONV_TOL),
+                                                     (1.19, TIGHT_SCF_CONV_TOL)])  # None: default
+def test_G9_builder_reference_reaches_the_b1g_level_at_every_conv_tol(a, conv_tol):
+    """What the builder's reference does since chem-8ls. It is the broken-symmetry minimum, whose HF
+    overlap with the B1g ground state is physical (population 0.469 at a = 1.10, 0.462 at 1.19). So
+    QKSD reaches B1g at every conv_tol, and conv_tol no longer decides the level."""
+    mh = build_molecular_hamiltonian(atom=_sq(a), **({} if conv_tol is None
+                                                     else {"conv_tol": conv_tol}))
+    assert reachability.hf_population_spectrum(mh)[0] > 0.4
+    _assert_qksd_sits_on_b1g(mh, a)
 
 
 # --- G10: the diagnostic never raises -------------------------------------------------------------
@@ -435,7 +495,9 @@ def test_G10_half_detected_symmetry_does_not_raise(atom):
 
 
 def test_G10_any_diagnostic_failure_means_no_diagnostic(monkeypatch):
-    mh, w, V, pops = _system(_sq(1.10), 1e-6)              # a witness: the diagnostic would warn
+    mh, w, V, pops, mol, mo = _saddle_witness(1.10)
+    monkeypatch.setattr(reachability, "_driver_orbitals", lambda _mh: (mol, mo))
+    assert len(_residue_warnings(mh, w, V, pops, ODMD_TOL)[1]) == 1    # the diagnostic warns here
 
     def boom(*_):
         raise RuntimeError("diagnostic failure")

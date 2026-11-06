@@ -4,6 +4,8 @@
 `tests/test_scf_conv_tol_spec.py` was written or run; results go in a later section and may not
 edit §5. A threshold that turns out wrong is recorded as a finding, not retuned.
 
+**Revised 2026-11-05 (chem-8ls, `SPEC_scf_stability_rule.md`):** §11: the witnesses no longer move; G1 covers them, G2 and G3 re-pinned, §5 untouched.
+
 ---
 
 ## 1. Goal
@@ -184,3 +186,40 @@ had already run the a = 1.10 `conv_tol` sweep above (reproducing the hand-off's 
 baseline `test_reachability_tolerance_spec` / `test_chained_overlap_spec` runs. That knowledge fixed
 the decision not to gate a = 1.10 (§3, §8 R1); it fixed no §5 threshold, and the other measurements in
 this section were first taken after the commit.
+
+## 11. chem-8ls (2026-11-05): the witnesses no longer move
+
+§5 stays as pre-registered. This section records what the stability rule (`SPEC_scf_stability_rule.md`) did to it.
+- At the default and at 1e-13, both witnesses (a = 1.35 and 1.19) were the free SCF stopped on square H₄'s D2h saddle point.
+- The rule follows that saddle's instability, so both builds are now the broken-symmetry minimum on macOS and Linux alike.
+
+**Gates.**
+- **G1** now also runs on the two former witnesses, and they pass its clean-set thresholds.
+- **G2 is re-pinned** (it was claim (b), the definition of done). At both tolerances the lowest level is now reachable (index 0) and physical (p₀ > 0.4).
+- **G3 is narrowed to "tight Ritz leakage < `LEAK_TOL`".**
+  - "p₀(tight) < 1e-20" is now false by design: the lowest level is physical.
+  - "Default leakage > `LEAK_TOL`" is not gated. At the default a symmetry-forbidden *excited* level can still carry a residue. Which geometries carry one depends on the SCF trajectory, and so on the platform; see the last column below.
+- **G4 is unchanged.**
+
+**Verdict, revised.**
+- chem-ayr's verdict stands: document, and keep the 1e-9 default (G4).
+- Kill rule (b), "the artifact is practically unreachable from the public API", now fires for the lowest level. The builder cannot produce it on this family any more: the rule removes it at the source, which is the follow-up `SPEC_eigenstate_reachability` §0 asked for.
+- `conv_tol` still matters below that. At the default an excited forbidden level can enter the sector (one more reachable level) and leak into the Ritz vector, and `TIGHT_SCF_CONV_TOL` removes that on both platforms. So the chained-overlap exclusions keyed to leakage still need a tight build (`SPEC_chained_overlap` §10, chem-8ls).
+
+**The §10 table, re-measured with the rule (square H₄ only).** H₂ and the chains are untouched: the rule does not fire there.
+- New values were measured on macOS 27.2 arm64 and on Linux x86_64 (the `claude-chem` image), with pyscf 2.13.1, qiskit-nature 0.8.0, numpy 2.4.6 and scipy 1.15.3 on both.
+- Overlap and p₀ are identical on both platforms. Reachable counts and leakage are given as macOS; Linux.
+
+| geometry | overlap default → tight, before (§10) | overlap, now | p₀ default → tight, before | p₀ now | reachable levels default / tight, now | Ritz leakage default → tight, now |
+|---|---|---|---|---|---|---|
+| H₄ square 1.0 | 0.6898 → 0.6898 | 0.6898 | 4.8e-1 | 0.476 | 8/8; 9/8 | 1.4e-14 → 1.6e-14; 1.6e-7 → 1.3e-14 |
+| H₄ square 1.05 | 0.6739 → 0.6739 | 0.6875 | 3.7e-32 → 1.7e-29 | 0.473 | 9/8; 8/8 | 2.7e-7 → 2.1e-14; 8.1e-15 → 1.2e-14 |
+| H₄ square 1.2 | 0.6791 → 0.6791 | 0.6791 | 4.6e-1 | 0.461 | 9/8; 9/8 | 5.1e-7 → 1.1e-14; 2.9e-7 → 7.6e-15 |
+| H₄ square 1.4 | 0.6637 → 0.6637 | 0.6637 | 4.4e-1 | 0.440 | 8/8; 8/8 | 2.0e-14 → 1.4e-14; 1.6e-14 → 1.4e-14 |
+| **H₄ square 1.35** | **7.80e-5 → 0.6128** | **0.6681 → 0.6681** | **6.1e-9 → 4e-30** | 0.446 | 8/8; 9/8 | 3.7e-6 → 1.4e-14; 2.0e-7 → 3.3e-14 |
+| **H₄ square 1.19** | **1.18e-4 → 0.6518** | **0.6798 → 0.6798** | **1.4e-8 → 3e-28** | 0.462 | 9/8; 9/8 | 3.0e-7 → 1.2e-14; 3.0e-7 → 2.3e-14 |
+
+- The old a = 1.05 overlap, 0.6739, was the Ag level's overlap on the saddle; 0.6875 is the B1g ground state's on the minimum.
+- The a = 1.10 residue sweep (`t.residue_sweep()`, §10) is likewise a record of the free SCF. Through the builder, p₀ at a = 1.10 is now 0.46923 at `conv_tol` 1e-6, 1e-9 and 1e-13 on both platforms.
+
+**Gate run.** See `SPEC_scf_stability_rule` §9.

@@ -39,13 +39,10 @@ from reachability import (  # noqa: E402
 )
 
 ASYM_H4 = "H 0 0 0; H 1.1 0.2 0.3; H 1.9 1.3 0.1; H 0.3 1.7 0.9"  # true C1: no mirror plane
-WITNESS_A = 1.2  # square H4 side; Linux-native residue witness (SPEC_symmetric_scf R2)
-_LINUX_REFERENCE_ONLY = pytest.mark.skipif(
-    sys.platform != "linux",
-    reason="square H4 side 1.2 is a Linux-native witness (spec R2): on macOS 27 its RHF breaks "
-           "symmetry (scf_symmetry_status -> (True, -0.0764 Ha), threads pinned), so there is no "
-           "residue to collapse and both builds' QKSD land on B1g. specs/SPEC_symmetric_scf.md R2.",
-)
+# Square H4 side 1.2: the Linux-native residue witness (spec R2), whose free SCF stopped on the D2h
+# saddle on Linux but not on macOS. Since chem-8ls the builder follows that saddle's instability to
+# the minimum on both (specs/SPEC_scf_stability_rule.md), so G6/G7 run everywhere (spec section 10).
+WITNESS_A = 1.2
 
 
 def _square(a):
@@ -133,48 +130,44 @@ def test_G5_equivalent_to_manual_tight_tolerance(a):
     assert exact_reachable_overlap(opt) == exact_reachable_overlap(tight)
 
 
-# --- G6: residue collapse at the Linux-native witness, thread-pinned (definition of done, 1/2) ----
+# --- G6: no lowest-level residue left for the flag to collapse (chem-8ls; was definition of done) --
 
-@_LINUX_REFERENCE_ONLY
-def test_G6_residue_collapses_at_the_witness():
+def test_G6_no_residue_with_or_without_the_flag():
+    """Was (Linux only): without the flag the lowest level carried a 5.08e-9 residue and was warned
+    about, and with it the residue was < 1e-20, repeatably over 5 builds each. That residue was the
+    free SCF stopped on the D2h saddle. Since chem-8ls both builds are the broken-symmetry minimum,
+    whose lowest level is physical, so with or without the flag p0 is the same, > 0.4, and nothing
+    is warned about. Still 5 builds each: the original's repeatability check."""
     atom = _square(WITNESS_A)
     for _ in range(5):
-        off = build_molecular_hamiltonian(atom=atom, conv_tol=1e-9)
-        _, _, pops_off = _dense_hf_projection(off)
-        assert pops_off[0] > REACHABLE_TOL_CERTIFIED, pops_off[0]
-        with warnings.catch_warnings(record=True) as rec:
-            warnings.simplefilter("always")
-            reachable_eigenpairs(off, tol=REACHABLE_TOL_CERTIFIED)
-        assert any(issubclass(r.category, RuntimeWarning) for r in rec)
-
-        on = build_molecular_hamiltonian(atom=atom, conv_tol=1e-9, symmetric_scf=True)
-        _, _, pops_on = _dense_hf_projection(on)
-        assert pops_on[0] < 1e-20, pops_on[0]
-        with warnings.catch_warnings(record=True) as rec:
-            warnings.simplefilter("always")
-            reachable_eigenpairs(on, tol=REACHABLE_TOL_CERTIFIED)
-        assert not any(issubclass(r.category, RuntimeWarning) for r in rec)
+        p0 = []
+        for flag in (False, True):
+            mh = build_molecular_hamiltonian(atom=atom, conv_tol=1e-9, symmetric_scf=flag)
+            p0.append(float(_dense_hf_projection(mh)[2][0]))
+            with warnings.catch_warnings(record=True) as rec:
+                warnings.simplefilter("always")
+                reachable_eigenpairs(mh, tol=REACHABLE_TOL_CERTIFIED)
+            assert not any(issubclass(r.category, RuntimeWarning) for r in rec), flag
+        assert p0[0] == pytest.approx(p0[1], abs=1e-4) and min(p0) > 0.4, p0
 
 
-# --- G7: QKSD lands on the physical level, not the artifact (definition of done, 2/2) -------------
+# --- G7: QKSD lands on the B1g ground state either way (chem-8ls; was definition of done) ----------
 
-@_LINUX_REFERENCE_ONLY
-def test_G7_qksd_lands_on_the_physical_level_not_the_artifact():
+def test_G7_qksd_lands_on_the_ground_state_with_or_without_the_flag():
+    """Was (Linux only): QKSD from the default build sat on B1g (the residue level), and with the
+    flag on Ag. With the stability rule HF genuinely overlaps the B1g ground state, so QKSD sits on
+    it, and the reference starts there, with or without the flag."""
     atom = _square(WITNESS_A)
     e_ag = ter._fci(atom, "Ag")[0]
     e_b1g = ter._fci(atom, "B1g")[0]
-    assert e_b1g < e_ag - 0.1, (e_ag, e_b1g)   # sanity: B1g is the lower, HF-unreachable level here
+    assert e_b1g < e_ag - 0.1, (e_ag, e_b1g)   # sanity: B1g is the lower level here
 
-    off = build_molecular_hamiltonian(atom=atom, conv_tol=1e-9)
-    e_off_tail = ter._qksd_electronic(off)[[m - 1 for m in ter.G9_M]]   # same window as G9
-    assert (e_off_tail - e_b1g).min() >= -1e-9      # variational floor around the artifact level
-    assert (e_off_tail < e_ag - 0.1).all()          # ...and settled nowhere near the physical one
-    assert reachable_eigenpairs(off)[0][0] == pytest.approx(e_b1g, abs=1e-8)
-
-    on = build_molecular_hamiltonian(atom=atom, conv_tol=1e-9, symmetric_scf=True)
-    e_on_tail = ter._qksd_electronic(on)[[m - 1 for m in ter.G9_M]]
-    assert np.abs(e_on_tail - e_ag).max() < 1e-8, e_on_tail - e_ag
-    assert reachable_eigenpairs(on)[0][0] == pytest.approx(e_ag, abs=1e-8)
+    for flag in (False, True):
+        mh = build_molecular_hamiltonian(atom=atom, conv_tol=1e-9, symmetric_scf=flag)
+        tail = ter._qksd_electronic(mh)[[m - 1 for m in ter.G9_M]]   # same window as G9
+        assert (tail - e_b1g).min() >= -1e-9, (flag, tail - e_b1g)   # the variational floor
+        assert (tail - e_b1g).max() < 1e-8, (flag, tail - e_b1g)     # ...and converged on B1g
+        assert reachable_eigenpairs(mh)[0][0] == pytest.approx(e_b1g, abs=1e-8), flag
 
 
 # --- G8: the dipole runs H's SCF -- same conv_tol floor, same thread pin (chem-9ud) ---------------
@@ -191,8 +184,10 @@ def test_G8_dipole_shares_the_hamiltonians_scf_orbitals(a, monkeypatch):
     runs = []  # (conv_tol, threads inside the SCF, mo_coeff), one per PySCFDriver run
 
     class Recorder(mham.PySCFDriver):
-        def run(self):
-            problem = super().run()
+        # _driver_problem runs run_pyscf, the stability rule (chem-8ls), then to_problem, all inside
+        # the pin. to_problem therefore sees the final orbitals that H and the dipole are built on.
+        def to_problem(self, *args, **kwargs):
+            problem = super().to_problem(*args, **kwargs)
             runs.append((self.conv_tol, lib.num_threads(), self._calc.mo_coeff.copy()))
             return problem
 

@@ -8,6 +8,11 @@ the tight one through `conv_tol=TIGHT_SCF_CONV_TOL`) so run-to-run noise cannot 
 Regenerate the table recorded in the spec's results section (`t.residue_sweep()` prints the a=1.10 sweep):
     uv run --no-sync python -c "import sys; sys.path.insert(0, 'tests'); \
 import test_scf_conv_tol_spec as t; t.table()"
+
+chem-8ls (2026-11-05): the witnesses' residue came from the free SCF stopping on square H4's D2h
+saddle point. The builder now follows that instability to the stable minimum
+(specs/SPEC_scf_stability_rule.md), so the witnesses no longer move. G1 now covers them too; G2 and G3
+assert what is left (SPEC section 11).
 """
 import inspect
 from functools import lru_cache
@@ -50,7 +55,8 @@ CLEAN = {
     "H4 square 1.2": _square(1.2),
     "H4 square 1.4": _square(1.4),
 }
-# Symmetric-SCF square H4 where the default-tolerance residue is large enough to be platform-robust.
+# Symmetric-SCF square H4 where the default-tolerance residue was large enough to be platform-robust
+# -- until chem-8ls's stability rule moved both onto the broken-symmetry minimum.
 WITNESS = {"H4 square 1.35": _square(1.35), "H4 square 1.19": _square(1.19)}
 
 
@@ -91,37 +97,39 @@ def _pair(atom):
     return _measure(atom, None), _measure(atom, TIGHT_SCF_CONV_TOL)
 
 
-# --- G1: the clean set does not move (claim a) ----------------------------------------------------
+# --- G1: the clean set does not move (claim a) -- since chem-8ls, the former witnesses too ---------
 
-@pytest.mark.parametrize("name", list(CLEAN))
+@pytest.mark.parametrize("name", list(CLEAN) + list(WITNESS))
 def test_G1_clean_geometry_does_not_move(name):
-    d, t = _pair(CLEAN[name])
+    d, t = _pair({**CLEAN, **WITNESS}[name])
     assert abs(d["E0"] - t["E0"]) < 1e-9, (name, d["E0"], t["E0"])
     assert abs(d["EHF"] - t["EHF"]) < 1e-8, (name, d["EHF"], t["EHF"])
     assert abs(d["ov"] - t["ov"]) < 1e-4, (name, d["ov"], t["ov"])
     assert d["i_reach"] == t["i_reach"], (name, d["i_reach"], t["i_reach"])
 
 
-# --- G2: the witnesses move, the eigenvalue does not (claim b; DEFINITION OF DONE) -----------------
+# --- G2: the former witnesses' lowest level is physical at both tolerances (chem-8ls) --------------
 
 @pytest.mark.parametrize("name", list(WITNESS))
-def test_G2_witness_moves_but_the_eigenvalue_does_not(name):
-    d, t = _pair(WITNESS[name])
-    assert abs(d["E0"] - t["E0"]) < 1e-9, (name, d["E0"], t["E0"])           # same eigenvalue
-    assert d["p0"] > REACHABLE_TOL_CERTIFIED, (name, d["p0"])                # admitted as reachable
-    assert d["ov"] < 1e-3, (name, d["ov"])                                   # ...at residue level
-    assert abs(d["ov"] - t["ov"]) > 0.1, (name, d["ov"], t["ov"])
-    assert abs(d["E0reach"] - t["E0reach"]) > 0.010, (name, d["E0reach"], t["E0reach"])
+def test_G2_former_witness_lowest_level_is_physical(name):
+    """Was claim b, the DEFINITION OF DONE: at the default the lowest reachable level was a B1g
+    residue (overlap < 1e-3), and tightening moved the overlap by > 0.1 and the reachable ground
+    energy by > 10 mHa (section 10: overlap 7.80e-5 -> 0.6128 at a = 1.35). The residue was the free
+    SCF stopped on the D2h saddle. With the stability rule both builds are the broken-symmetry
+    minimum, and its lowest level is reachable and physical at both tolerances (section 11)."""
+    for m in _pair(WITNESS[name]):
+        assert m["i_reach"] == 0 and m["p0"] > 0.4, (name, m["i_reach"], m["p0"])
 
 
-# --- G3: the residue collapses at TIGHT_SCF_CONV_TOL (claim c) -------------------------------------
+# --- G3: TIGHT_SCF_CONV_TOL leaves no leakage (claim c, narrowed by chem-8ls) -----------------------
 
 @pytest.mark.parametrize("name", list(WITNESS))
-def test_G3_residue_collapses_at_the_tight_tolerance(name):
-    atom = WITNESS[name]
-    assert _measure(atom, TIGHT_SCF_CONV_TOL)["p0"] < 1e-20, name
-    assert _leak(atom, TIGHT_SCF_CONV_TOL) < LEAK_TOL, name
-    assert _leak(atom, None) > LEAK_TOL, (name, "exclusion no longer warranted at the default")
+def test_G3_no_leakage_at_the_tight_tolerance(name):
+    """Was also: p0(tight) < 1e-20 (now physical, G2), and default leakage > LEAK_TOL. A default build
+    can still leave a residue on a symmetry-forbidden EXCITED level. Which geometries carry one
+    depends on the SCF trajectory, and so on the platform (section 11), so the default side is not
+    gated. At TIGHT_SCF_CONV_TOL the leakage collapses on both platforms measured."""
+    assert _leak(WITNESS[name], TIGHT_SCF_CONV_TOL) < LEAK_TOL, name
 
 
 # --- G4: the default is pinned ---------------------------------------------------------------------

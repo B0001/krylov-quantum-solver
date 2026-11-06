@@ -101,6 +101,19 @@ hypothesis whose death is informative is worth more here than a safe one.
   (and every existing call site/gate) is unchanged. `build_dipole_operators` takes the same flag
   and runs the same SCF path, thread pin included (chem-9ud, G8).
 
+- [x] **chem-8ls — is square H₄'s RHF branch a platform accident or a rule?** **DONE 2026-11-05:
+  a rule.** At every side from 1.00 to 1.40 Å, the D2h-symmetric RHF is a saddle point (lowest
+  orbital-Hessian eigenvalue −0.53…−0.67 Ha). The broken-symmetry minimum lies 0.066–0.084 Ha below
+  it. The free SCF stopped on the saddle at a = 1.05/1.10/1.19/1.22/1.35 on macOS, and at a
+  different set on Linux. `_driver_problem` now follows internal SCF instabilities to a stable
+  minimum, so every builder lands on the same branch on macOS and Linux (E_HF to 1e-10 Ha, p₀ to 8
+  digits). The rule is a no-op on every ordinary gated system. *Consequences:* the lowest-level
+  residue witnesses of `SPEC_reachability_tolerance`, `SPEC_eigenstate_reachability`,
+  `SPEC_scf_conv_tol`, `SPEC_symmetry_reachability` and `SPEC_symmetric_scf` are gone from the
+  builder. Each spec records old and new values. The diagnostic's residue witness is now built on
+  purpose; excited-level residues at loose `conv_tol` remain, platform-dependent and ungated.
+  → [`SPEC_scf_stability_rule.md`](SPEC_scf_stability_rule.md).
+
 - [ ] ~~**A symmetry/sector-aware reachability test**~~ *(superseded by the closed entry above;
   original text follows)* *(the fix the
   entry above proves is needed)* — *Claim:* reachability should be decided by the trial state's

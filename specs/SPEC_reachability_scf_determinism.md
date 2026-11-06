@@ -194,6 +194,8 @@ subprocess spawns of `test_symmetry_reachability_spec.py` dominate the gate file
   cross-platform divergence chem-g14 already tracks, unaffected (made provably stable, not fixed)
   by this change.
 
+**chem-8ls (2026-11-05).** `test_symmetry_reachability_spec`'s "available" G3 cases are retired. Their sides were the free SCF stopped on the D2h saddle, which the builder now leaves for the stable minimum (`SPEC_scf_stability_rule.md`). G4 replays the "unavailable" G3 case at the same sides, 1.05, 1.10 and 1.35, which calls the same `scf_symmetry_status`/`hf_orbital_irreps`. It still asserts only that the outcome stops flipping. These cases now pass on macOS and Linux alike.
+
 ## 10. Deliverables
 
 - `reachability.py` — `scf_symmetry_status` and `hf_orbital_irreps` pin/restore

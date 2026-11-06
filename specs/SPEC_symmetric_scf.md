@@ -3,6 +3,8 @@
 **Status:** IMPLEMENTED. Gates in `tests/test_symmetric_scf_spec.py`. Results: §9. G8 (chem-9ud)
 extends the flag to `build_dipole_operators`.
 
+**Revised 2026-11-05 (chem-8ls, `SPEC_scf_stability_rule.md`):** §10: no lowest-level residue is left for the flag; G6 and G7 re-pinned and no longer Linux-only.
+
 ---
 
 ## 1. Goal
@@ -182,3 +184,29 @@ helper in `hybrid_quantum_solver/molecular_hamiltonian.py`); gates in
   check (1e-9 vs 1e-13) catches it. The flips matter: the dipole that pre-fix callers got, compared
   with the one on the Hamiltonian's SCF, is off in spectral norm by ‖Δμ_x‖ = ‖Δμ_y‖ = 4.44, 4.99
   and 5.36 a.u. at 1.05, 1.2 and 1.35. At side 1.0 (not a G8 side), ‖Δμ_x‖ is 8.59 a.u.
+
+## 10. chem-8ls (2026-11-05): the residue this flag removed is gone from the default build too
+
+**What changed.** Every builder now follows internal SCF instabilities to a stable minimum (`SPEC_scf_stability_rule.md`). R1 above was half right.
+- **What R1 got right.** Tightening `conv_tol` does not choose the RHF solution.
+- **What R1 got wrong.** It called the symmetric solution and the broken one two branches the SCF may "land on". In fact the D2h-symmetric solution is a saddle point at every side, with orbital-Hessian eigenvalue −0.53 to −0.67 Ha.
+- **Why R2's split looked inverted.** The free SCF stopped on that saddle at sides that depended on rounding: 1.15/1.19/1.20/1.25/1.30 on Linux against 1.05/1.10/1.19/1.35 on macOS, at `conv_tol` 1e-9.
+- **Now.** The rule puts every side on the broken-symmetry minimum. Its lowest level is the B1g ground state, which HF genuinely overlaps (population 0.461 at side 1.2). So there is no lowest-level residue left for `symmetric_scf=True` to collapse, with or without the flag.
+
+**Gates.**
+- **G6 is re-pinned, and is no longer Linux-only.** At side 1.2, five builds each with the flag off and on: p₀ equal to 1e-4 and > 0.4, and no residue warning either way.
+  - It was: without the flag, p₀ = 5.08e-9 and warned; with it, < 1e-20 (Linux).
+  - Measured now: p₀ = 0.4612 both ways, on both platforms.
+- **G7 is re-pinned, and is no longer Linux-only.** QKSD from either build sits on the B1g ground state (M = 28…32, within 1e-8; measured ≤ 1.2e-12 from M = 12 on macOS), and the reference starts there.
+  - It was: the default build on B1g (called the artifact), and the flag on Ag.
+- **G1–G5 and G8 are unchanged.**
+  - G5 still pins what the flag is now for: a floor at `TIGHT_SCF_CONV_TOL` that removes the *excited*-level residue a default build can leave. `SPEC_scf_conv_tol` §11 shows one extra reachable level and Ritz leakage up to 3.7e-6 at the default, against ≤ 3.3e-14 tight.
+  - G8 holds because the dipole and the Hamiltonian share `_driver_problem`, rule included.
+  - G8's spy moved from `PySCFDriver.run` to `to_problem`. `_driver_problem` now calls `run_pyscf`, then the rule, then `to_problem`, so a `run` override recorded nothing and G8 failed 6/6 with the rule alone. `to_problem` sees the final orbitals, after the rule.
+
+**What this does to the claim.**
+- "QKSD lands on the physical level, not the artifact" identified the physical level with Ag, the level a *saddle-point* reference reaches. On the minimum the physical ground state is B1g, and every build reaches it.
+- The flag's purpose narrows to the excited-level residue.
+- §7's out-of-scope item "a true symmetry-constrained SCF" stays out of scope. It would select the saddle on purpose.
+
+**Gate run.** See `SPEC_scf_stability_rule` §9.

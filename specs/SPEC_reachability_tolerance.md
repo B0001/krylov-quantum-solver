@@ -4,6 +4,8 @@
 hypothesis (specs/BACKLOG.md, Open → Certified-bounds arc): the chained bound appeared to *violate*
 its reference, and the cause was not the bound.
 
+**Revised 2026-11-05 (chem-8ls, `SPEC_scf_stability_rule.md`):** §11: the a = 1.1 witness was the SCF stopping on a saddle point; G1, G2, G6 and G8 re-pinned, G3 retired.
+
 ---
 
 ## 1. Goal
@@ -246,3 +248,39 @@ out of scope here (no macOS environment in this session).
 this session). The original macOS numbers in this section were measured independently (2026-10-02,
 chem-7rb) and are unaffected. The rest of the Linux column rests on the numbers this spec recorded
 in §2b.
+
+## 11. chem-8ls (2026-11-05): the witness was the SCF stopping on a saddle
+
+**What changed.** Every builder now follows internal SCF instabilities to a stable minimum (`SPEC_scf_stability_rule.md`).
+- Square H₄'s D2h-symmetric RHF is a saddle at every side: lowest orbital-Hessian eigenvalue −0.53 to −0.67 Ha.
+- The §2 witness (a residue on the B1g level at a = 1.1) existed only while the free SCF stopped on that saddle. Whether it stopped there depended on the platform's rounding. That is why the witness did not reproduce on macOS (§10), and why the bead found the a = 1.1 SCF on the broken branch on its Linux container.
+- With the rule, the a = 1.1 reference is the broken-symmetry minimum on both platforms. Its lowest level is the B1g ground state with HF population 0.4692, overlap 0.685, and both cuts select it.
+
+**Old values next to new.** a = 1.1, builder default `conv_tol` = 1e-9:
+
+| source | lowest level, 1e-10 cut | lowest level, 1e-8 cut | overlap at 1e-10 | overlap at 1e-8 | p₀ |
+|---|---|---|---|---|---|
+| Linux freeze, before (§2) | B1g (residue) | Ag | 2.25e-5 | 0.667 | 5.07e-10 |
+| macOS 27, before (§10) | Ag | Ag | 0.667 | 0.667 | ~1e-29 |
+| chem-8ls: macOS 27.2 arm64 and Linux x86_64 | B1g | B1g | 0.6850 | 0.6850 | 0.46922809 |
+
+New values: pyscf 2.13.1, qiskit-nature 0.8.0, numpy 2.4.6 and scipy 1.15.3 on both platforms. On Linux the `claude-chem` image ran with OpenMP.
+
+**Gates.**
+- **G1 is re-pinned and runs everywhere.** Both cuts select index 0, and its overlap is 0.685 ± 0.005. It was: different indices, Linux-only since §10.
+- **G2 is re-pinned.** The two shipped d=1 references agree to rel 1e-8; they used to differ by more than 1000×. `SPEC_hf_overlap_subspace`'s d=1 vs d=2 head-to-head now certifies one target at this geometry.
+- **G3 is retired.** At the default `conv_tol` the (1e-10, 1e-8) window at a = 1.1 now holds one *excited* level on macOS (6.3e-10) and none on Linux. That depends on the SCF trajectory, so it is not gated.
+- **G4, G5 and G7 are unchanged.**
+- **G6 is re-pinned through the builder.** p₀ at `conv_tol` 1e-6 and 1e-13 agree to 1e-4 and exceed 0.4; measured 0.46922808 and 0.46922809. The raw-driver residue of §2b(i) is the record of the free SCF.
+  - That raw driver had no thread pin and no rule. On this Mac it still gives 2.66e-6 at 1e-6 and 1.8e-29 at 1e-13, re-measured 2026-11-05.
+  - An unpinned PySCF SCF is the configuration chem-7cx found non-deterministic on Linux. chem-8ls recorded G5/G6 varying from run to run there; the cause was not isolated further.
+  - The gate no longer uses it.
+- **G8 is re-pinned.** At 1.185, 1.19, 1.195 and 1.22 every candidate is broken-symmetry, with p₀ = 0.4625, 0.4621, 0.4617 and 0.4595. It was: some candidate is a symmetric-SCF offender with p₀ > 1e-8 (a = 1.22: 1.26e-8 on Linux, §10).
+
+**What this does to the findings.**
+- §2b(i)–(iii) stand as the record of the pre-rule builder: the residue was SCF residue, and no fixed constant separated it from physics.
+- The remedy is now at the source. On this family the builder's lowest level is never a residue, so the two constants agree on the ground state.
+- They can still disagree about *excited* levels at the default `conv_tol`, as with the 6.3e-10 level above. `SPEC_scf_conv_tol` §11 gives the sector sizes and Ritz leakage.
+- So unifying the two constants (§7) is still open, but it now affects only the size of the sector, not which ground state is certified.
+
+**Gate run.** See `SPEC_scf_stability_rule` §9.

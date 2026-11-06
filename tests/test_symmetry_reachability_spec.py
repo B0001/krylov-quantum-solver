@@ -8,6 +8,12 @@ strongly-correlated systems that matter -- leaving no irrep to match.
 THE FINDING: that objection is self-consistent, not fatal. The filter is available EXACTLY when the
 artifact is present (9/9 on the square-H4 family). Where RHF breaks symmetry the reference genuinely
 overlaps the low state (~0.45, not ~1e-10), so there is nothing to remove.
+
+chem-8ls (2026-11-05): the "artifact" half was the free SCF stopping on the D2h saddle point, at
+sides that depended on the platform's rounding. The builder now follows that instability to the
+stable broken-symmetry minimum (specs/SPEC_scf_stability_rule.md). So on this family the artifact is
+gone, and the filter unavailable, at every side. G1 still holds, as one regime; G2 and G3 assert the
+branch the rule selects (SPEC section 10).
 """
 import numpy as np
 import pytest
@@ -45,25 +51,26 @@ def test_G1_filter_is_available_exactly_when_the_artifact_is_present():
     assert not mismatches, mismatches
 
 
-# --- G2: the two regimes are genuinely distinct, not a graded continuum ---------------------------
+# --- G2: one regime -- the stability rule leaves no artifact geometry (chem-8ls) -------------------
 
-def test_G2_the_two_regimes_are_separated_by_orders_of_magnitude():
-    """Artifact geometries carry p0 < 1e-8; symmetry-broken ones carry p0 > 0.4. Nothing between."""
-    small, large = [], []
-    for a in SWEEP:
-        p0 = float(hf_population_spectrum(build_molecular_hamiltonian(atom=_square_h4(a)))[0])
-        (small if p0 < ARTIFACT_P0 else large).append(p0)
-    assert small and large, (small, large)
-    assert max(small) < 1e-7, small
-    assert min(large) > 0.4, large
+def test_G2_every_side_carries_a_physical_overlap():
+    """Was: artifact geometries carry p0 < 1e-7, symmetry-broken ones p0 > 0.4, nothing between.
+    The artifact geometries were the SCF stopping on the saddle (macOS: 1.05/1.10/1.35 in this
+    sweep; Linux: 1.15/1.20/1.25/1.30). With the stability rule every side is on the minimum, and p0
+    falls smoothly from 0.476 to 0.440 (SPEC section 10)."""
+    p0 = [float(hf_population_spectrum(build_molecular_hamiltonian(atom=_square_h4(a)))[0])
+          for a in SWEEP]
+    assert min(p0) > 0.4 and max(p0) < 0.5, p0
+    assert all(x > y for x, y in zip(p0, p0[1:])), p0              # monotone in a: no branch jump
 
 
 # --- G3: the mechanism -- unavailability tracks a genuinely lower broken-symmetry solution --------
 
-@pytest.mark.parametrize("a", (1.20, 1.40))
+@pytest.mark.parametrize("a", SWEEP)
 def test_G3_unavailable_means_RHF_found_a_lower_solution(a):
     """The filter refuses precisely because the reference is not a symmetry eigenfunction -- and
-    that reference is variationally BETTER, so refusing is correct, not a shortcoming."""
+    that reference is variationally BETTER, so refusing is correct, not a shortcoming. Gated at 1.20
+    and 1.40 only until chem-8ls; with the stability rule it holds at every side."""
     geom = _square_h4(a)
     broken, d_e = scf_symmetry_status(geom)
     assert broken, (a, d_e)
@@ -71,15 +78,6 @@ def test_G3_unavailable_means_RHF_found_a_lower_solution(a):
     assert hf_orbital_irreps(geom) is None
     assert not symmetry_filter_available(geom)
 
-
-@pytest.mark.parametrize("a", (1.05, 1.10, 1.35))
-def test_G3_available_means_the_symmetric_solution_is_the_RHF_solution(a):
-    geom = _square_h4(a)
-    broken, d_e = scf_symmetry_status(geom)
-    assert not broken, (a, d_e)
-    assert abs(d_e) < SYMMETRY_BREAK_TOL, (a, d_e)
-    irreps = hf_orbital_irreps(geom)
-    assert irreps is not None and len(irreps) == 4, irreps
 
 
 # --- G4: the filter is not vacuous -- it must accept ordinary systems ------------------------------
