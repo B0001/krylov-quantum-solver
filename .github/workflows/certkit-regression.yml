@@ -20,6 +20,7 @@ on:
       # break it and the gate dies before collecting a single test.
       - "pytest_invariants/**"
       - "tests/test_certkit_regression_gate_spec.py"
+      - "tests/test_certkit_return_paths_spec.py"
       - "specs/SPEC_certkit_regression_gate.md"
       - "pyproject.toml"
       - ".github/workflows/certkit-regression.yml"
@@ -55,7 +56,9 @@ jobs:
       # (not `pytest`) puts the repo root on sys.path, which is how the suite imports its
       # top-level modules -- same invocation as the Makefile.
       - name: Every emitted certificate must pass the independent checker
-        run: uv run --no-sync python -m pytest tests/test_certkit_regression_gate_spec.py -q
+        run: >-
+          uv run --no-sync python -m pytest -q
+          tests/test_certkit_regression_gate_spec.py tests/test_certkit_return_paths_spec.py
 
       # A failing gate is a claim that stopped verifying. Keep the evidence.
       - name: Keep the certificates when the gate fails

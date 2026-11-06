@@ -15,6 +15,7 @@ reproduce, up to Trotter error (which shrinks with more Trotter ``reps`` / highe
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import List, Optional
 
 import numpy as np
@@ -25,7 +26,7 @@ from qiskit.synthesis import SuzukiTrotter
 from scipy.sparse.linalg import eigsh
 
 from hybrid_quantum_solver.molecular_hamiltonian import MolecularHamiltonian
-from hybrid_quantum_solver.quantum_krylov_solver import KrylovStep, solve_generalized_eig
+from hybrid_quantum_solver.quantum_krylov_solver import KrylovStep, certify_state, ritz_pairs
 
 
 def canonical_term_order(hamiltonian: SparsePauliOp) -> SparsePauliOp:
@@ -129,21 +130,23 @@ class TrotterKrylovSolver:
         while len(self._basis) < dim:
             self._basis.append(self._basis[-1].evolve(self.step_circuit))
 
-    def solve(self, krylov_dim: int) -> KrylovStep:
+    def solve(self, krylov_dim: int, certify: str | Path | None = None) -> KrylovStep:
+        """Ground-state Ritz energy; ``certify`` as in ``QuantumKrylovSolver.solve``."""
         if krylov_dim < 1:
             raise ValueError("krylov_dim must be >= 1")
         self._ensure_basis(krylov_dim)
         B = np.array([s.data for s in self._basis[:krylov_dim]])
         S = B.conj() @ B.T
         H = B.conj() @ self._H.dot(B.T)
-        energy, rank = solve_generalized_eig(
-            0.5 * (H + H.conj().T), 0.5 * (S + S.conj().T), self.threshold
-        )
-        return KrylovStep(dim=krylov_dim, rank=rank, energy=energy + self.offset)
+        vals, C, rank = ritz_pairs(0.5 * (H + H.conj().T), 0.5 * (S + S.conj().T), self.threshold)
+        cert = None if certify is None else certify_state(self.mh, C[:, 0] @ B, vals[0], certify)
+        return KrylovStep(dim=krylov_dim, rank=rank, energy=float(vals[0]) + self.offset,
+                          certificate=cert)
 
-    def convergence(self, max_dim: int) -> List[KrylovStep]:
+    def convergence(self, max_dim: int, certify: str | Path | None = None) -> List[KrylovStep]:
         self._ensure_basis(max_dim)
-        return [self.solve(m) for m in range(1, max_dim + 1)]
+        return [self.solve(m, None if certify is None else Path(certify) / f"M{m}")
+                for m in range(1, max_dim + 1)]
 
 
 if __name__ == "__main__":

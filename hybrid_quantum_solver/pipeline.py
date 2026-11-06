@@ -20,7 +20,8 @@ Two entry points:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from pathlib import Path
+from typing import Any, List, Optional, Tuple
 
 import numpy as np
 
@@ -49,6 +50,9 @@ class PipelineResult:
     dt: float
     shots: Optional[int]
     convergence: List[Tuple[int, int, float]] = field(default_factory=list)  # (M, rank, energy)
+    # With certify=: one certkit_bridge.Verdict per ``convergence`` entry, in the same order;
+    # [-1] covers ``computed_energy``. Empty when no certificates were asked for.
+    certificates: List[Any] = field(default_factory=list)
 
     def summary(self) -> str:
         ref = "n/a" if self.reference_energy is None else f"{self.reference_energy:.6f}"
@@ -68,14 +72,16 @@ def _run(
     seed: Optional[int],
     reference_energy: Optional[float],
     track_convergence: bool,
+    certify: str | Path | None,
 ) -> PipelineResult:
     sigma = shot_noise_sigma(shots) if shots else 0.0
     solver = QuantumKrylovSolver(mh, dt=dt, noise_sigma=sigma, seed=seed)
 
     if track_convergence:
-        steps = solver.convergence(krylov_dim)
+        steps = solver.convergence(krylov_dim, certify=certify)
     else:
-        steps = [solver.solve(krylov_dim)]
+        steps = [solver.solve(krylov_dim,
+                              None if certify is None else Path(certify) / f"M{krylov_dim}")]
     final = steps[-1]
 
     err = None if reference_energy is None else abs(final.energy - reference_energy)
@@ -90,6 +96,7 @@ def _run(
         dt=solver.dt,
         shots=shots,
         convergence=[(s.dim, s.rank, s.energy) for s in steps],
+        certificates=[] if certify is None else [s.certificate for s in steps],
     )
 
 
@@ -107,11 +114,13 @@ def run_geometry(
     reference: str = "exact",
     track_convergence: bool = True,
     conv_tol: float = 1e-9,
+    certify: str | Path | None = None,
 ) -> PipelineResult:
     """Run the solver from a molecular geometry string (PySCFDriver under the hood).
 
     ``reference="exact"`` adds a dense-diagonalisation reference when the qubit count is small
-    enough; otherwise no reference is computed.
+    enough; otherwise no reference is computed. ``certify``: a directory; every returned energy
+    gets a certkit certificate checked out of process (``PipelineResult.certificates``).
     """
     mh = build_molecular_hamiltonian(
         atom=atom, basis=basis, charge=charge, spin=spin,
@@ -121,7 +130,7 @@ def run_geometry(
     reference_energy = None
     if reference == "exact" and mh.num_qubits <= _EXACT_REFERENCE_MAX_QUBITS:
         reference_energy = mh.ground_state_energy()
-    return _run(mh, krylov_dim, dt, shots, seed, reference_energy, track_convergence)
+    return _run(mh, krylov_dim, dt, shots, seed, reference_energy, track_convergence, certify)
 
 
 def run_from_integrals(
@@ -135,13 +144,15 @@ def run_from_integrals(
     seed: Optional[int] = None,
     reference_energy: Optional[float] = None,
     track_convergence: bool = True,
+    certify: str | Path | None = None,
 ) -> PipelineResult:
     """Run the solver from precomputed CASCI active-space integrals (CIF/materials path).
 
     Pass ``reference_energy = cas.e_tot`` (the active-space CASCI total) as the internal
     convergence target -- in a complete active space the Krylov estimate should approach it.
+    ``certify`` as in ``run_geometry``.
     """
     mh = build_hamiltonian_from_integrals(
         h1, eri, num_particles=num_particles, energy_offset=e_core
     )
-    return _run(mh, krylov_dim, dt, shots, seed, reference_energy, track_convergence)
+    return _run(mh, krylov_dim, dt, shots, seed, reference_energy, track_convergence, certify)

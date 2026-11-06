@@ -11,7 +11,9 @@ whether the solver's bound survives an independent re-derivation.
 
 Run:  uv sync --inexact --extra certkit  then  uv run python certkit_bridge.py [H2|H4|H4-stretched|N2]
 
-The gate over what this emits is tests/test_certkit_regression_gate_spec.py.
+The gate over what this emits is tests/test_certkit_regression_gate_spec.py. The solver's own
+return paths certify through certify_ground_state (``certify=``), gated by
+tests/test_certkit_return_paths_spec.py.
 """
 from __future__ import annotations
 
@@ -179,6 +181,55 @@ def emit(enc: dict, rule: str, x, lo: float, hi: float, out: Path, name: str,
     ok, line = check_certificate(cert_path, out / "operator.json")
     print(f"  [{name:23s}] {line or '(no checker output)'}")
     return Verdict(name, rule, ok, line, float(lo), float(hi))
+
+
+def real_witness(H, psi):
+    """The real unit vector a certificate can carry, from a complex solver state.
+
+    H is real symmetric, so <psi|H|psi> is the norm-weighted mean of the Rayleigh quotients
+    of Re(psi) and Im(psi): the lower of the two is never above psi's own. krylov_witness
+    picks by weight instead, which can land above the energy the solver returned.
+    """
+    parts = [p / np.linalg.norm(p) for p in (psi.real, psi.imag) if np.linalg.norm(p) > 0]
+    return min(parts, key=lambda p: float(p @ (H @ p)))
+
+
+def certify_ground_state(mh, psi, energy: float, out: Path) -> Verdict:
+    """Certificate for one ground-state energy a solver returned, checked out of process.
+
+    ``energy`` is the returned value in the ELECTRONIC frame and ``psi`` the state it is the
+    Ritz value of (portfolio-cir). The claim is lambda_min in [floor, energy]: the certified
+    ceiling is the returned number itself, padded, so VERIFIED means that number is a proven
+    upper bound on the ground state -- not merely that some vector has a low Rayleigh
+    quotient (G5 of the regression gate shows how little that is worth). A noisy energy
+    below its own witness's Rayleigh quotient therefore ABSTAINs, as does one below the
+    floor (an inverted enclosure).
+
+    Routes, tightest first: temple_inertia when certkit will materialise the matrix and
+    Temple's bound is finite, then gershgorin_rayleigh. The first VERIFIED wins; otherwise
+    the last abstention is returned. Writes ``out/operator.json`` plus one file per route
+    tried.
+    """
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    enc = encode_hamiltonian(mh)
+    (out / "operator.json").write_text(json.dumps(enc, indent=2))
+    H = mh.qubit_hamiltonian.to_matrix(sparse=True).real.tocsc()
+    x = real_witness(H, np.asarray(psi))
+    th, var = mean_and_variance(H, x)
+
+    routes = []
+    if len(x) <= DENSE_LIMIT:
+        beta, _ = full_space_beta(H)
+        if th < beta:
+            routes.append(("temple_inertia", th - var / (beta - th), beta, "certificate_temple"))
+    routes.append(("gershgorin_rayleigh", gershgorin_lower(enc), None, "certificate_gershgorin"))
+    for rule, lo, beta, name in routes:
+        pad = pad_claim(energy, 1e-9, len(x), energy - lo)
+        v = emit(enc, rule, x, lo - pad, energy + pad, out, name, beta=beta)
+        if v.ok:
+            break
+    return v
 
 
 def run_case(case: str, out: Path, conv_tol: float = 1e-9) -> tuple[float, list[Verdict]]:
