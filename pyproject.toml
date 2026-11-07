@@ -38,12 +38,16 @@ dependencies = [
 [project.optional-dependencies]
 # certkit_bridge.py emits certificates for the independent checker to verify; robot/workspace.py
 # (CADE Milestone D2) reuses certkit.interval.Iv for outward-rounded workspace-boundary checks.
-# Pinned to an exact tag on purpose: the checker's value is that it is a fixed,
+# Pinned to an exact ref on purpose: the checker's value is that it is a fixed,
 # independent artifact, so tracking a moving ref would defeat it. The bridge
 # previously relied on PYTHONPATH pointing at a sibling checkout, which pinned
 # nothing at all. Bumping this pin is a deliberate act -- see certkit's
 # CHANGELOG and run its conformance suite before you do.
-certkit = ["certkit @ git+https://github.com/B0001/certkit@v0.2.0"]
+#
+# A full commit SHA (certkit main, 2026-11-05), not a tag: v0.2.0 lacks certkit-330
+# (5597008, a false-VERIFIED fix) and the soundness fixes after it, and no later tag
+# exists yet. Move to the v0.2.1 tag once it exists.
+certkit = ["certkit @ git+https://github.com/B0001/certkit@c2582aa61e36622c9010b41761e1692368071e7d"]
 
 gpu = [
     # CUDA does not exist on macOS and cupy-cuda12x ships no darwin wheels for any arch, so this

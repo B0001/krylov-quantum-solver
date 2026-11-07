@@ -41,11 +41,11 @@ jobs:
         with:
           version: "0.12.3"
 
-      # The certkit extra is an exact git tag and is deliberately absent from uv.lock (the
-      # pin is a deliberate act -- see pyproject.toml), so this installs from pyproject
-      # rather than syncing the lock. `uv pip` keeps CLAUDE.md's rule that bare pip and bare
-      # python are never invoked. Editable, so the top-level modules the gate imports
-      # (certkit_bridge, temple_bounds) resolve the same way they do locally.
+      # The certkit extra pins an exact commit (a deliberate act -- see pyproject.toml), so
+      # installing from pyproject gets exactly that checker; the rest of the environment
+      # resolves fresh rather than from uv.lock. `uv pip` keeps CLAUDE.md's rule that bare
+      # pip and bare python are never invoked. Editable, so the top-level modules the gate
+      # imports (certkit_bridge, temple_bounds) resolve the same way they do locally.
       - name: Install the solver and the pinned checker
         run: |
           uv venv --python 3.13

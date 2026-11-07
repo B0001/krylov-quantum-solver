@@ -1047,11 +1047,16 @@ hypothesis whose death is informative is worth more here than a safe one.
   from adversarial review:** exit 1 means ABSTAIN *or* crash, and a consumer that falls back to
   stderr when stdout is empty cannot tell them apart — a checker crashing on a certificate
   pinned ABSTAIN passed silently until G1 was made to compare the checker's own verdict line
-  against its exit code.
+  against its exit code. **Third finding, bumping the pin to certkit `c2582aa` (chem-cgb,
+  2026-11-06):** a checker fix reopened that hole. Since certkit-3zr an exception inside a rule
+  is printed as an ABSTAIN whose reason is `internal error: ...`, exit 1. The verdict line now
+  agrees with the exit code, so a checker crashing on every sector certificate passed G1 again
+  (shown by mutation). `check_certificate` now reports that case, and exit 2, as CRASH, and a
+  gate test injects both into the real checker. No pinned value moved in the bump.
   → [`SPEC_certkit_regression_gate.md`](SPEC_certkit_regression_gate.md) (gates G1–G5 in
   `tests/test_certkit_regression_gate_spec.py`; electronic frame, global λ_min and **not** the
-  reachable-sector one, coverage is the producer's four cases until certificate emission reaches
-  the solver's return path).
+  reachable-sector one; coverage is the producer's four cases, each with the solver's own
+  return-path certificate since chem-cgb).
 
 - [x] **portfolio-cir: does every ground-state energy the solver returns get a certificate
   *about that energy*?** *(2026-11-05)* — **DONE.** Every energy-returning method now takes

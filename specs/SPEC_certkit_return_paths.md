@@ -46,7 +46,7 @@ the gate.
      the subspace matrices; its certificate carries `sum_k c_k U^k|HF>`, rebuilt as a
      statevector. That works because the device is simulated. On real hardware it would not
      scale.
-  6. Same checker caveat as the sibling gate: out of process from the pinned release, but in
+  6. Same checker caveat as the sibling gate: out of process from the pinned commit, but in
      the producer's own venv, not a dedicated one.
 
 ## 3. Approach

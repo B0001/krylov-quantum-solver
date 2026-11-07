@@ -133,7 +133,7 @@ wheels = [
 [[package]]
 name = "certkit"
 version = "0.2.0"
-source = { git = "https://github.com/B0001/certkit?rev=v0.2.0#30b2335e6902674eb92a76e1d0172d13c8a2392e" }
+source = { git = "https://github.com/B0001/certkit?rev=c2582aa61e36622c9010b41761e1692368071e7d#c2582aa61e36622c9010b41761e1692368071e7d" }
 
 [[package]]
 name = "cffi"
@@ -979,7 +979,7 @@ test = [
 requires-dist = [
     { name = "ase", specifier = ">=3.22" },
     { name = "block2", marker = "extra == 'dmrg'", specifier = ">=0.5.3" },
-    { name = "certkit", marker = "extra == 'certkit'", git = "https://github.com/B0001/certkit?rev=v0.2.0" },
+    { name = "certkit", marker = "extra == 'certkit'", git = "https://github.com/B0001/certkit?rev=c2582aa61e36622c9010b41761e1692368071e7d" },
     { name = "cupy-cuda12x", marker = "sys_platform != 'darwin' and extra == 'gpu'", specifier = ">=12.0.0" },
     { name = "cvxpy", specifier = ">=1.9" },
     { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.141.1" },

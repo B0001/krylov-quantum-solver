@@ -11,8 +11,9 @@ whether the solver's bound survives an independent re-derivation.
 
 Run:  uv sync --inexact --extra certkit  then  uv run python certkit_bridge.py [H2|H4|H4-stretched|N2]
 
-The gate over what this emits is tests/test_certkit_regression_gate_spec.py. The solver's own
-return paths certify through certify_ground_state (``certify=``), gated by
+The gate over what this emits is tests/test_certkit_regression_gate_spec.py, which pins, per
+case, the solver's own return-path certificate too (run_case's solve/ entry). Every return
+path certifies through certify_ground_state (``certify=``); all of them are gated on H2 by
 tests/test_certkit_return_paths_spec.py.
 """
 from __future__ import annotations
@@ -47,8 +48,8 @@ class Verdict(NamedTuple):
     """One certificate, and what the independent checker said about it.
 
     ``line`` is the checker's first stdout line, verbatim, or a ``CRASH``-prefixed
-    diagnostic if it printed no verdict at all. Both an ABSTAIN and a crash exit 1, so
-    the line is the only thing that tells them apart.
+    diagnostic if it gave no verdict at all (see ``check_certificate``). A crash can exit 1
+    just as an ABSTAIN does, so the line is the only thing that tells them apart.
     """
 
     name: str
@@ -149,27 +150,33 @@ def build_certificate(enc: dict, rule: str, x, lo: float, hi: float,
     return seal(cert)
 
 
-def check_certificate(cert_path: Path, operator_path: Path) -> tuple[bool, str]:
+def check_certificate(cert_path: Path, operator_path: Path, op_ref: str) -> tuple[bool, str]:
     """Run the checker as a separate process over the files, and report what it said.
 
-    The verdict is the checker's exit status. This file is a producer and is
-    untrusted; it must not adjudicate its own claims in its own process.
+    The verdict is the checker's exit status, on the question certkit's INTEGRATION.md says
+    to ask: is this a lambda_min_enclosure (--require-kind) of the operator the producer
+    encoded, ``op_ref`` (--operator-ref)? A true claim of another kind, or a swapped operator
+    file, then abstains instead of verifying. This file is a producer and is untrusted; it
+    must not adjudicate its own claims in its own process.
 
-    Exit 1 covers both ABSTAIN and a crash, and confusing the two would let a broken
-    checker pass for an expected abstention. The checker prints its verdict to stdout
-    and nothing else there, so an empty stdout means it died: that is returned with a
-    CRASH prefix, never as a bare traceback line, which a caller matching on the text
-    would otherwise read as a verdict.
+    A crash must never pass for an expected abstention, and the checker can crash three
+    ways: exit 2 (no verdict, certkit-3zr); dying before it prints, which still exits 1;
+    and, also since certkit-3zr, an exception inside a rule, which it prints as an ABSTAIN
+    whose reason is "internal error: ...". All three come back CRASH-prefixed, never as a
+    bare line that a caller matching on "ABSTAIN" would read as the expected refusal.
     """
     proc = subprocess.run(
-        [sys.executable, "-m", "certkit.cli", "check", str(cert_path), str(operator_path)],
+        [sys.executable, "-m", "certkit.cli", "check", "--require-kind", "lambda_min_enclosure",
+         "--operator-ref", op_ref, str(cert_path), str(operator_path)],
         capture_output=True, text=True,
     )
-    verdict = proc.stdout.strip().splitlines()
-    if verdict:
-        return proc.returncode == 0, verdict[0]
+    line = proc.stdout.strip().split("\n", 1)[0]
+    internal = line.removeprefix("ABSTAIN").lstrip().startswith("internal error:")
+    if line and proc.returncode in (0, 1) and not internal:
+        return proc.returncode == 0, line
     err = proc.stderr.strip().splitlines()
-    return False, f"CRASH  {err[-1] if err else '(no output at all)'}"
+    why = line or (err[-1] if err else "(no output at all)")
+    return False, f"CRASH  exit {proc.returncode}: {why}"
 
 
 def emit(enc: dict, rule: str, x, lo: float, hi: float, out: Path, name: str,
@@ -178,7 +185,7 @@ def emit(enc: dict, rule: str, x, lo: float, hi: float, out: Path, name: str,
     cert = build_certificate(enc, rule, x, lo, hi, beta)
     cert_path = out / f"{name}.json"
     cert_path.write_text(json.dumps(cert, indent=2))
-    ok, line = check_certificate(cert_path, out / "operator.json")
+    ok, line = check_certificate(cert_path, out / "operator.json", operator_ref(enc))
     print(f"  [{name:23s}] {line or '(no checker output)'}")
     return Verdict(name, rule, ok, line, float(lo), float(hi))
 
@@ -286,6 +293,13 @@ def run_case(case: str, out: Path, conv_tol: float = 1e-9) -> tuple[float, list[
     verdicts.append(emit(enc, "gershgorin_rayleigh", x, lo - pad, th0 + pad, out,
                          "certificate_gershgorin"))
 
+    # What the solver's own return path emits for the energy it returns (portfolio-cir),
+    # through the public certify= argument: certify_ground_state, whose ceiling is the
+    # returned number rather than a witness's Rayleigh quotient. One verdict, from the route
+    # that won. It writes its own operator.json and reuses the route filenames, hence solve/.
+    v = QuantumKrylovSolver(mh).solve(KRYLOV_DIM, certify=out / "solve").certificate
+    verdicts.append(v._replace(name=f"solve/{v.name}"))
+
     for v in verdicts:
         if v.ok:
             print(f"  {v.name:23s}   width {v.hi - v.lo:.3e}"
@@ -304,7 +318,8 @@ def main() -> int:
     # This disjunction is now over every emitted certificate, including the sector one, whose
     # verdict the pre-refactor code dropped on the floor. No observable change -- the sector
     # route has never verified -- but it is a wider disjunction than what it replaced, so say
-    # so rather than let a reader assume the old exclusion still holds.
+    # so rather than let a reader assume the old exclusion still holds. It also covers the
+    # solver's own return-path certificate (solve/), since chem-cgb.
     return 0 if any(v.ok for v in verdicts) else 1
 
 

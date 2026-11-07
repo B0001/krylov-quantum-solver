@@ -1,7 +1,8 @@
 # SPEC: Every emitted certificate must pass the independent checker, in CI
 
 **Status:** IMPLEMENTED — gates G1–G5 green (`tests/test_certkit_regression_gate_spec.py`,
-`.github/workflows/certkit-regression.yml`).
+`.github/workflows/certkit-regression.yml`). Since `chem-cgb` the table also pins the solver's
+own return-path certificate per case, and the pin is certkit `c2582aa` (§8, "Pin history").
 
 ---
 
@@ -9,7 +10,7 @@
 
 `certkit_bridge.py` turns a QKSD Krylov solve into certificates and hands them to an
 independent checker. Nothing enforced that the answer stayed *yes*. Claim: every certificate
-this repo's producer emits still verifies under the exact certkit release pinned in
+this repo's producer emits still verifies under the exact certkit commit pinned in
 `pyproject.toml`, and the energy each verified certificate certifies is still within chemical
 accuracy of the exact lowest eigenvalue of the qubit matrix — checked automatically, on every
 push, by a checker that never shares a process with the solver. Falsifiable at machine
@@ -24,7 +25,7 @@ bound that drifts past 1.6 mHa fails the gate.
   the other half: the checker is known-good, so what does it say about *our* certificates.
 - **What we can claim if the gates pass:** the Krylov ground-state energies this repo
   produces carry enclosures that an independent, out-of-process checker re-derives from the
-  certificate and the operator alone, at a pinned release, with the exact energy inside every
+  certificate and the operator alone, at a pinned commit, with the exact energy inside every
   one of them and the certified upper bound within chemical accuracy.
 - **What we cannot claim.** Three limits, all load-bearing:
   1. **The checker alone proves almost nothing about the solver.** The `gershgorin_rayleigh`
@@ -34,10 +35,13 @@ bound that drifts past 1.6 mHa fails the gate.
      comes from G3/G4 comparing against a reference. Neither is sufficient alone.
   2. **Coverage is the producer's four cases, not the test suite.** `certkit_bridge.py` emits
      for H2, H4, H4-stretched and N2. No regression test in `tests/` emits a certificate.
-     Since `portfolio-cir` every solver return path *can* (`certify=`), gated separately by
-     `SPEC_certkit_return_paths.md`, whose certificates also pin the ceiling to the returned
-     energy rather than to the witness's Rayleigh quotient. Making that non-bypassable is
-     `portfolio-0pc`, still open.
+     Since `portfolio-cir` every solver return path *can* (`certify=`), and the certificate
+     `QuantumKrylovSolver.solve(certify=)` emits is pinned here per case, as `solve/<route>`
+     (`chem-cgb`). Its ceiling is the returned energy rather than the witness's Rayleigh
+     quotient. The other return paths (Trotter, hardware, SKQD, pipeline) emit through the
+     same `certify_ground_state` but from their own witnesses, and are gated on H2 only, by
+     `SPEC_certkit_return_paths.md`. Making certification non-bypassable is `portfolio-0pc`,
+     still open.
   3. **Electronic frame.** Certificates are about the qubit matrix; `mh.energy_offset` is a
      trusted addition made outside it. The pinned references here are therefore not the total
      energies the rest of the suite asserts.
@@ -45,12 +49,15 @@ bound that drifts past 1.6 mHa fails the gate.
 
 ## 3. Approach
 
-`certkit_bridge.run_case(case, out)` emits every certificate a case supports and checks each
-one by running `python -m certkit.cli check <certificate> <operator>` as a separate process,
-returning the exact electronic-frame `lambda_min` and one `Verdict` per certificate. The gate
-pins, per case, the reference energy and the exact set of certificates with each one's
-expected status, then asserts the four properties below. CI installs the `certkit` extra —
-the exact git tag from `pyproject.toml` — and runs this gate file.
+`certkit_bridge.run_case(case, out)` emits every certificate a case supports, including the one
+the solver's return path emits for the energy it returns, and checks each one by running
+`python -m certkit.cli check --require-kind lambda_min_enclosure --operator-ref <ref>
+<certificate> <operator>` as a separate process — the invocation certkit's INTEGRATION.md
+prescribes, so a true claim of another kind, or a swapped operator file, abstains. It returns
+the exact electronic-frame `lambda_min` and one `Verdict` per certificate. The gate pins, per
+case, the reference energy and the exact set of certificates with each one's expected status,
+then asserts the four properties below. CI installs the `certkit` extra — the exact commit
+from `pyproject.toml` — and runs this gate file.
 
 **Reference:** exact `lambda_min` of the qubit Hamiltonian by dense diagonalization
 (`mh.ground_state_energy() - mh.energy_offset`), itself cross-checked against independent
@@ -69,7 +76,7 @@ number gated here is not the one the temple_bracket gates compare against.
 
 ```
 certkit_bridge.Verdict                                   -> (name, rule, ok, line, lo, hi)
-certkit_bridge.check_certificate(cert_path, op_path)     -> (ok, first stdout line)
+certkit_bridge.check_certificate(cert_path, op_path, op_ref) -> (ok, first stdout line or CRASH)
 certkit_bridge.emit(enc, rule, x, lo, hi, out, name, beta=None) -> Verdict
 certkit_bridge.run_case(case, out)                       -> (lambda_min, [Verdict])
 .github/workflows/certkit-regression.yml                 -> the CI gate
@@ -78,7 +85,9 @@ certkit_bridge.run_case(case, out)                       -> (lambda_min, [Verdic
 Certificate filenames are now per route (`certificate_sector`, `certificate_temple`,
 `certificate_gershgorin`). The old mode-dependent `certificate.json`, which meant
 `temple_inertia` or `gershgorin_rayleigh` depending on whether the dense route succeeded,
-cannot be pinned by a gate and is gone.
+cannot be pinned by a gate and is gone. The return-path certificate lives in `<case>/solve/`
+(its own `operator.json`, the same route filenames) and its `Verdict` is named
+`solve/<route>`.
 
 ## 5. Acceptance criteria (validation gates)
 
@@ -90,8 +99,17 @@ cannot be pinned by a gate and is gone.
   take `eps` from the solver's own second Ritz pair, which the checker cannot discharge by
   inertia count. Only the status is pinned, not the reason — the reason varies with Pauli
   term ordering, which is not stable across processes.
+
+  The checker can crash three ways, and `check_certificate` turns each into a `CRASH` line:
+  exit 2 (its own "no verdict", since certkit-3zr), dying before it prints (exit 1), and an
+  exception inside a rule. Since certkit-3zr the checker prints that last one as an ABSTAIN
+  with reason `internal error: ...`, exit 1, which is the very status the sector certificates
+  are pinned to. `test_G1_crash_guard…` injects the first and third into the real checker
+  process. Checked by mutation: crashing the checker on every sector certificate passes G1
+  with the pre-`chem-cgb` bridge on certkit `c2582aa`, and fails it with this one.
 - **G2 — the emitted set is exactly the pinned set.** A route that silently stops emitting is
-  a loss of coverage, not a pass.
+  a loss of coverage, not a pass. For `solve/<route>` the name is the route that won, so a
+  return path that drops from Temple to Gershgorin fails here.
 - **G3 — soundness. DEFINITION OF DONE.** The exact `lambda_min` lies inside every VERIFIED
   enclosure, and the re-derived reference agrees with the pinned literal to `< 1e-6` Ha. One
   escape kills the claim.
@@ -130,10 +148,11 @@ information where it means something and avoids the pad where it does not.
 
 ## 7. Out of scope
 
-- Emitting certificates from the solver's return path, or from existing regression tests
-  (`portfolio-cir`, `portfolio-0pc`).
+- Emitting certificates from existing regression tests, or making certification
+  non-bypassable (`portfolio-0pc`). Pinning, per case, the return paths other than
+  `QuantumKrylovSolver.solve`: `SPEC_certkit_return_paths.md` gates them on H2.
 - Running the checker in a *separate environment* from the producer. It already runs
-  out of process from a pinned release; a dedicated checker venv — certkit has zero runtime
+  out of process from a pinned commit; a dedicated checker venv — certkit has zero runtime
   dependencies, so it is cheap — would be strictly stronger and is a good follow-up.
 - Claim kinds certkit does not have: gaps, dipoles, relative energies, overlaps. The
   `certified_*` gates assert quantities no single certificate can express.
@@ -172,10 +191,28 @@ information where it means something and avoids the pad where it does not.
   other file-writing test here, so a CI failure can upload the certificates as artifacts. It
   overwrites only what it emits: stale files from earlier runs are not cleared.
 
+### Pin history
+
+- **v0.2.0 (`30b2335`) → `c2582aa` (certkit `main`, 2026-11-05; `chem-cgb`).** v0.2.0 lacks
+  certkit-330 (`5597008`, a false-VERIFIED fix) and the soundness fixes after it, and no later
+  tag exists, so the pin is the full SHA until v0.2.1 is cut. Done by pyproject's rule:
+  certkit's CHANGELOG was read from v0.2.0 to `c2582aa`, and its conformance suite was run
+  against `c2582aa` installed alone in a fresh venv, as `certkit-conformance.yml` does: 14/14.
+  **No pinned value moved.** All 13 certificates the four cases emit (run_case's nine, plus
+  the four return-path ones) got the same status, rule and checker line under both pins, with
+  bit-identical `lo`, `hi` and reference. That fits the fixes: 330's forged memo key needs a
+  bundle or a dependency, and this repo checks one certificate at a time with neither. What
+  changed is the protocol. The `internal error:` abstention reopened G1's crash guard (§5).
+  A VERIFIED is scoped only when the caller asks (`--require-kind`, `--operator-ref`), so
+  `check_certificate` now asks. Checked: a true `lambda_min <= 1e300` rayleigh claim about
+  H2 exits 0 on the bare CLI and abstains through `check_certificate`. The `operator_ref`
+  and `metric_ref` fields portfolio-4gv added are on certkit's own `Verdict`, which nothing
+  here imports; `certkit_bridge.Verdict` is unchanged.
+
 ## 9. Deliverables
 
 - `certkit_bridge.py` — `Verdict`, `check_certificate`, `emit`, `run_case` (+ `__main__`).
-- `tests/test_certkit_regression_gate_spec.py` — gates G1–G5.
+- `tests/test_certkit_regression_gate_spec.py` — gates G1–G5, plus G1's crash guard.
 - `.github/workflows/certkit-regression.yml` — the CI job.
 - `scripts/run_gates.sh` — exit 5 (nothing collected) reported as SKIP, not FAIL; covered by
   `tests/test_gate_runner.py`.
