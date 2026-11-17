@@ -36,7 +36,9 @@ def test_hardware_krylov_matches_fci_exact():
 def test_hardware_krylov_under_shot_noise_is_bounded():
     mh = build_molecular_hamiltonian(**H2)
     fci = mh.ground_state_energy()
-    energies = [HardwareKrylovSolver(mh, shots=8192, seed=s).solve(3).energy for s in range(3)]
+    # Raw estimates throughout the noisy tests below: a noisy energy may not be certifiable.
+    energies = [HardwareKrylovSolver(mh, shots=8192, seed=s).solve(3).unverified_energy
+                for s in range(3)]
     assert all(np.isfinite(e) for e in energies)
     assert max(abs(e - fci) for e in energies) < 0.05    # bounded (mHa-scale), not -800 Ha
 
@@ -47,7 +49,7 @@ def test_hardware_krylov_under_device_noise_runs():
     mh = build_molecular_hamiltonian(**H2)
     fci = mh.ground_state_energy()
     nm = build_depolarizing_noise_model(1e-3, 1e-2, 1e-2)
-    energy = HardwareKrylovSolver(mh, shots=4096, noise_model=nm, seed=0).solve(2).energy
+    energy = HardwareKrylovSolver(mh, shots=4096, noise_model=nm, seed=0).solve(2).unverified_energy
     assert np.isfinite(energy)
     assert abs(energy - fci) < 0.2                        # perturbed by device noise, still bounded
 
@@ -61,9 +63,10 @@ def test_zne_reduces_device_noise_error():
     # Gate noise only (global folding amplifies gate noise, not readout); good 2-qubit error rate.
     nm = build_depolarizing_noise_model(5e-5, 5e-4, 0.0)
 
-    err_noisy = abs(HardwareKrylovSolver(mh, noise_model=nm).solve(2).energy - fci)
+    err_noisy = abs(HardwareKrylovSolver(mh, noise_model=nm).solve(2).unverified_energy - fci)
     err_zne = abs(
-        HardwareKrylovSolver(mh, noise_model=nm, zne_scale_factors=[1, 3, 5]).solve(2).energy - fci
+        HardwareKrylovSolver(mh, noise_model=nm, zne_scale_factors=[1, 3, 5]
+                             ).solve(2).unverified_energy - fci
     )
 
     assert err_noisy > 1e-3        # device noise genuinely present (~9 mHa)

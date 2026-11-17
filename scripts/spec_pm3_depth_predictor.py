@@ -88,7 +88,8 @@ def find_escape_witnesses(candidates=CANDIDATES, m_search=M_SEARCH):
 
         picked = None
         for m in m_search:
-            energies, states = solver.eigenstates(m, n_states=d + 1)
+            spectrum, states = solver.uncertified_eigenstates(m, n_states=d + 1)
+            energies = spectrum.unverified_energies
             centers = [energies[k] - offset for k in range(d + 1)]
             sigmas = [residual_norm(Hs, states[k], centers[k]) for k in range(d + 1)]
             disjoint = _weinstein_intervals_disjoint(centers, sigmas)

@@ -43,7 +43,7 @@ def _endpoint_stats(mh: MolecularHamiltonian, m: int):
     frame, matching `certified_noise`'s convention: offset added later, at composition time)."""
     solver = QuantumKrylovSolver(mh)
     H = mh.qubit_hamiltonian.to_matrix(sparse=True).tocsc()
-    psi0 = solver.eigenstates(m, n_states=1)[1][0]
+    psi0 = solver.uncertified_eigenstates(m, n_states=1)[1][0]
     th0, var0 = mean_and_variance(H, psi0)
     return th0, var0 + th0 * th0
 

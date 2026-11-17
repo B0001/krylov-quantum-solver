@@ -88,7 +88,7 @@ def _leak(atom, conv_tol):
     """||P_unreach v|| for the depth-LEAK_DEPTH ground Ritz vector (chained-overlap R2b quantity)."""
     mh = _build(atom, conv_tol)
     _, vecs, pops = _dense_hf_projection(mh)
-    v = np.asarray(QuantumKrylovSolver(mh).eigenstates(LEAK_DEPTH, n_states=1)[1][0], dtype=complex)
+    v = np.asarray(QuantumKrylovSolver(mh).uncertified_eigenstates(LEAK_DEPTH, n_states=1)[1][0], dtype=complex)
     v = v / np.linalg.norm(v)
     return float(np.linalg.norm(vecs[:, pops <= REACHABLE_TOL_CERTIFIED].conj().T @ v))
 

@@ -41,12 +41,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import List, Optional
 
 import numpy as np
 from scipy.linalg import eigh
 from scipy.sparse.linalg import eigsh, expm_multiply
 
+from hybrid_quantum_solver.certification import (
+    Verdict,
+    certified,
+    certify_energies,
+    not_submitted,
+    require_verdict,
+)
 from hybrid_quantum_solver.molecular_hamiltonian import MolecularHamiltonian
 
 import math
@@ -127,37 +134,49 @@ def solve_generalized_eig(H, S, threshold: float = 1e-10, noise_floor: float = 0
     return float(ritz[0]), rank
 
 
-def certify_state(mh: MolecularHamiltonian, psi, energy: float, out) -> Any:
-    """certkit certificate for one returned ground-state energy, checked out of process.
-
-    ``energy`` is electronic-frame and ``psi`` the Hilbert-space state it is the Ritz value
-    of; returns the checker's ``certkit_bridge.Verdict`` (VERIFIED or ABSTAIN). Every
-    ``certify=`` argument in this package lands here (portfolio-cir). Needs the certkit extra
-    (``uv sync --inexact --extra certkit``), imported lazily so the solver imports without it.
-    """
-    # ponytail: the producer is top-level certkit_bridge (the repo root is on sys.path in the
-    # editable install, as for certchem -> temple_bounds); move it into this package if
-    # portfolio-0pc makes certification non-optional.
-    from certkit_bridge import certify_ground_state
-    return certify_ground_state(mh, psi, float(energy), Path(out))
-
-
-@dataclass
+# Certificate-or-abstention (specs/SPEC_certificate_or_abstention.md): a result stores the
+# solver's number as ``unverified_*`` and the checker's Verdict as ``certificate``. The
+# certified reading (``energy`` / ``energies``) is a property that returns the number only if
+# that verdict is VERIFIED and raises ``EnergyAbstained`` otherwise. There is no result
+# without a verdict, and no argument that turns the checker off.
+@dataclass(frozen=True)
 class KrylovStep:
-    """Result at one Krylov dimension."""
-    dim: int          # requested Krylov dimension M
-    rank: int         # effective subspace rank kept after thresholding
-    energy: float     # total energy in Ha (electronic eigenvalue + offset)
-    certificate: Any = None  # certkit_bridge.Verdict for ``energy`` when solved with certify=
+    """Result at one Krylov dimension: the solver's estimate and the checker's word on it."""
+    dim: int                   # requested Krylov dimension M
+    rank: int                  # effective subspace rank kept after thresholding
+    unverified_energy: float   # the Ritz value, total Ha (eigenvalue + offset). NOT a claim.
+    certificate: Verdict       # what the independent checker said about it; never absent
+
+    def __post_init__(self):
+        require_verdict(self)
+
+    @property
+    def energy(self) -> float:
+        """Total energy in Ha, proven an upper bound on the ground state by the checker.
+
+        Raises ``EnergyAbstained`` unless ``certificate`` is VERIFIED."""
+        return certified(self.unverified_energy, self.certificate)
 
 
-@dataclass
+@dataclass(frozen=True)
 class ExcitedKrylovStep:
     """Low-lying spectrum at one Krylov dimension (ground + excited Ritz values)."""
-    dim: int                # requested Krylov dimension M
-    rank: int               # effective subspace rank kept after thresholding
-    energies: List[float]   # ascending total energies in Ha (offset included); [0] is the ground
-    certificate: Any = None  # certkit_bridge.Verdict for ``energies[0]`` when certify= was given
+    dim: int                          # requested Krylov dimension M
+    rank: int                         # effective subspace rank kept after thresholding
+    unverified_energies: List[float]  # ascending Ritz values, total Ha; [0] is the ground
+    certificate: Verdict              # the checker's word on ``unverified_energies[0]``
+
+    def __post_init__(self):
+        require_verdict(self)
+
+    @property
+    def energies(self) -> List[float]:
+        """The spectrum, released only once the checker VERIFIED the ground-state energy.
+
+        Raises ``EnergyAbstained`` otherwise. Only ``energies[0]`` is certified: certkit v1
+        has no claim kind for excited levels, so ``energies[1:]`` are Ritz values that ride
+        along with it."""
+        return certified(self.unverified_energies, self.certificate)
 
 
 class QuantumKrylovSolver:
@@ -304,67 +323,102 @@ class QuantumKrylovSolver:
             return np.asarray([self._cp.asnumpy(v) for v in self._basis[:krylov_dim]])
         return np.asarray(self._basis[:krylov_dim])
 
-    def _certify(self, vals, C, krylov_dim: int, certify):
-        """Certificate for the ground Ritz pair, or None when none was asked for."""
-        if certify is None:
-            return None
-        return certify_state(self.mh, C[:, 0] @ self._basis_rows(krylov_dim), vals[0], certify)
+    def _steps(self, dims, certificate_dir, names) -> List[KrylovStep]:
+        """Solve every dimension in ``dims``, then certify the energies in one call.
+
+        One ``_ritz`` per dimension, in order, before any certificate: shot noise is drawn
+        there, so the energies are the ones the solver returned before certification existed.
+        The witness (the ground Ritz state) is built only for an energy that is submitted.
+        """
+        ritz = [self._ritz(m) for m in dims]
+        certs = certify_energies(
+            self.mh, [(vals[0], lambda C=C, m=m: C[:, 0] @ self._basis_rows(m))
+                      for m, (vals, C, _) in zip(dims, ritz)], certificate_dir, names)
+        return [KrylovStep(dim=m, rank=rank, unverified_energy=float(vals[0]) + self.offset,
+                           certificate=cert)
+                for m, (vals, _, rank), cert in zip(dims, ritz, certs)]
+
+    def _spectrum(self, krylov_dim: int, n_states: Optional[int]):
+        """(Ritz values, rank, states) for the lowest ``n_states`` Ritz pairs; row m is |Ψ_m>."""
+        vals, C, rank = self._ritz(krylov_dim)
+        if n_states is not None:
+            vals, C = vals[:n_states], C[:, :n_states]
+        return vals, rank, C.T @ self._basis_rows(krylov_dim)
+
+    def _spectrum_step(self, krylov_dim: int, rank: int, vals, cert) -> ExcitedKrylovStep:
+        return ExcitedKrylovStep(dim=krylov_dim, rank=rank, certificate=cert,
+                                 unverified_energies=[float(e) + self.offset for e in vals])
 
     # -- public API ----------------------------------------------------------
-    # ``certify`` (a directory) on every energy-returning method below emits the certkit
-    # certificate for the ground-state energy returned and has certkit check it out of process;
-    # see ``certify_state``. Off by default: each one costs a checker run.
-    def solve(self, krylov_dim: int, certify: str | Path | None = None) -> KrylovStep:
+    # Every energy-returning method below certifies the ground-state energy it returns: a
+    # certkit certificate, judged by certkit's checker in a separate process (see
+    # ``certification.certify_energies``). Always, with no argument to turn it off.
+    # ``certificate_dir`` only says where the certificate files are kept; without it they are
+    # written to a temporary directory and removed. Read ``.energy`` for the certified number
+    # (it raises ``EnergyAbstained`` if the checker abstained) and ``.unverified_energy`` for
+    # the raw estimate. Each call costs a checker run: 0.06 s at 4 qubits, seconds at 8 or 12.
+    def solve(self, krylov_dim: int, certificate_dir: str | Path | None = None) -> KrylovStep:
         """Estimate the ground-state energy from an ``krylov_dim``-vector Krylov space."""
-        vals, C, rank = self._ritz(krylov_dim)
-        return KrylovStep(dim=krylov_dim, rank=rank, energy=float(vals[0]) + self.offset,
-                          certificate=self._certify(vals, C, krylov_dim, certify))
+        return self._steps([krylov_dim], certificate_dir, None)[0]
 
-    def convergence(self, max_dim: int, certify: str | Path | None = None) -> List[KrylovStep]:
-        """Energies for M = 1 .. max_dim (basis built once and reused); certificates in M<m>/."""
+    def convergence(self, max_dim: int,
+                    certificate_dir: str | Path | None = None) -> List[KrylovStep]:
+        """Steps for M = 1 .. max_dim (basis built once and reused).
+
+        One checker run covers the sweep: the lowest energy is certified, and that proof
+        makes every higher energy an upper bound too, so the steps share its certificate
+        (files in ``<certificate_dir>/M<m>/`` for the step that was submitted)."""
         self._ensure_basis(max_dim)
-        return [self.solve(m, None if certify is None else Path(certify) / f"M{m}")
-                for m in range(1, max_dim + 1)]
+        dims = range(1, max_dim + 1)
+        return self._steps(dims, certificate_dir, [f"M{m}" for m in dims])
 
     def solve_excited(self, krylov_dim: int, n_states: Optional[int] = None,
-                      certify: str | Path | None = None) -> ExcitedKrylovStep:
+                      certificate_dir: str | Path | None = None) -> ExcitedKrylovStep:
         """Estimate the low-lying spectrum (ground + excited) from a Krylov space.
 
         Returns the lowest ``n_states`` Ritz values (all of them if ``n_states`` is None) of the
         same subspace ``solve`` uses -- ``energies[0]`` is identical to ``solve(krylov_dim).energy``.
         Each Ritz value is variationally above the corresponding exact eigenvalue (Cauchy
         interlacing); excited states are reachable only insofar as |HF> overlaps them. See
-        specs/SPEC_qksd_excited.md. ``certify`` covers ``energies[0]`` only: certkit v1 has no
-        claim kind for excited levels.
+        specs/SPEC_qksd_excited.md. The certificate covers ``energies[0]`` only: certkit v1
+        has no claim kind for excited levels.
         """
         vals, C, rank = self._ritz(krylov_dim)
-        cert = self._certify(vals, C, krylov_dim, certify)
-        if n_states is not None:
-            vals = vals[:n_states]
-        energies = [float(e) + self.offset for e in vals]
-        return ExcitedKrylovStep(dim=krylov_dim, rank=rank, energies=energies, certificate=cert)
+        cert, = certify_energies(
+            self.mh, [(vals[0], lambda: C[:, 0] @ self._basis_rows(krylov_dim))], certificate_dir)
+        return self._spectrum_step(krylov_dim, rank, vals if n_states is None else vals[:n_states],
+                                   cert)
 
     def eigenstates(self, krylov_dim: int, n_states: Optional[int] = None,
-                    certify: str | Path | None = None):
-        """Krylov eigen-energies and the corresponding Hilbert-space eigenvectors.
+                    certificate_dir: str | Path | None = None):
+        """The low-lying Krylov spectrum and the corresponding Hilbert-space eigenvectors.
 
-        Returns ``(energies, states)`` where ``energies`` is the ascending list of total energies
-        (offset included, identical to ``solve_excited``) and ``states`` is an ``(k, N)`` complex
-        array whose row ``m`` is the Ritz eigenstate |Ψ_m⟩ = Σ_i C[i, m] |φ_i⟩ as a normalised
-        statevector. These feed the property layer (``qksd_properties``): permanent and transition
-        dipoles are ⟨Ψ_m|Ô|Ψ_n⟩ on these states. CPU path only (properties are a dense reference
-        analysis; a GPU statevector is copied back to host). See specs/SPEC_qksd_properties.md.
-        With ``certify`` it returns ``(energies, states, certificate)`` instead, the certificate
-        covering ``energies[0]`` (the ``return_counts`` pattern of ``np.unique``).
+        Returns ``(step, states)``: ``step`` is the ``ExcitedKrylovStep`` that ``solve_excited``
+        returns (its ground-state energy certified the same way) and ``states`` is an ``(k, N)``
+        complex array whose row ``m`` is the Ritz eigenstate |Ψ_m⟩ = Σ_i C[i, m] |φ_i⟩ as a
+        normalised statevector. These feed the property layer (``qksd_properties``): permanent
+        and transition dipoles are ⟨Ψ_m|Ô|Ψ_n⟩ on these states. CPU path only (properties are a
+        dense reference analysis; a GPU statevector is copied back to host). See
+        specs/SPEC_qksd_properties.md. Analysis code that wants the states and makes no energy
+        claim should call ``uncertified_eigenstates``, which costs no checker run.
         """
-        vals, C, _ = self._ritz(krylov_dim)
-        if n_states is not None:
-            vals, C = vals[:n_states], C[:, :n_states]
-        states = C.T @ self._basis_rows(krylov_dim)   # (k, N): row m is |Ψ_m>
-        energies = [float(e) + self.offset for e in vals]
-        if certify is None:
-            return energies, states
-        return energies, states, certify_state(self.mh, states[0], vals[0], certify)
+        vals, rank, states = self._spectrum(krylov_dim, n_states)
+        cert, = certify_energies(self.mh, [(vals[0], lambda: states[0])], certificate_dir)
+        return self._spectrum_step(krylov_dim, rank, vals, cert), states
+
+    def uncertified_eigenstates(self, krylov_dim: int, n_states: Optional[int] = None):
+        """``eigenstates`` without the checker: the Ritz decomposition, and NO energy claim.
+
+        The one uncertified door of this solver (specs/SPEC_certificate_or_abstention.md
+        section 3d), for analysis that reads Ritz vectors and values but returns no energy,
+        and for systems too large for the pure-Python checker. It is not a way round the
+        invariant: the step it returns is already an ABSTENTION. Its ``energies`` raises
+        ``EnergyAbstained``, its numbers are there only as ``unverified_energies``, and its
+        ``certificate`` line says it was never submitted. ``states`` as in ``eigenstates``.
+        """
+        vals, rank, states = self._spectrum(krylov_dim, n_states)
+        return self._spectrum_step(krylov_dim, rank, vals, not_submitted(
+            "uncertified_eigenstates() was called")), states
 
 
 if __name__ == "__main__":
@@ -379,5 +433,6 @@ if __name__ == "__main__":
         solver = QuantumKrylovSolver(mh)
         print(f"\n{name}: FCI={fci:.6f} Ha, dt={solver.dt:.4f}")
         for step in solver.convergence(10):
-            print(f"  M={step.dim:2d} rank={step.rank:2d}  "
-                  f"E={step.energy:.6f}  err={(step.energy - fci)*1e3:+.3f} mHa")
+            e = step.unverified_energy
+            print(f"  M={step.dim:2d} rank={step.rank:2d}  E={e:.6f}  "
+                  f"err={(e - fci)*1e3:+.3f} mHa  {step.certificate.line.split()[0]}")

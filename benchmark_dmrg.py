@@ -74,9 +74,14 @@ def krylov_energy(h1, eri, nelecas, e_core, reference, n_qubits):
     if n_qubits > KRYLOV_QUBIT_CAP:
         return None, None
     mh = build_hamiltonian_from_integrals(h1, eri, num_particles=nelecas, energy_offset=e_core)
-    steps = QuantumKrylovSolver(mh).convergence(KRYLOV_DIM)
-    best = min(steps, key=lambda s: abs(s.energy - reference))
-    return best.energy, best.rank
+    # The uncertified door, on purpose: "the step closest to the reference" is picked by an
+    # oracle, so it is a comparison number and not an energy claim, and at 16 qubits every
+    # checker run is about half an hour. Certified energies come from solve() and
+    # convergence().
+    solver = QuantumKrylovSolver(mh)
+    steps = [solver.uncertified_eigenstates(m, n_states=1)[0] for m in range(1, KRYLOV_DIM + 1)]
+    best = min(steps, key=lambda s: abs(s.unverified_energies[0] - reference))
+    return best.unverified_energies[0], best.rank
 
 
 def main():

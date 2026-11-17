@@ -1,36 +1,24 @@
 """
 Acceptance gates G1-G4 for specs/SPEC_certkit_return_paths.md (portfolio-cir).
 
-Claim: every ground-state energy the Krylov solver returns can carry a certkit v1
-lambda_min_enclosure certificate whose certified CEILING IS THE RETURNED NUMBER, checked by
-the pinned checker out of process -- and the checker refuses one for an energy that is not a
-true upper bound on the ground state. Every energy-returning method in hybrid_quantum_solver
-takes ``certify=<dir>``; this gate drives each one.
+Claim: every ground-state energy the Krylov solver returns carries a certkit v1
+lambda_min_enclosure certificate that proves THE RETURNED NUMBER an upper bound on the ground
+state, checked by the pinned checker out of process -- and the checker refuses one for an
+energy that is not. Every energy-returning method in hybrid_quantum_solver certifies on every
+call (portfolio-0pc; that nothing can skip it is tests/test_certificate_or_abstention_spec.py).
+This gate drives each path and checks what its certificates say.
 
 Electronic frame throughout, as in test_certkit_regression_gate_spec.py: the certificate is
 about the qubit matrix, so lambda_min is its GLOBAL lowest eigenvalue over every particle
 sector, and mh.energy_offset is a trusted addition outside it.
 
-Needs the pinned checker (`uv sync --inexact --extra certkit`). PySCF/qiskit, no block2.
+The pinned checker is a core dependency, so there is no skip guard here: a missing certkit is
+an import error. PySCF/qiskit, no block2.
 """
-import importlib.util
-import os
 from pathlib import Path
 
-import pytest
-
-if importlib.util.find_spec("certkit") is None:
-    # Same guard as the regression gate: optional locally, and never a silent pass in CI.
-    if os.environ.get("CI"):
-        raise RuntimeError(
-            "certkit is not installed: the return-path certificate gate cannot run. "
-            'Install the pinned checker with `uv sync --inexact --extra certkit`.'
-        )
-    pytest.skip('certkit extra not installed (uv sync --inexact --extra certkit)',
-                allow_module_level=True)
-
-import certkit_bridge  # noqa: E402
-from hybrid_quantum_solver import (  # noqa: E402
+import certkit_bridge
+from hybrid_quantum_solver import (
     HardwareKrylovSolver,
     QuantumKrylovSolver,
     TrotterKrylovSolver,
@@ -40,7 +28,7 @@ from hybrid_quantum_solver import (  # noqa: E402
     run_from_integrals,
     run_geometry,
 )
-from hybrid_quantum_solver.skqd import SampleKrylovSolver  # noqa: E402
+from hybrid_quantum_solver.skqd import SampleKrylovSolver
 
 H2 = "H 0 0 0; H 0 0 0.74"
 M = 3
@@ -71,54 +59,50 @@ def _dimer():
     return _CACHE["dimer"]
 
 
-def _paths(certify):
+def _paths(out):
     """path -> (mh, [(returned total energy, certificate)]) for every energy-returning path.
 
-    certify=None runs the same calls uncertified, so G1 can show the flag changes nothing.
+    ``.energy`` is the certified reading: it raises unless the checker VERIFIED, so a path
+    that abstained fails here before any assertion below.
     """
-    def sub(name):
-        return None if certify is None else certify / name
-
     mh = _h2()
     p = {}
-    s = QuantumKrylovSolver(mh).solve(M, sub("qks_solve"))
+    s = QuantumKrylovSolver(mh).solve(M, out / "qks_solve")
     p["QuantumKrylovSolver.solve"] = [(s.energy, s.certificate)]
     p["QuantumKrylovSolver.convergence"] = [
         (s.energy, s.certificate)
-        for s in QuantumKrylovSolver(mh).convergence(M, certify=sub("qks_convergence"))]
-    s = QuantumKrylovSolver(mh).solve_excited(M, n_states=2, certify=sub("qks_excited"))
+        for s in QuantumKrylovSolver(mh).convergence(M, out / "qks_convergence")]
+    s = QuantumKrylovSolver(mh).solve_excited(M, n_states=2, certificate_dir=out / "qks_excited")
     p["QuantumKrylovSolver.solve_excited"] = [(s.energies[0], s.certificate)]
-    r = QuantumKrylovSolver(mh).eigenstates(M, n_states=2, certify=sub("qks_eigenstates"))
-    p["QuantumKrylovSolver.eigenstates"] = [(r[0][0], r[2] if certify else None)]
+    s, _ = QuantumKrylovSolver(mh).eigenstates(M, n_states=2,
+                                               certificate_dir=out / "qks_eigenstates")
+    p["QuantumKrylovSolver.eigenstates"] = [(s.energies[0], s.certificate)]
     p["TrotterKrylovSolver.convergence"] = [
         (s.energy, s.certificate) for s in TrotterKrylovSolver(mh, trotter_reps=2).convergence(
-            M, certify=sub("trotter"))]
-    s = HardwareKrylovSolver(mh).solve(M, sub("hardware_solve"))
+            M, out / "trotter")]
+    s = HardwareKrylovSolver(mh).solve(M, out / "hardware_solve")
     p["HardwareKrylovSolver.solve"] = [(s.energy, s.certificate)]
     p["HardwareKrylovSolver.convergence"] = [
         (s.energy, s.certificate)
-        for s in HardwareKrylovSolver(mh).convergence(M, certify=sub("hardware_convergence"))]
+        for s in HardwareKrylovSolver(mh).convergence(M, out / "hardware_convergence")]
     skqd = SampleKrylovSolver(mh, depth=4, n_shots=50, seed=0)
-    s = skqd.solve(sub("skqd_solve"))
+    s = skqd.solve(out / "skqd_solve")
     p["SampleKrylovSolver.solve"] = [(s.energy, s.certificate)]
     p["SampleKrylovSolver.convergence"] = [
         (s.energy, s.certificate) for s in SampleKrylovSolver(mh, depth=4, seed=0).convergence(
-            (5, 50), certify=sub("skqd_convergence"))]
-    r = run_geometry(H2, krylov_dim=M, certify=sub("run_geometry"))
-    p["run_geometry"] = [(e, c) for (_, _, e), c in
-                         zip(r.convergence, r.certificates or [None] * len(r.convergence))]
-    r = run_geometry(H2, krylov_dim=M, track_convergence=False, certify=sub("run_geometry_final"))
-    p["run_geometry(track_convergence=False)"] = [
-        (r.computed_energy, r.certificates[-1] if certify else None)]
-    out = {name: (mh, pairs) for name, pairs in p.items()}
+            (5, 50), out / "skqd_convergence")]
+    r = run_geometry(H2, krylov_dim=M, certificate_dir=out / "run_geometry")
+    p["run_geometry"] = [(s.energy, s.certificate) for s in r.steps]
+    r = run_geometry(H2, krylov_dim=M, track_convergence=False,
+                     certificate_dir=out / "run_geometry_final")
+    p["run_geometry(track_convergence=False)"] = [(r.computed_energy, r.certificate)]
+    paths = {name: (mh, pairs) for name, pairs in p.items()}
 
     mi, mh_d = _dimer()
     r = run_from_integrals(mi.h1, mi.eri, mi.nelec, mi.e_core, krylov_dim=M,
-                           certify=sub("run_from_integrals"))
-    out["run_from_integrals"] = (mh_d, [(e, c) for (_, _, e), c in
-                                        zip(r.convergence,
-                                            r.certificates or [None] * len(r.convergence))])
-    return out
+                           certificate_dir=out / "run_from_integrals")
+    paths["run_from_integrals"] = (mh_d, [(s.energy, s.certificate) for s in r.steps])
+    return paths
 
 
 def _certified():
@@ -131,16 +115,11 @@ def _lam(mh):
     return mh.ground_state_energy() - mh.energy_offset
 
 
-def test_G1_every_path_returns_a_verified_certificate_and_the_same_energy():
+def test_G1_every_path_returns_a_verified_certificate_by_the_pinned_route():
     """Every energy every path returns carries a certificate the checker VERIFIED, by the
-    route pinned for it, and asking for one does not change the energy returned."""
-    plain = _paths(None)
+    route pinned for it. (That certifying does not move the energy is gated, against the
+    uncertified door and against a refusing checker, in test_certificate_or_abstention_spec.)"""
     for name, (mh, pairs) in _certified().items():
-        # Not bitwise: the default dt comes from ARPACK with a random start vector, so two
-        # solver instances already differ by ~1e-15 Ha before certify= enters at all.
-        drift = max(abs(a - b) for (a, _), (b, _) in zip(pairs, plain[name][1]))
-        assert len(pairs) == len(plain[name][1]) and drift <= 1e-12, (
-            f"{name}: certify= changed the returned energies (by {drift:.1e} Ha)")
         # H2 has 16 states, inside certkit's DENSE_LIMIT; the dimer's sector energy sits too
         # high for a finite Temple bound on the global spectrum (see _dimer).
         route = "gershgorin_rayleigh" if name == "run_from_integrals" else "temple_inertia"
@@ -152,16 +131,21 @@ def test_G1_every_path_returns_a_verified_certificate_and_the_same_energy():
 
 
 def test_G2_the_certificate_is_about_the_returned_energy_and_contains_the_ground_state():
-    """DEFINITION OF DONE. lambda_min lies in [lo, hi], and hi is the returned energy: the
-    checker has proven that number an upper bound on the ground state."""
+    """DEFINITION OF DONE. lambda_min lies in [lo, hi], and hi is not above the returned
+    energy: the checker has proven that number an upper bound on the ground state. A sweep
+    shares one proof (portfolio-0pc), issued for its lowest energy, so there the ceiling IS
+    the returned number; for the steps above it the ceiling is lower, which proves more."""
     for name, (mh, pairs) in _certified().items():
         lam = _lam(mh)
         for e_total, v in pairs:
             e = e_total - mh.energy_offset
             assert v.lo <= lam <= v.hi, (
                 f"{name}: exact {lam!r} escaped the certified [{v.lo!r}, {v.hi!r}]")
-            assert 0.0 <= v.hi - e <= PAD_MAX, (
-                f"{name}: certified ceiling {v.hi!r} is not the returned energy {e!r}")
+            assert v.hi - e <= PAD_MAX, (
+                f"{name}: certified ceiling {v.hi!r} is above the returned energy {e!r}")
+        e_low, v_low = min(pairs, key=lambda pair: pair[0])
+        assert 0.0 <= v_low.hi - (e_low - mh.energy_offset) <= PAD_MAX, (
+            f"{name}: the lowest energy {e_low!r} is not the one its certificate is about")
 
 
 def test_G3_an_energy_below_the_ground_state_is_refused():
@@ -174,8 +158,9 @@ def test_G3_an_energy_below_the_ground_state_is_refused():
     below = 0
     for seed in range(12):
         s = QuantumKrylovSolver(mh, noise_sigma=3e-2, seed=seed).solve(
-            6, certify=OUT / "noise" / f"seed{seed}")
-        e, v = s.energy - mh.energy_offset, s.certificate
+            6, OUT / "noise" / f"seed{seed}")
+        # The raw number: reading ``.energy`` raises on exactly the seeds this gate is about.
+        e, v = s.unverified_energy - mh.energy_offset, s.certificate
         if e < lam:
             below += 1
             assert not v.ok and v.line.startswith("ABSTAIN"), (
@@ -189,7 +174,7 @@ def test_G4_beyond_the_dense_limit_the_gershgorin_route_certifies():
     """N2 CAS(6,6) is 4096 states, past certkit's DENSE_LIMIT, so there is no inertia count
     and the only route is gershgorin_rayleigh: VERIFIED, with a floor 2.7 Ha down."""
     mh = build_molecular_hamiltonian(**certkit_bridge.CASES["N2"])
-    s = QuantumKrylovSolver(mh).solve(8, certify=OUT / "N2")
+    s = QuantumKrylovSolver(mh).solve(8, OUT / "N2")
     e, v = s.energy - mh.energy_offset, s.certificate
     # Pinned, and re-derived, in test_certkit_regression_gate_spec.py (G3); not recomputed
     # here because the dense 4096 x 4096 diagonalisation is most of that gate's runtime.

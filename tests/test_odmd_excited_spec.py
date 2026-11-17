@@ -83,7 +83,9 @@ def test_G3_noisy_gap_beats_qksd_at_matched_noise():
         solver = QuantumKrylovSolver(mh, noise_sigma=sigma, seed=1)
         kerrs = []
         for _ in range(100):
-            es = solver.solve_excited(M, n_states=2).energies
+            # Raw noisy Ritz values, 200 of them at 8 qubits: an estimator study, not an
+            # energy claim, so it takes the solver's uncertified door.
+            es = solver.uncertified_eigenstates(M, n_states=2)[0].unverified_energies
             kerrs.append(abs((es[1] - es[0]) - gap_fci) if len(es) > 1 else np.inf)
         m_kqd = float(np.median(kerrs))
         assert m_kqd / m_odmd > 10.0, (M, m_kqd, m_odmd)

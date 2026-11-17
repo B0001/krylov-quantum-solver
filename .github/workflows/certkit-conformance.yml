@@ -1,6 +1,7 @@
 name: certkit conformance
 
-# This repo emits certificates (certkit_bridge.py) that an independent checker
+# This repo emits certificates (hybrid_quantum_solver/certification.py, and the
+# regression cases in certkit_bridge.py) that an independent checker
 # verifies. The guarantee is only worth what the pinned checker is worth, so
 # this gates the pin itself: if the certkit version named in pyproject stops
 # passing its own conformance suite, that is this repo's problem, not certkit's.
@@ -11,7 +12,8 @@ name: certkit conformance
 
 on:
   push:
-    paths: ["certkit_bridge.py", "pyproject.toml", ".github/workflows/certkit-conformance.yml"]
+    paths: ["certkit_bridge.py", "hybrid_quantum_solver/certification.py", "pyproject.toml",
+            ".github/workflows/certkit-conformance.yml"]
   pull_request:
   workflow_dispatch:
 

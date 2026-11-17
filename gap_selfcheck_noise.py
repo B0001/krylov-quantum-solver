@@ -55,7 +55,7 @@ def _ladder_stats(mh: MolecularHamiltonian, dims: Sequence[int]) -> dict:
     H = mh.qubit_hamiltonian.to_matrix(sparse=True).tocsc()
     stats = {}
     for m in dims:
-        _, states = solver.eigenstates(m, n_states=2)
+        _, states = solver.uncertified_eigenstates(m, n_states=2)
         th0, var0 = mean_and_variance(H, states[0])
         th1, var1 = mean_and_variance(H, states[1])
         stats[m] = (th0, var0, th1, var1)

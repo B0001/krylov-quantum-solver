@@ -1,7 +1,10 @@
 # SPEC: Every ground-state energy the solver returns can carry a checked certificate
 
 **Status:** IMPLEMENTED — gates G1–G4 green (`tests/test_certkit_return_paths_spec.py`).
-Bead `portfolio-cir`. Making it non-bypassable is `portfolio-0pc`, not this spec.
+Bead `portfolio-cir`. Since `portfolio-0pc` the certificate is no longer optional: every
+return path certifies on every call, and that nothing can skip it is
+[`SPEC_certificate_or_abstention.md`](SPEC_certificate_or_abstention.md). This spec is
+still what says the certificates are *right*. Where 0pc changed it, the text says so.
 
 ---
 
@@ -26,13 +29,19 @@ the gate.
   noisy H2 energy 7.3 mHa **below** the exact ground state got a VERIFIED certificate under
   that claim (checked by mutating the producer). Anchoring the ceiling to the returned
   energy turns the same run into an ABSTAIN.
-- **What we can claim if the gates pass:** on every return path, with `certify=<dir>`, the
-  returned ground-state energy comes with a certificate that the pinned checker re-derives
-  from the files alone, out of process. A VERIFIED one proves `lambda_min <= E` (electronic
-  frame) and gives a certified floor. A noisy energy below `lambda_min` gets ABSTAIN.
+- **What we can claim if the gates pass:** on every return path the returned ground-state
+  energy comes with a certificate that the pinned checker re-derives from the files alone,
+  out of process. A VERIFIED one proves `lambda_min <= E` (electronic frame) and gives a
+  certified floor. A noisy energy below `lambda_min` gets ABSTAIN.
 - **What we cannot claim:**
-  1. **Opt-in, so bypassable.** Without `certify=`, energies come back uncertified as before.
-     Making certificate-or-abstention unavoidable is `portfolio-0pc`.
+  1. **Not opt-in any more, but not every number either.** This limit used to read "opt-in,
+     so bypassable": without `certify=`, energies came back uncertified. `portfolio-0pc`
+     closed it. The argument is gone, every listed path certifies on every call, and a
+     result's `energy` raises unless the checker VERIFIED it. What is left is narrower and
+     stated in `SPEC_certificate_or_abstention.md` §2: one uncertified door
+     (`uncertified_eigenstates`, `uncertified_estimates_only=True`) that returns abstentions
+     and nothing that reads as an energy, and the numbers that were never return paths
+     (references, expectation values, the linear-algebra kernels).
   2. **Global, not sector, minimum.** The claim is about the whole qubit matrix. Where the
      global minimum lies in another particle sector, a VERIFIED certificate is true but
      loose: the Hubbard dimer's returned energy is 0.17 Ha above the global `lambda_min`.
@@ -51,7 +60,8 @@ the gate.
 
 ## 3. Approach
 
-`certkit_bridge.certify_ground_state(mh, psi, energy, out)`:
+`certify_ground_state(mh, psi, energy, out)`, in `hybrid_quantum_solver/certification.py`
+since `portfolio-0pc` (re-exported by `certkit_bridge`):
 
 1. Witness `x`: the lower-Rayleigh-quotient one of `Re(psi)` and `Im(psi)`, normalised. `H` is
    real symmetric, so `<psi|H|psi>` is their norm-weighted mean and `x` is never above
@@ -62,6 +72,10 @@ the gate.
    then `gershgorin_rayleigh`. The first VERIFIED wins; otherwise the last abstention is
    returned. An energy below the floor makes an inverted enclosure, which the checker refuses.
 4. Each certificate is checked by `certkit check` in a subprocess, as `run_case` does.
+5. *(`portfolio-0pc`)* A call that returns several energies submits the lowest first, and a
+   VERIFIED certificate for it covers the ones above it: `lambda_min <= E_low + pad` proves
+   every `E >= E_low` an upper bound too. So a sweep's steps can share one certificate, whose
+   ceiling is then at or below their energy, not equal to it.
 
 **Reference:** exact `lambda_min` by dense diagonalisation, `mh.ground_state_energy() -
 mh.energy_offset` (cross-checked against PySCF FCI in `test_reference_energies.py`), and the
@@ -69,34 +83,44 @@ N2 value pinned and re-derived in the sibling gate.
 
 ## 4. Public interface
 
-```
-certkit_bridge.certify_ground_state(mh, psi, energy, out) -> Verdict
-certkit_bridge.real_witness(H, psi)                       -> real unit vector
-hybrid_quantum_solver.quantum_krylov_solver.certify_state(mh, psi, energy, out) -> Verdict
+As built by `portfolio-cir` every method below took `certify=<dir>` and returned
+`certificate=None` without it. The current interface (`portfolio-0pc`) is:
 
-QuantumKrylovSolver.solve(m, certify=None)               -> KrylovStep(.certificate)
-QuantumKrylovSolver.convergence(m, certify=None)         -> [KrylovStep], files in <dir>/M<m>/
-QuantumKrylovSolver.solve_excited(m, n, certify=None)    -> ExcitedKrylovStep(.certificate)
-QuantumKrylovSolver.eigenstates(m, n, certify=None)      -> (energies, states[, certificate])
-TrotterKrylovSolver.solve / .convergence(..., certify=None)
-HardwareKrylovSolver.solve / .convergence(..., certify=None)
-SampleKrylovSolver.solve / .convergence(..., certify=None)     files in <dir>/shots<s>/
-run_geometry / run_from_integrals(..., certify=None)     -> PipelineResult.certificates
+```
+hybrid_quantum_solver.certification.certify_ground_state(mh, psi, energy, out) -> Verdict
+hybrid_quantum_solver.certification.real_witness(H, psi)        -> real unit vector
+hybrid_quantum_solver.certification.certify_energies(mh, candidates, out, names) -> [Verdict]
+
+QuantumKrylovSolver.solve(m, certificate_dir=None)            -> KrylovStep(.certificate)
+QuantumKrylovSolver.convergence(m, certificate_dir=None)      -> [KrylovStep], files in <dir>/M<m>/
+QuantumKrylovSolver.solve_excited(m, n, certificate_dir=None) -> ExcitedKrylovStep(.certificate)
+QuantumKrylovSolver.eigenstates(m, n, certificate_dir=None)   -> (ExcitedKrylovStep, states)
+TrotterKrylovSolver.solve / .convergence(..., certificate_dir=None)
+HardwareKrylovSolver.solve / .convergence(..., certificate_dir=None)
+SampleKrylovSolver.solve / .convergence(..., certificate_dir=None)     files in <dir>/shots<s>/
+run_geometry / run_from_integrals(..., certificate_dir=None)  -> PipelineResult.certificates
 ```
 
-`certify` is a directory; it holds `operator.json` plus one certificate file per route tried.
-`certificate` is `None` when it is not given. Energies are unchanged either way (G1).
+`certificate_dir` is a directory; it holds `operator.json` plus one certificate file per
+route tried, in the subdirectory of each step that was submitted. Without it the files go
+to a temporary directory and are removed after the check. `certificate` is never `None`.
 
 ## 5. Acceptance criteria (validation gates)
 
-- **G1 — every path, every energy, VERIFIED, by the pinned route, energy unchanged.** All
-  13 paths on H2 (plus `run_from_integrals` on the Hubbard dimer) return a certificate for
-  every energy. The checker's exit code and its own output line agree. The route is
-  `temple_inertia` on H2 and `gershgorin_rayleigh` on the dimer. The energies match an
-  uncertified run to 1e-12 Ha: not bitwise, because the default `dt` comes from ARPACK with
-  a random start vector, so two solver instances already differ by ~1e-15.
+- **G1 — every path, every energy, VERIFIED, by the pinned route.** All 13 paths on H2
+  (plus `run_from_integrals` on the Hubbard dimer) return a certificate for every energy.
+  The checker's exit code and its own output line agree. The route is `temple_inertia` on H2
+  and `gershgorin_rayleigh` on the dimer. *Revised by `portfolio-0pc`:* G1 also compared
+  each path against an uncertified run of itself to 1e-12 Ha. There is no uncertified run of
+  a certified path any more, so that half moved to `SPEC_certificate_or_abstention.md` G2
+  and G3, which compare against the uncertified door and against a checker that refuses.
 - **G2 — DEFINITION OF DONE.** For every certificate, `lo <= lambda_min <= hi`, and
-  `0 <= hi - E <= 1e-7` Ha: the certified ceiling is the returned energy plus float padding.
+  `hi - E <= 1e-7` Ha: the certified ceiling is not above the returned energy, beyond float
+  padding. For the lowest energy of each call `0 <= hi - E` as well, so there the ceiling is
+  the returned energy itself. *Revised by `portfolio-0pc`:* this gate read `0 <= hi - E <=
+  1e-7` for every energy. A sweep now shares the certificate of its lowest energy (§3,
+  step 5), so for the steps above it the ceiling is lower than their energy. That proves
+  more about `lambda_min`, not less, and it still proves each step an upper bound.
 - **G3 — it can fail.** 12 seeded noisy H2 solves (`noise_sigma=3e-2`, M=6). Every energy
   below `lambda_min` ABSTAINs, by verdict and not by crash. Every VERIFIED one contains
   `lambda_min`. At least one seed dips below, so the gate is not vacuous; today six do.
@@ -108,17 +132,19 @@ convention) turns G2 and G3 red.
 
 ## 6. Out of scope
 
-- Certificate-or-abstention as a non-bypassable invariant (`portfolio-0pc`), and the CI gate
-  over every regression test's certificate (`portfolio-zwd`).
+- The CI gate over every regression test's certificate (`portfolio-zwd`).
+  Certificate-or-abstention as a non-bypassable invariant was out of scope here and is now
+  `SPEC_certificate_or_abstention.md` (`portfolio-0pc`).
 - Top-level study scripts (`krylov_subspace_solver.py`, `qdrift_krylov.py`, ODMD and so on).
   They are harnesses, not the solver, and ODMD energies have no state to serve as a witness.
-- A shared inertia certificate per operator (`temple_ref`). Each energy is checked on its
-  own, so a certified `convergence` on 8 qubits pays one O(n³) interval factorisation per
-  step.
+- A shared inertia certificate per operator (`temple_ref`). It would need a bundle, whose
+  per-certificate verdicts the checker only prints as display text. `portfolio-0pc` cut the
+  cost of a sweep another way (§3, step 5): one certificate for the lowest energy.
 
 ## 7. Caveats and risks
 
-- **Cost.** One checker process per certified energy, off by default. That is about 0.1 s on
-  H2, seconds on 8 qubits (Temple), and about 10 s on N2 (Gershgorin, matrix-free).
-- `emit` prints the checker's line for every certificate, as `run_case` does, so certified
-  library calls print one line per energy.
+- **Cost.** One checker run per call, on by default since `portfolio-0pc`, and one per
+  sweep. A run is 0.06 s on H2, about 4 s on 8 qubits (Temple) and on N2 (Gershgorin,
+  matrix-free).
+- The library path is silent. `emit` used to print the checker's line for every certificate;
+  since `portfolio-0pc` only `run_case` prints, because every solve now certifies.

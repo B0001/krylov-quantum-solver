@@ -27,6 +27,13 @@ ENV UV_LINK_MODE=copy \
 
 WORKDIR /app
 
+# certkit, the independent checker, is a core dependency pinned to a git commit
+# (pyproject.toml), and uv fetches git dependencies with the git executable, which the slim
+# image lacks. Builder stage only: the runtime stage copies the finished venv.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
 # Dependency layer first, so editing source does not invalidate the (slow) dependency solve.
 # --no-install-project: the project itself is installed by the second sync, after the source copy.
 COPY pyproject.toml uv.lock ./

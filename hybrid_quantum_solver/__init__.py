@@ -6,10 +6,15 @@ Public API (the validated, live path):
     QuantumKrylovSolver              -- real-time quantum Krylov subspace diagonalisation
     run_geometry / run_from_integrals-- end-to-end pipeline
 
+Every ground-state energy these return is certificate-or-abstention: ``.energy`` is the number
+only if certkit's checker VERIFIED it out of process and raises ``EnergyAbstained`` otherwise;
+``.unverified_energy`` is the raw estimate (specs/SPEC_certificate_or_abstention.md).
+
 The original ``EnterprisePipelineOrchestrator`` (orchestrate_hybrid_pipeline.py) and
 ``QiskitKrylovSampler`` (quantum_sampler.py) are retained only as quarantined regression
 fixtures -- see REFACTOR_PLAN.md. They are intentionally NOT exported here.
 """
+from .certification import EnergyAbstained, Verdict
 from .molecular_hamiltonian import (
     MolecularHamiltonian,
     build_dipole_operators,
@@ -40,6 +45,8 @@ __all__ = [
     "QuantumKrylovSolver",
     "KrylovStep",
     "ExcitedKrylovStep",
+    "EnergyAbstained",
+    "Verdict",
     "property_matrix",
     "transition_dipoles",
     "oscillator_strengths",

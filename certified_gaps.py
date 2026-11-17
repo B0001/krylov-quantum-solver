@@ -86,7 +86,7 @@ def gap_bracket(mh: MolecularHamiltonian, m: int, e1: Optional[float] = None,
     """
     solver = solver if solver is not None else QuantumKrylovSolver(mh)
     H = mh.qubit_hamiltonian.to_matrix(sparse=True).tocsc()
-    _, states = solver.eigenstates(m, n_states=2)
+    _, states = solver.uncertified_eigenstates(m, n_states=2)
     th0, var0 = mean_and_variance(H, states[0])
     if len(states) < 2:                                   # rank-1 subspace: no E_1 handle
         return GapBracket(m, -np.inf, np.inf, np.inf, th0, np.inf, np.inf, -np.inf, "self")

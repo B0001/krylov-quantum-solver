@@ -35,13 +35,14 @@ bound that drifts past 1.6 mHa fails the gate.
      comes from G3/G4 comparing against a reference. Neither is sufficient alone.
   2. **Coverage is the producer's four cases, not the test suite.** `certkit_bridge.py` emits
      for H2, H4, H4-stretched and N2. No regression test in `tests/` emits a certificate.
-     Since `portfolio-cir` every solver return path *can* (`certify=`), and the certificate
-     `QuantumKrylovSolver.solve(certify=)` emits is pinned here per case, as `solve/<route>`
-     (`chem-cgb`). Its ceiling is the returned energy rather than the witness's Rayleigh
-     quotient. The other return paths (Trotter, hardware, SKQD, pipeline) emit through the
-     same `certify_ground_state` but from their own witnesses, and are gated on H2 only, by
-     `SPEC_certkit_return_paths.md`. Making certification non-bypassable is `portfolio-0pc`,
-     still open.
+     Since `portfolio-cir` every solver return path emits one, and since `portfolio-0pc`
+     on every call. The certificate `QuantumKrylovSolver.solve` emits is pinned here per
+     case, as `solve/<route>` (`chem-cgb`). Its ceiling is the returned energy rather than
+     the witness's Rayleigh quotient. The other return paths (Trotter, hardware, SKQD,
+     pipeline) emit through the same `certify_ground_state` but from their own witnesses,
+     and are gated on H2 only, by `SPEC_certkit_return_paths.md`. That no path can skip the
+     checker is `SPEC_certificate_or_abstention.md`. So the regression tests that call a
+     return path now do emit certificates; this gate still pins only the four cases.
   3. **Electronic frame.** Certificates are about the qubit matrix; `mh.energy_offset` is a
      trusted addition made outside it. The pinned references here are therefore not the total
      energies the rest of the suite asserts.
@@ -73,6 +74,10 @@ which is also why the Temple sector route cannot discharge its premise (G1). It 
 number gated here is not the one the temple_bracket gates compare against.
 
 ## 4. Public interface
+
+Since `portfolio-0pc` `Verdict`, `check_certificate` and `emit` are defined in
+`hybrid_quantum_solver/certification.py` and re-exported by `certkit_bridge`, which keeps
+`run_case` and the four cases.
 
 ```
 certkit_bridge.Verdict                                   -> (name, rule, ok, line, lo, hi)
@@ -148,9 +153,9 @@ information where it means something and avoids the pad where it does not.
 
 ## 7. Out of scope
 
-- Emitting certificates from existing regression tests, or making certification
-  non-bypassable (`portfolio-0pc`). Pinning, per case, the return paths other than
-  `QuantumKrylovSolver.solve`: `SPEC_certkit_return_paths.md` gates them on H2.
+- Pinning, per case, the return paths other than `QuantumKrylovSolver.solve`:
+  `SPEC_certkit_return_paths.md` gates them on H2. Making certification non-bypassable was
+  out of scope here and is `SPEC_certificate_or_abstention.md` (`portfolio-0pc`).
 - Running the checker in a *separate environment* from the producer. It already runs
   out of process from a pinned commit; a dedicated checker venv — certkit has zero runtime
   dependencies, so it is cheap — would be strictly stronger and is a good follow-up.

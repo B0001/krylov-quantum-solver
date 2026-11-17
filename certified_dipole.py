@@ -86,7 +86,7 @@ def certified_dipole(mh: MolecularHamiltonian, a_sparse, m: int, width: Optional
     ``e1``: exact E_1 (oracle) for Delta_lo, else the self estimate (see certified_gaps)."""
     solver = solver if solver is not None else QuantumKrylovSolver(mh)
     H = mh.qubit_hamiltonian.to_matrix(sparse=True).tocsc()
-    _, states = solver.eigenstates(m, n_states=1)
+    _, states = solver.uncertified_eigenstates(m, n_states=1)
     psi0 = states[0]
     _, var0 = mean_and_variance(H, psi0)
     sigma0 = float(np.sqrt(var0))

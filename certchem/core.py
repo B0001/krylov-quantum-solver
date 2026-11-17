@@ -145,9 +145,11 @@ def certified_energy(
     if mode is Mode.FAST:
         from hybrid_quantum_solver import QuantumKrylovSolver
 
-        # eigenstates() already returns TOTAL energies (offset included).
-        energies, _ = QuantumKrylovSolver(mh).eigenstates(krylov_dim, n_states=1)
-        return float(energies[0])
+        # FAST is this package's deliberately bare point estimate (ADR-0004), so it takes the
+        # solver's uncertified door and says so: no checker runs and no certificate exists.
+        # TOTAL energy (offset included).
+        spectrum, _ = QuantumKrylovSolver(mh).uncertified_eigenstates(krylov_dim, n_states=1)
+        return float(spectrum.unverified_energies[0])
 
     best, lower, upper, variance = _estimate(mh, krylov_dim, eps)
 

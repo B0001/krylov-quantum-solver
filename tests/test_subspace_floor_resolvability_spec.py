@@ -63,7 +63,8 @@ def _e_d_total(b, d):
 
 
 def _ritz(b, d, m):
-    en, st = b["solver"].eigenstates(m, n_states=d + 1)
+    spectrum, st = b["solver"].uncertified_eigenstates(m, n_states=d + 1)
+    en = spectrum.unverified_energies
     centers = [en[k] - b["off"] for k in range(d + 1)]
     sig = [residual_norm(b["Hs"], st[k], centers[k]) for k in range(d + 1)]
     return centers, sig

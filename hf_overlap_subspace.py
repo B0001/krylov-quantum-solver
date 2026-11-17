@@ -90,7 +90,8 @@ def certify_hf_subspace_overlap(
     Hs = mh.qubit_hamiltonian.to_matrix(sparse=True).tocsc()
     u = np.asarray(mh.hf_state().data, dtype=complex)
 
-    energies, states = solver.eigenstates(m, n_states=cluster_size + 1)
+    spectrum, states = solver.uncertified_eigenstates(m, n_states=cluster_size + 1)
+    energies = spectrum.unverified_energies      # Ritz centres for the floor, not a claim
     if len(energies) < cluster_size + 1:
         raise ValueError(
             f"Krylov subspace at M = {m} exposes only {len(energies)} reachable levels; "

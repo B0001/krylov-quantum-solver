@@ -96,7 +96,7 @@ def shot_noise_coverage(mh: MolecularHamiltonian, m: int, shots: float, trials: 
     the <H>, <H^2> measurements are sampled."""
     solver = solver if solver is not None else QuantumKrylovSolver(mh)
     H = mh.qubit_hamiltonian.to_matrix(sparse=True).tocsc()
-    psi0 = solver.eigenstates(m, n_states=1)[1][0]
+    psi0 = solver.uncertified_eigenstates(m, n_states=1)[1][0]
     th0, var0 = mean_and_variance(H, psi0)
     h2_exact = var0 + th0 * th0
     E0, E1 = reachable_E0_E1(mh)
