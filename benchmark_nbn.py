@@ -20,9 +20,9 @@ HONEST CAVEATS (see also REFACTOR_PLAN.md):
     NOT the periodic superconductor. It says nothing about superconductivity.
   * At 16 qubits the exact answer (CASCI) is classically trivial, so there is NO quantum
     advantage here; this is a methodology study, not a discovery.
-  * block2 (DMRG) required: pip install block2.
+  * block2 (DMRG) required: uv sync --inexact --extra dmrg.
 
-Run:  python benchmark_nbn.py   ->  prints a table and writes data/nbn_active_space.csv
+Run:  uv run python benchmark_nbn.py   ->  prints a table and writes data/nbn_active_space.csv
 """
 import csv
 import math
@@ -174,7 +174,7 @@ def ground_state_mf(cif):
 
 def main():
     if not dmrg_available():
-        print("[WARN] block2 not importable -- install with `pip install block2`. "
+        print("[WARN] block2 not importable -- install with `uv sync --inexact --extra dmrg`. "
               "DMRG column unavailable.\n")
     print(f"NbN active-space growth | {CIF} | quantum Krylov M={KRYLOV_DIM} (statevector <= {KRYLOV_QUBIT_CAP} qubits)")
 
@@ -210,8 +210,13 @@ def main():
         e_kry = None
         if nq <= KRYLOV_QUBIT_CAP and reference is not None:
             mh = build_hamiltonian_from_integrals(h1, eri, num_particles=nelecas, energy_offset=e_core)
-            steps = QuantumKrylovSolver(mh).convergence(KRYLOV_DIM)
-            e_kry = min(steps, key=lambda s: abs(s.energy - reference)).energy
+            # The uncertified door, on purpose: "the step closest to the reference" is picked by an
+            # oracle, so it is a comparison number and not an energy claim, and at 16 qubits every
+            # checker run is about half an hour. Certified energies come from solve() and
+            # convergence().
+            solver = QuantumKrylovSolver(mh)
+            e_kry = min((solver.uncertified_eigenstates(m, n_states=1)[0].unverified_energies[0]
+                         for m in range(1, KRYLOV_DIM + 1)), key=lambda e: abs(e - reference))
 
         if e_dmrg_cap is None and reference is not None:
             e_dmrg_cap = e_dmrg if e_dmrg is not None else e_fci

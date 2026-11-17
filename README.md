@@ -106,8 +106,7 @@ with useful fidelity — which is exactly why the next research lever is shallow
 ## Installation
 
 ```bash
-conda create -n chem python=3.11 && conda activate chem
-pip install -r requirements.txt
+uv sync --extra dmrg --extra test --extra dev
 ```
 
 ## Quickstart
@@ -118,15 +117,29 @@ From a molecular geometry:
 from hybrid_quantum_solver.pipeline import run_geometry
 
 result = run_geometry(atom="Li 0 0 0; H 0 0 1.6", basis="sto3g", krylov_dim=10)
-print(result.summary())   # E=-7.882... Ha (HF=-7.861..., ref=-7.882..., ...)
+print(result.summary())   # E=-7.882180 Ha [VERIFIED via gershgorin_rayleigh]  (HF=-7.861865, ...)
+print(result.computed_energy)   # the certified number; raises EnergyAbstained if it is not
 ```
+
+**Certificate-or-abstention.** Every ground-state energy the solvers and the pipeline return
+is certified before you see it: a [certkit](https://github.com/B0001/certkit) certificate,
+judged by certkit's checker in a separate process. `.energy` / `.computed_energy` hand the
+number out only if the checker VERIFIED it an upper bound on the ground state, and raise
+`EnergyAbstained` otherwise (a shot-noisy estimate below the ground state, for instance).
+`.unverified_energy` is the raw estimate, and says so. One checker run is seconds up to 12
+qubits and about half an hour at 16; `uncertified_estimates_only=True` (pipeline) and
+`QuantumKrylovSolver.uncertified_eigenstates` skip it and return an abstention, never
+something that reads as an energy. See `specs/SPEC_certificate_or_abstention.md`.
 
 From a CIF via CASCI active space (materials path):
 
 ```bash
-python run_hybrid_solver.py --input_file data/nb_structures/NbN_mp-2634.cif \
+uv run python run_hybrid_solver.py --input_file data/nb_structures/NbN_mp-2634.cif \
     --active_space 8,8 --krylov_dim 8           # add --shots 8192 to model sampling noise
 ```
+
+At CAS(8,8), 16 qubits, certifying the result takes about half an hour; add
+`--uncertified-estimates-only` for a quick unverified estimate.
 
 > **Scientific caveat (materials).** The CIF path builds a *finite molecular cluster* from the
 > unit-cell atoms with no periodic boundary conditions — it is **not** a calculation of the periodic
@@ -154,6 +167,7 @@ hybrid_quantum_solver/
   hardware_krylov.py          # on-hardware Krylov: Hij/Sij measured via ancilla Hadamard tests
   noise.py                    # shot-noise model, Hermitisation, Aer NoiseModel, ZNE (fold + extrapolate)
   pipeline.py                 # end-to-end: run_geometry / run_from_integrals
+  certification.py            # certificate-or-abstention: every returned energy is checked by certkit
   dmrg_reference.py           # classical reference: exact FCI, or DMRG (block2) for larger spaces
   orchestrate_hybrid_pipeline.py, quantum_sampler.py   # LEGACY/BROKEN, regression fixtures only
 benchmark_krylov.py           # honest FCI benchmark table (H2 / H4 / LiH)

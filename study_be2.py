@@ -17,7 +17,7 @@ HONEST CAVEATS:
   * At 16 qubits FCI is exact and classically trivial -- there is NO quantum advantage here. This
     independently REPRODUCES the physics that resolved the controversy; it is not a new result.
 
-Run:  python study_be2.py   ->  prints the curve + binding energies, writes data/be2_curve.csv
+Run:  uv run python study_be2.py   ->  prints the curve + binding energies, writes data/be2_curve.csv
 """
 import csv
 import os
@@ -51,8 +51,13 @@ def energies_at(R):
 
     mh = build_hamiltonian_from_integrals(h1, eri, num_particles=nelecas, energy_offset=e_core)
     ref = e_dmrg if e_dmrg is not None else e_fci
-    steps = QuantumKrylovSolver(mh).convergence(KRYLOV_DIM)
-    e_kry = min(steps, key=lambda s: abs(s.energy - ref)).energy
+    # The uncertified door, on purpose: "the step closest to the reference" is picked by an
+    # oracle, so it is a comparison number and not an energy claim, and at 16 qubits every
+    # checker run is about half an hour. Certified energies come from solve() and
+    # convergence().
+    solver = QuantumKrylovSolver(mh)
+    e_kry = min((solver.uncertified_eigenstates(m, n_states=1)[0].unverified_energies[0]
+                 for m in range(1, KRYLOV_DIM + 1)), key=lambda e: abs(e - ref))
     return mh.hf_energy, e_kry, e_fci, e_dmrg
 
 

@@ -6,7 +6,7 @@ Replaces the retracted README "Empirical Benchmarks" table (which reported machi
 collapse as a feature and energies that swung from +0.003 to -48.7 Ha). Every number here is
 the solver's error against an exact diagonalisation reference in the same energy frame.
 
-Run:  python benchmark_krylov.py   ->  prints a table and writes data/krylov_benchmark.csv
+Run:  uv run python benchmark_krylov.py   ->  prints a table and writes data/krylov_benchmark.csv
 """
 import csv
 
@@ -27,7 +27,11 @@ def _pyscf_fci(atom, basis="sto3g"):
     mol = gto.M(atom=atom, basis=basis, verbose=0)
     mf = scf.RHF(mol)
     mf.kernel()
-    e, _ = fci.FCI(mf).kernel()
+    solver = fci.FCI(mf)
+    e, _ = solver.kernel()
+    if not solver.converged:
+        raise RuntimeError(f"FCI Davidson did not converge for atom={atom!r} basis={basis!r} "
+                            f"(chem-60i: an unchecked Davidson call can silently report a wrong energy)")
     return float(e)
 
 
@@ -42,12 +46,11 @@ def main():
         hf_err_mha = (r.hf_energy - fci) * 1e3
         kr_err_mha = (r.computed_energy - fci) * 1e3
         respects_floor = r.computed_energy >= fci - 1e-7
-        r.reference_energy = fci
         print(f"{name:26s} {r.n_qubits:6d} {r.krylov_dim:3d} "
               f"{hf_err_mha:9.3f}m {kr_err_mha:10.4f}m {str(respects_floor):>7}")
         rows.append({
             "system": name, "qubits": r.n_qubits, "krylov_dim": r.krylov_dim,
-            "fci_energy": r.reference_energy, "hf_energy": r.hf_energy,
+            "fci_energy": fci, "hf_energy": r.hf_energy,
             "krylov_energy": r.computed_energy,
             "hf_error_mHa": hf_err_mha, "krylov_error_mHa": kr_err_mha,
             "respects_variational_floor": respects_floor,

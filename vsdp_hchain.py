@@ -401,6 +401,21 @@ def build(h1, eri, na, nb, t2=False):
                 rows=rows, loc=loc, traces=traces, groups=groups, tot=tot, r=r, na=na, nb=nb)
 
 
+_ACCEPTABLE_STATUS = {"optimal", "optimal_inaccurate", "solved", "solved_inaccurate"}
+
+
+def require_solved(val, y, status, label):
+    """Raise a clear, labeled error for a failed solve instead of letting `None`/inf/nan silently
+    propagate to surface as an opaque `TypeError` (or a quietly-wrong Infinity/NaN in the saved
+    JSON) several steps downstream, e.g. at `val + e_nuc` in `main()` (chem-66q)."""
+    ok = (val is not None and y is not None and math.isfinite(val)
+          and str(status).lower() in _ACCEPTABLE_STATUS)
+    if not ok:
+        raise RuntimeError(f"{label}: SDP solve did not produce a usable solution "
+                            f"(status={status!r}, value={val!r})")
+    return val, y, status
+
+
 def solve(prob, solver="CLARABEL", **kw):
     import cvxpy as cp
 
@@ -409,7 +424,8 @@ def solve(prob, solver="CLARABEL", **kw):
     con = prob["A"] @ v == prob["b"]
     P = cp.Problem(cp.Minimize(prob["c"] @ v), [con])
     P.solve(solver=solver, **kw)
-    return P.value, np.asarray(con.dual_value, float), P.status
+    y = None if con.dual_value is None else np.asarray(con.dual_value, float)
+    return require_solved(P.value, y, P.status, f"cvxpy({solver})")
 
 
 def solve_scs(prob, **settings):
@@ -432,7 +448,8 @@ def solve_scs(prob, **settings):
                 c=prob["c"][cols] * scale)
     del A
     sol = scs.SCS(data, dict(z=m, s=sizes), **settings).solve()
-    return sol["info"]["pobj"], np.asarray(sol["y"][:m]), sol["info"]["status"]
+    val, y = sol["info"]["pobj"], np.asarray(sol["y"][:m])
+    return require_solved(val, y, sol["info"]["status"], "scs")
 
 
 def _lam_lower(Z):
@@ -482,6 +499,19 @@ def rigorous_lower_bound(prob, y, e_const=0.0):
 def certify(prob, y, e_const):
     """Best rigorous bound over the two dual-sign conventions (each is valid on its own)."""
     return max((rigorous_lower_bound(prob, s * y, e_const) for s in (1.0, -1.0)), key=lambda t: t[0])
+
+
+def recertify(n, t2, dual_y, e_nuc):
+    """Re-run `certify` on an already-solved, stored dual vector without re-solving the SDP: only
+    `build()` (seconds) is redone from (n, t2), not `solve()` (hours at n = 10/12) (chem-66q).
+
+    `e_nuc` must match what the stored dual was certified against, else the problem data and the
+    dual silently disagree; checked explicitly rather than trusting the caller."""
+    prob, built_e_nuc = hchain_problem(n, t2)
+    if abs(built_e_nuc - e_nuc) > 1e-8:
+        raise ValueError(f"n={n}: stored e_nuc={e_nuc} does not match rebuilt integrals "
+                          f"e_nuc={built_e_nuc} -- wrong (n, t2) for this dual?")
+    return certify(prob, np.asarray(dual_y, float), e_nuc)
 
 
 def sym_integrals(n):
@@ -535,6 +565,19 @@ def upper_bound(n, sym=False):
     return (ub[str(n)]["energy"], ub[str(n)]["method"]) if str(n) in ub else (None, None)
 
 
+def _noise_schedule(n_stages):
+    """1e-4 for the early stages, annealed to 1e-5 then 0.0 for the last two -- always exactly
+    `n_stages` long, so it lines up 1:1 with `bond_dims` (chem-0wh: the old
+    `(1e-4,)*(len(bond_dims)-2) + (1e-5, 0.0)` always appended both tail entries even when
+    `len(bond_dims) < 2`, so a single bond-dim value got a leftover noises=(1e-5, 0.0) of length
+    2 -- one entry longer than bond_dims/thrds -- silently shifting which sweep each noise value
+    lands on instead of giving the lone stage its intended terminal noise of 0.0)."""
+    tail = (1e-5, 0.0)
+    if n_stages >= len(tail):
+        return (1e-4,) * (n_stages - len(tail)) + tail
+    return tail[len(tail) - n_stages:]
+
+
 def dmrg_upper(n, bond_dims, threads):
     """Variational DMRG upper bound (final two-site sweep energy, NOT the extrapolation). block2 must
     not share a process with pyscf, so the integrals come from a child process."""
@@ -549,7 +592,7 @@ def dmrg_upper(n, bond_dims, threads):
 
     na = int(d["na"])
     e = dmrg_energy(d["h1"], d["eri"], (na, na), float(d["e_nuc"]), bond_dims=bond_dims,
-                    noises=(1e-4,) * (len(bond_dims) - 2) + (1e-5, 0.0), n_sweeps=4 * len(bond_dims),
+                    noises=_noise_schedule(len(bond_dims)), n_sweeps=4 * len(bond_dims),
                     n_threads=threads)
     os.makedirs("data", exist_ok=True)
     out = "data/hchain_vsdp_upper.json"
@@ -574,6 +617,8 @@ def main():
     ap.add_argument("--t2", action="store_true", help="add the T2 condition (block ~1.5 r^3: n <= 8 here)")
     ap.add_argument("--sym", action="store_true", help="SU(2) x reflection adapted T2, direct SCS (chem-7ko)")
     ap.add_argument("--table", action="store_true", help="re-pair saved bounds with current upper bounds")
+    ap.add_argument("--recertify", action="store_true",
+                     help="re-run certify() on each row's stored dual (chem-66q) instead of re-solving the SDP")
     args = ap.parse_args()
     if args.sym and (args.solver != "SCS" or max(map(int, args.ns.split(","))) > FCI_MAX_N):
         ap.error(f"--sym always runs SCS and needs the FCI-checked singlet premise, so n <= {FCI_MAX_N}")
@@ -596,7 +641,14 @@ def main():
     os.makedirs("data", exist_ok=True)
     for n in map(int, args.ns.split(",")):
         premise = singlet_premise(n) if args.sym else None  # seconds, before hours of SDP
-        if args.table:
+        if args.recertify:
+            row = results[str(n)]
+            if "dual_y" not in row:
+                raise RuntimeError(f"n={n}: no stored dual in {args.output} to recertify "
+                                    "(row predates chem-66q; re-run a full solve once to get one)")
+            lb, lams = recertify(n, "sym" if args.sym else args.t2, row["dual_y"], row["e_nuc"])
+            row["certified_lb"], row["worst_block_lambda"] = lb, min(lams.values())
+        elif args.table:
             row = results[str(n)]
         else:
             prob, e_nuc = hchain_problem(n, "sym" if args.sym else args.t2)
@@ -609,7 +661,8 @@ def main():
             cond = "PQG+T2sym" if args.sym else "PQG+T2" if args.t2 else "PQG"
             row = dict(n=n, conditions=cond, solver=args.solver, status=status, sdp_value=val + e_nuc, certified_lb=lb,
                        worst_block_lambda=min(lams.values()),
-                       t2_blocks={k: v for k, v in prob["size"].items() if k.startswith("T2")})
+                       t2_blocks={k: v for k, v in prob["size"].items() if k.startswith("T2")},
+                       e_nuc=e_nuc, dual_y=y.tolist())
         up, how = upper_bound(n, args.sym)
         if premise:
             assert abs(premise[0] - up) < 1e-8, (premise[0], up)  # the premise state is the bounding E0

@@ -9,6 +9,18 @@ Status key: `[ ]` open · `[~]` specced · `[x]` done (link the spec) · `[-]` k
 
 ## Open
 
+- [x] **chem-j71 — does an HF-weighted band-edge gap predict the Krylov depth M the chem-pm3 η-bound
+  needs, where the overshoot β − E_d demonstrably does not?** **DONE 2026-10-15.** On a 10-witness
+  set (chem-pm3's original 3 + 7 new guard-passing/invalid-floor escapes found by the same R-sweep/
+  asym-sweep procedure `SPEC_subspace_floor_resolvability.md` used), the weighted-gap predictor
+  `WG = min(gap_lo,gap_hi)/η` beats the overshoot at tracking `b_min`: Spearman ρ(WG, b_min) = −0.867
+  vs ρ(overshoot, b_min) = −0.758 (n=10) — **supports** the pre-registered rule (`|ρ_WG| ≥ 0.7` and
+  `> |ρ_overshoot|`). Second half (measured noise sensitivity): the bound is **~100% unsound** under
+  realistic shot noise on `S_0k` at *every* tested shot count from 1e2 to 1e8 (far beyond any
+  near-term budget), at a magnitude matching chem-pm3's own analytic worst-case slope
+  `(2M−1)·cap·σ` rather than beating it — a load-bearing caveat that this LP bound is a
+  noiseless-only certificate. → [`SPEC_pm3_depth_predictor.md`](SPEC_pm3_depth_predictor.md) §10.
+
 Generated 2026-07-28 by a five-way parallel scout over the whole tree (certified arc · method rungs ·
 Nb₃X₈ · FT stack · scale/refs). Every entry names existing primitives — nothing here needs new
 machinery to *start*. Four entries below rest on a defect **verified in code** during generation;
@@ -83,7 +95,24 @@ hypothesis whose death is informative is worth more here than a safe one.
   CAS(2,2)), symmetry PySCF detects only within its tolerance, an unrecorded mapper. *Caveat
   confirmed:* it does not transfer to Trotter eigenbases (conserve Z-string parities, not N/S_z),
   odmd_spectral's kicked reference, or model Hamiltonians. Follow-up: fix the residue where it
-  belongs, a tight/symmetric SCF in the builder.
+  belongs, a tight/symmetric SCF in the builder. **Done (chem-n3w):**
+  [SPEC](SPEC_symmetric_scf.md) — opt-in `symmetric_scf=True` on `build_molecular_hamiltonian`
+  floors `conv_tol` to `TIGHT_SCF_CONV_TOL` on point-group-symmetric geometries; default build
+  (and every existing call site/gate) is unchanged. `build_dipole_operators` takes the same flag
+  and runs the same SCF path, thread pin included (chem-9ud, G8).
+
+- [x] **chem-8ls — is square H₄'s RHF branch a platform accident or a rule?** **DONE 2026-11-05:
+  a rule.** At every side from 1.00 to 1.40 Å, the D2h-symmetric RHF is a saddle point (lowest
+  orbital-Hessian eigenvalue −0.53…−0.67 Ha). The broken-symmetry minimum lies 0.066–0.084 Ha below
+  it. The free SCF stopped on the saddle at a = 1.05/1.10/1.19/1.22/1.35 on macOS, and at a
+  different set on Linux. `_driver_problem` now follows internal SCF instabilities to a stable
+  minimum, so every builder lands on the same branch on macOS and Linux (E_HF to 1e-10 Ha, p₀ to 8
+  digits). The rule is a no-op on every ordinary gated system. *Consequences:* the lowest-level
+  residue witnesses of `SPEC_reachability_tolerance`, `SPEC_eigenstate_reachability`,
+  `SPEC_scf_conv_tol`, `SPEC_symmetry_reachability` and `SPEC_symmetric_scf` are gone from the
+  builder. Each spec records old and new values. The diagnostic's residue witness is now built on
+  purpose; excited-level residues at loose `conv_tol` remain, platform-dependent and ungated.
+  → [`SPEC_scf_stability_rule.md`](SPEC_scf_stability_rule.md).
 
 - [ ] ~~**A symmetry/sector-aware reachability test**~~ *(superseded by the closed entry above;
   original text follows)* *(the fix the
@@ -241,6 +270,17 @@ hypothesis whose death is informative is worth more here than a safe one.
   the cluster boundary") is **accurate as written** and needs no correction. Its conclusion was never
   contingent on this either way — a spurious level breaks a floor guard just as effectively as a real
   one — so this confirms the description, it does not reopen the finding.
+  **Extended 2026-10-15 (chem-5fs) — the asymmetric-H₆ witness and the irrep filter agree.** The
+  entry above checked linear H₆ only. `scripts/chem_5fs_floor_guard_mechanism_check.py` adds the
+  third recorded escape witness, asym H₆ [0.9, 0.9, 2.2, 0.9, 0.9] Å, and applies the
+  `SPEC_symmetry_reachability` irrep filter to all four geometries. Asym H₆: 62 in-band levels at
+  both the default and `conv_tol=1e-13`, top population 9.400e-4 at both, largest relative
+  difference 1.8e-6. The irrep filter (available on all four, SCF symmetric) flags **0** in-band
+  levels as symmetry-forbidden. So the ~1e-4 level is physical on the asymmetric witness too.
+  *Precision correction to "identical to 6 significant figures":* populations above 1e-5 agree to
+  ≤ 2.6e-6 relative, but the smallest in-band levels (~4e-6) differ by up to 5.9e-6 relative
+  (linear R = 1.2: 14 of 65 levels past 1e-6). That is the 6th–7th digit and changes nothing above,
+  but "identical to 6 sig figs" holds only for the larger levels. macOS 27; Linux not re-run.
 
 - [ ] ~~**UPDATE 2026-07-30 — the math is VERIFIED, the "moots the block certificate" half is
   BLOCKED, and the attempt found a defect one rung lower.** Independent check of the chained bound
@@ -344,6 +384,22 @@ hypothesis whose death is informative is worth more here than a safe one.
   target (cond 1.2e17; the size depends on LAPACK, chem-pc1 saw −7.49), and seed 0 gives +0.026 mHa.
   On both seeds, centered roots stay above every target for K=3..8 (min +0.0042 mHa at K=8) and match
   across the seeds to < 1e-13 Ha. Follow-up: hash-seed-deterministic `build_molecular_hamiltonian`.
+
+- [x] **CLOSED (chem-nxn) — `hamiltonian_moments` centers by ⟨H⟩ by default, conditioning-guarded.
+  SURVIVES.** [`SPEC_centered_moments_default.md`](SPEC_centered_moments_default.md),
+  `tests/test_centered_moments_default_spec.py` (5/5 green, Linux x86_64, 8 vCPU/16GB, one process
+  per file, 67 s). `hamiltonian_moments(mh, max_order)` — no caller-side centering — now returns
+  `chem-70c`'s μ=⟨H⟩-centered moments whenever that is not worse-conditioned at the deepest K the
+  call supports, else falls back to the exact raw moments; the decision is a one-shot comparison at
+  `K_max = max_order // 2`. Every existing gate reproduces its original numbers: `SPEC_moment_pds`
+  G1–G4 unmodified (4/4), `SPEC_pds_excited_roots` and `SPEC_centered_pds` updated to pass
+  `centered=False` at their raw-frame call sites (both still green, 5/5 and 6/6), `SPEC_centered_pds_roots`
+  and `SPEC_centered_pds_shots` likewise pass `centered=False` and are unaffected (4/4, 7/7). H₂'s
+  K≥3 exhaustion boundary (`chem-70c`'s amendment) correctly falls back to raw: centered cond(Hankel)
+  at K=4 is 6.17e17 vs 5.96e17 raw — centered is worse, so the fallback returns the exact pre-chem-nxn
+  raw numbers. Re-verified on Linux after this branch was rebuilt from a stale, 109-commits-behind
+  base; the 2026-10-01 handoff's numbers were macOS-only. No other `hamiltonian_moments` caller in the
+  repo needed a `centered=False` update (`centered_pds_shots.py` imports only `pds_energy`).
 
 - [x] **CLOSED (chem-pc1) — the higher roots of P_K(E) are bounded excited-state estimates, but the
   usefulness claim is KILLED, and a second, sharper finding: the bound itself can break in floating
@@ -463,6 +519,109 @@ hypothesis whose death is informative is worth more here than a safe one.
   → [`SPEC_nb3x8_gaps.md`](SPEC_nb3x8_gaps.md) G8; [`SPEC_nb3x8_magnetometry.md`](SPEC_nb3x8_magnetometry.md)
   §7 (follow-up closed as a negative result, not deferred).
 
+- [x] **CLOSED 2026-10-15 (chem-phh) — of the three candidates chem-g78 left open, the third
+  (direct lattice renormalization of t_s⊥) is tested and also KILLED, in the narrow form stated;
+  the other two are pre-registered but blocked on data this sandbox cannot source.**
+  [SPEC](SPEC_nb3x8_tc_attribution.md) G1–G5. *Check:* hold U0, Us fixed and solve for the
+  multiplier `eta` on t_s⊥ such that the isolated-dimer predicted Tc (already-validated
+  `nb3x8_magnetometry.predicted_transition_K`) lands on the measured Tc; compare `|1-eta|` to an
+  *independent* slice of the same vendored table — the relative |t_s⊥| spread between the bulk and
+  bilayer stacking variants of the same halide's LT (dimerized) structure (2.041% F, 0.147% Cl,
+  0.118% Br, 0.092% I; zero new parameters, both already in `NB3X8_CLUSTERS`). *Result:* the
+  rescaling needed to match measured Tc is **57.7% (Nb3Cl8, eta=0.4229) / 35.8% (Nb3Br8,
+  eta=0.6424)** — 17–600× the 2.04% family-wide same-motif anchor even at a generous 10× kill margin
+  (bound 20.4%). A same-structural-motif renormalization of t_s⊥ alone cannot explain the
+  overprediction for either halide — **KILLED**. *Caveat, stated up front:* this is a narrow claim —
+  it does not rule out t_s⊥ moving as part of an actual structural PHASE change (the HT/LT |t_s⊥|
+  ratio, 0.126 Cl / 0.121 Br, shows the hopping CAN move by a large factor under a real phase
+  change — that is candidate 1's territory, untested here, not contradicted). *Candidates 1
+  (cooperative/first-order structural transition) and 2 (in-plane kagome exchange) remain
+  untested* — pre-registered in `nb3x8_tc_attribution.UNTESTED_CANDIDATES` with the kill condition
+  each would need to pass, but both need data (elastic/lattice free energies; an in-plane exchange
+  constant) that `arXiv:2501.10320`'s vendored tables do not carry and that this sandbox cannot
+  fetch: `WebSearch` was re-attempted this session and returned the same canned non-answer
+  chem-a04 recorded ("I don't have the capability to perform real-time web searches..."), confirming
+  the no-internet-access finding is still current, not stale. Gate G5 in
+  `tests/test_nb3x8_tc_attribution_spec.py` asserts both candidates stay honestly marked untested
+  (non-empty description/check/blocked_on) rather than silently claimed as tested.
+  → [`SPEC_nb3x8_tc_attribution.md`](SPEC_nb3x8_tc_attribution.md); `nb3x8_tc_attribution.py`;
+  follow-up beads chem-cfl (structural-transition data sourcing) and chem-b0y (in-plane kagome
+  exchange data sourcing) filed for whenever that data becomes reachable.
+
+- [x] **CLOSED 2026-10-15 (chem-cfl) — candidate 1 (cooperative/first-order structural transition,
+  pre-registered by chem-phh above) is now tested and SURVIVES; chem-phh/chem-a04's "no internet
+  access" finding did not hold for `WebFetch` on direct URLs.** [SPEC](SPEC_nb3x8_tc_attribution.md)
+  G5–G7. *Data sourced:* Mortazavi, Zhuang & Rabczuk, "A first-principles study on the physical
+  properties of two-dimensional Nb3Cl8, Nb3Br8 and Nb3I8," `arXiv:2412.03360v1` — fetched via
+  `WebFetch` on the arXiv PDF URL and read in full with the `Read` tool (not a search-engine
+  summary, per the chem-jiy lesson); reports DFT exfoliation energies and monolayer lattice
+  constants, independent of `arXiv:2501.10320`. *Check (exactly the one chem-phh pre-registered):*
+  build `F_phase(T) = E_mag,phase(T) - T*S_mag,phase(T) + E_lattice,phase` for HT vs LT using the
+  already-validated N=2 Boltzmann trace (`nb3x8_susceptibility.n2_spectrum`, via a new
+  `nb3x8_tc_attribution.mean_energy` accessor) on `NB3X8_HT_BULK`/`NB3X8_LT_BULK`; because
+  `E_lattice` enters linearly, the value that puts the crossing exactly at the measured Tc is solved
+  directly (`required_e_lattice`); compare to the sourced exfoliation energy per formula unit as a
+  loose, physically-plausible upper bound (`exfoliation_energy_per_fu`; a partial HT<->LT relaxation
+  cannot plausibly cost more than full layer separation). *Result:* needed `E_lattice` = **9.94 meV
+  (Nb3Cl8, 1.7% of the 596.9 meV bound) / 41.61 meV (Nb3Br8, 5.6% of the 740.1 meV bound)** — both
+  positive (correct sign) and small fractions of the bound, robust even to a 2× tightening of the
+  bound (1-vs-2-formula-units-per-cell ambiguity). **SURVIVES**: a modest, physically plausible
+  lattice energy reproduces the measured Tc without extreme tuning. *Caveat, stated up front (not
+  rounded into the verdict):* this is a plausibility bound, not confirmation — `arXiv:2412.03360`
+  does not resolve an HT phase at all, so the exfoliation energy is a generous upper bound on *any*
+  structural relaxation, not a measured HT/LT energy difference; `NB3X8_HT_BULK`/`NB3X8_LT_BULK` are
+  single-dimer electronic parameters with no lattice feedback. Surviving this check means candidate
+  1 is not ruled out on energetic grounds, not that it is confirmed as the mechanism. Candidate 2
+  (in-plane kagome exchange) remains untested — `arXiv:2412.03360` has no magnetic exchange data
+  either — but the `WebSearch`-only "no internet access" finding is now known to be wrong; a future
+  session should retry sourcing it with `WebFetch` before assuming it is unreachable.
+  → [`SPEC_nb3x8_tc_attribution.md`](SPEC_nb3x8_tc_attribution.md) §3b, G5–G7;
+  `nb3x8_tc_attribution.py` (`mean_energy`, `exfoliation_energy_per_fu`, `required_e_lattice`,
+  `candidate1_verdict`); follow-up bead chem-b0y (in-plane kagome exchange data) remains open, now
+  with the WebFetch note.
+
+- [x] **CLOSED 2026-10-15 (chem-b0y) — candidate 2 (in-plane kagome exchange), the last of
+  chem-phh's two pre-registered-but-blocked candidates with a sourceable constant, is now sourced
+  and KILLED.** [SPEC](SPEC_nb3x8_tc_attribution.md) G8–G9. *Process correction first:* chem-phh and
+  chem-a04 both concluded "no working internet access" from `WebSearch` alone, which genuinely is
+  broken in this sandbox (returns generic non-answers). Direct bash `curl` to `export.arxiv.org`
+  (following its 301→HTTPS redirect) works and returns real content — the arXiv API plus direct PDF
+  download and `pypdf` text extraction (ad hoc, not a project dependency, matching the chem-jiy
+  precedent of verifying against primary-source PDF text rather than a search-engine/AI summary)
+  found and verified a real in-plane exchange constant. *Source:* Zhang, Dai, Wang, Cheng & Ji,
+  "Robust Mottness and tunable interlayer magnetism in Nb3X8 (X = F, Cl, Br, I) bilayers"
+  (`arXiv:2508.17352`), Table 1, DFT+U total-energy-mapped in-plane NN/NNN exchange between Nb₃
+  trimers (meV/trimer, "positive = AFM"): Nb3Cl8 J1=+0.12, J2=−0.24; Nb3Br8 J1=−2.74, J2=−0.37 —
+  verified against the downloaded PDF text directly, not a summary. *Two premise corrections found
+  before any suppression arithmetic:* (a) the paper's own in-plane lattice of Nb₃ trimers is
+  **triangular**, not kagome — "kagome" in this bead's name and the magnetometry spec's §7 is this
+  repo's geometric shorthand, not what the source paper reports; (b) the coupling is not robustly
+  antiferromagnetic — Nb3Br8's J1 is FM by the paper's own sign convention, and Nb3Cl8's J1 is a
+  tiny near-degenerate AFM/FM difference (the paper: "Nb3Cl8 has nearly degenerate FM, ZZ-AFM and
+  Stripe-AFM configurations") — frustration-driven Tc suppression needs a dominant, genuinely
+  antiferromagnetic coupling on a frustrated net, which neither halide's sourced coupling clearly
+  is. *Quantitative check run anyway* (steelmanning past the premise problem, per the pre-registered
+  condition in `UNTESTED_CANDIDATES`): the standard RPA/mean-field self-consistency closure for
+  weakly-coupled quantum dimers, `J'_eff * chi_dimer(Tc) = 1` (`chi_dimer` from the already-validated
+  `nb3x8_susceptibility.susceptibility`), gives the effective in-plane coupling that WOULD be needed
+  to pull the isolated-dimer crossover down to measured Tc: **19776 meV (Cl), 663 meV (Br)**.
+  Compared to the most generous possible reading of the sourced J1/J2 — full triangular-lattice
+  coordination (z1=z2=6), absolute values, no cancellation — **2.16 meV (Cl), 18.66 meV (Br)**: the
+  needed coupling exceeds even this generous bound by **9156× (Cl) / 35.5× (Br)**, and exceeds
+  `J_interlayer` itself (66.2 meV Cl, 119.1 meV Br, from the already-validated
+  `odmd_spin.dimer_exchange_analytic`) by **298.7× (Cl) / 5.6× (Br)** — well past the pre-registered
+  kill bar ("requires J' unphysically close to or exceeding J_interlayer"). **KILLED** for both
+  halides. *Caveat, stated up front:* this only rules out the in-plane coupling acting ALONE via the
+  standard weak-coupling mean-field mechanism at the sourced scale — it does not address a small
+  in-plane contribution combined with a lattice relaxation (candidate 1, which survives its own check -- chem-cfl, entry above). The margin
+  (>35×, and exceeding `J_interlayer` itself) is large enough that this is not a close call. Gates G8 (sourced-data regression pin) and G9 (kill verdict, both halides) in
+  `tests/test_nb3x8_tc_attribution_spec.py`; G4 now asserts `UNTESTED_CANDIDATES` is empty.
+  *What remains open:* none of the three named candidates -- chem-cfl tested candidate 1 in
+  parallel (entry above) and it SURVIVES.
+  → [`SPEC_nb3x8_tc_attribution.md`](SPEC_nb3x8_tc_attribution.md); `nb3x8_tc_attribution.py`
+  (`NB3X8_INPLANE_EXCHANGE`, `required_inplane_coupling`, `sourced_inplane_bound`,
+  `candidate2_verdict`).
+
 - [x] **CLOSED 2026-09-30 (chem-a04) — re-verified, both kill conditions survive; the scale-agreement
   caveat still applies up front.** [SPEC](SPEC_odmd_optical.md), LT Cl +1.59%, family spread 44.3%,
   `coordination_gap` z=3 872.9 meV. *Original claim:* `odmd_optical.dimer_optical_gap` on LT cRPA
@@ -545,10 +704,11 @@ hypothesis whose death is informative is worth more here than a safe one.
   earlier scout-probe numbers logged in this entry's history ("2.285 vs 2.175, 2.351 vs 2.285, 2.391
   vs 2.364") are close to but not identical with this closure's pre-registered `π·sin θ₀` values —
   they predate the pre-registration discipline applied here and were not reproduced as part of this
-  closure; treat this entry's own numbers above as the checked ones. **Landing finding (not gated):**
-  on chem-177's recentered walk, H₂ at t=4 reaches 2.6966 > π·sin θ₀' = 2.6212. That is under the
-  exact nearest-bin bound 2.7739, so the first-order envelope is not a strict bound at small t
-  (SPEC §10).
+  closure; treat this entry's own numbers above as the checked ones. **Landing finding, now gated
+  (chem-bu4, SPEC §10/G4):** on chem-177's recentered walk, H₂ at t=4 reaches 2.6966 > π·sin θ₀' =
+  2.6212. That is under the exact nearest-bin bound 2.7739, so the first-order envelope is not a
+  strict bound at small t — restated as a large-t envelope, with the exact bound gated directly on
+  both walks across t=4..14.
   *Cost:* cheap; ≤6 qubits (`pauli_decompose` is exponential). *Caveat:* an upper envelope (first-order
   geometric argument, not a worst-case proof), tested on 3 systems, all STO-3G, all ≤6 qubits, all near
   equilibrium geometry — generalization beyond that is not tested (`SPEC_qpe_precision_bound` R1-R3).
@@ -564,8 +724,9 @@ hypothesis whose death is informative is worth more here than a safe one.
   closed form for a literal *fixed-t* point-estimate ratio is **killed** (the ratio swings 18–279×
   across t=4..20 on every system — the dyadic staircase the π·sin θ₀ entry above bounds), while
   λ'/λ = 0.51–0.70 cuts the walk-step budget ∝ λ/ε by 1.43–1.94× and the phase-bit count at ε=1e-3
-  by 0–1 bit (13→13, 13→12, 15→14, 15→14 under the *empirical* `3λ/2^t` envelope of
-  `SPEC_qpe_readout_laws` G2; the decode's hard ceiling is π), confirmed by running `run_qpe` end to
+  by 0–1 bit (14→13, 13→12, 15→14, 15→15, revised chem-bu4 to use the derived hard ceiling `πλ/2^t`
+  in the budget formula itself, in place of the *empirical* `3λ/2^t` fit of `SPEC_qpe_readout_laws`
+  G2), confirmed by running `run_qpe` end to
   end at each variant's own budget (G3); (4) `df_lambda` vs
   identity-excluded naive λ resolved as **NOT-COMPARABLE-AND-VACUOUS, not a flip**: `SPEC_scdf_lambda`
   G1(b) (identity-*included* comparison) still holds on every system, and `df_lambda` is a provably
@@ -886,11 +1047,50 @@ hypothesis whose death is informative is worth more here than a safe one.
   from adversarial review:** exit 1 means ABSTAIN *or* crash, and a consumer that falls back to
   stderr when stdout is empty cannot tell them apart — a checker crashing on a certificate
   pinned ABSTAIN passed silently until G1 was made to compare the checker's own verdict line
-  against its exit code.
+  against its exit code. **Third finding, bumping the pin to certkit `c2582aa` (chem-cgb,
+  2026-11-06):** a checker fix reopened that hole. Since certkit-3zr an exception inside a rule
+  is printed as an ABSTAIN whose reason is `internal error: ...`, exit 1. The verdict line now
+  agrees with the exit code, so a checker crashing on every sector certificate passed G1 again
+  (shown by mutation). `check_certificate` now reports that case, and exit 2, as CRASH, and a
+  gate test injects both into the real checker. No pinned value moved in the bump.
   → [`SPEC_certkit_regression_gate.md`](SPEC_certkit_regression_gate.md) (gates G1–G5 in
   `tests/test_certkit_regression_gate_spec.py`; electronic frame, global λ_min and **not** the
-  reachable-sector one, coverage is the producer's four cases until certificate emission reaches
-  the solver's return path).
+  reachable-sector one; coverage is the producer's four cases, each with the solver's own
+  return-path certificate since chem-cgb).
+
+- [x] **portfolio-cir: does every ground-state energy the solver returns get a certificate
+  *about that energy*?** *(2026-11-05)* — **DONE.** Every energy-returning method now takes
+  `certify=<dir>`. Doing that showed the bridge's claim shape was the wrong one for a return
+  path: `[floor, ⟨x|H|x⟩]` puts the witness's quotient in the ceiling, not the returned energy.
+  With shot noise those differ, and a noisy H₂ energy **7.3 mHa below** the exact ground state
+  then gets a VERIFIED certificate. Claiming `[floor, E]` instead makes VERIFIED mean "E is a
+  proven upper bound". Six of twelve seeded noisy energies fall below λ_min, and all six now
+  ABSTAIN. → [`SPEC_certkit_return_paths.md`](SPEC_certkit_return_paths.md) (G1–G4 in
+  `tests/test_certkit_return_paths_spec.py`; opt-in as built, on every call since
+  `portfolio-0pc`, next entry).
+
+- [x] **portfolio-0pc: can an energy leave the solver without a certificate or an
+  abstention?** *(2026-11-16)* — **DONE: no.** `certify=` is gone. Every energy-returning
+  method of the four solvers and the pipeline certifies on every call, and the result types
+  hold the number as `unverified_energy`: `energy` returns it only if the checker VERIFIED it
+  and raises `EnergyAbstained` otherwise. Four things came out of doing it. **(1) One proof
+  covers a sweep.** A VERIFIED certificate for E proves `lambda_min <= E`, hence every
+  E' >= E too, so the lowest energy of a call is submitted first and the rest share its
+  verdict: one checker run per sweep instead of one per step (352 eight-qubit energies in the
+  suite, 26 minutes down to under one). **(2) A door is unavoidable, and it can be made
+  harmless.** The suite makes 1,857 `eigenstates` calls that read Ritz vectors and claim no
+  energy, and one checker run is **37 minutes at 16 qubits** (measured; the checker is pure
+  Python). `uncertified_eigenstates` and `uncertified_estimates_only=True` run no checker and
+  return abstentions, so nothing they return reads as an energy. **(3) Nothing noiseless
+  abstained.** All 519 noiseless energies the suite returns on certified paths verified; the
+  11 abstentions are shot-noisy ones. All 4,863 energies match `origin/main` to 1e-12 Ha.
+  **(4) The gate had a hole, found by mutation.** An abstention that kept its refused
+  claim's ceiling handed the number back to within the float padding, and the leak scan was
+  tighter than the padding. Nine source mutations now turn the gate red.
+  → [`SPEC_certificate_or_abstention.md`](SPEC_certificate_or_abstention.md) (G1–G5 in
+  `tests/test_certificate_or_abstention_spec.py`; references, `estimate_energy_aer` and the
+  linear-algebra kernels are out of scope and say why; certchem's `Mode.FAST` is still a bare
+  float by ADR-0004).
 
 - [x] **Falsifying my own guard: the self-mode subspace floor is heuristic, not rigorous, for
   d ≥ 2** *(a parallel adversarial falsification sweep auditing PRs #20/#21)* — the self-mode floor
@@ -1673,7 +1873,8 @@ hypothesis whose death is informative is worth more here than a safe one.
   literal "~lambda/2^t" smooth-scaling reading is FALSE — the realized argmax point-estimate error
   is a monotonically non-increasing STAIRCASE in `t` (adding phase bits never hurts, but the error
   often doesn't move for several consecutive `t` before a sudden drop), bounded above by a real,
-  checked constant (measured max ratio `err/(lambda/2^t)` = 2.175, gated at 3x). The state-prep
+  PROVABLE ceiling `pi*lambda/2^t` (mean-value-theorem on cos + the half-dyadic-bin phase error;
+  measured max ratio `err/(lambda/2^t)` = 2.175, comfortably inside `pi`). The state-prep
   claim sharpens into a precise law: `p_success(window)/overlap` depends almost entirely on `t`, NOT
   on the overlap value — verified band width `< 0.05` across an overlap sweep spanning 0.02 to 0.99
   (a 50x range) at each of `t=8,10,12` (measured widths 0.029 / 0.002 / 0.0001). **Boundary, recorded
@@ -1683,7 +1884,11 @@ hypothesis whose death is informative is worth more here than a safe one.
   code changes — the checks live entirely in the test file, exercising `qpe_walk_readout.py`'s
   existing `run_qpe` unmodified. Gates G1–G4 in `tests/test_qpe_readout_laws_spec.py`.
   → [`SPEC_qpe_readout_laws.md`](SPEC_qpe_readout_laws.md) (exact Fejer-kernel simulation oracle,
-  not circuit-level; one system, H2 CAS(2,2) — the specific constants are measurements, not derived).
+  not circuit-level; one system, H2 CAS(2,2). **chem-aob correction:** G2 originally called the
+  constant `3` "provable" — it wasn't, it was a bare fit to this one sweep (`3 < pi`, so not even a
+  valid ceiling in general); G2 now uses the actually-derived `pi`. The *tight* realized ratio
+  (2.175) remains a measurement, not derived — `SPEC_qpe_precision_bound` below tightens that to a
+  per-system `pi*sin(theta_0)` envelope).
 
 - [x] **krylov_subspace_solver — the documented bug fix gets a regression test, and the cross-check
   finally happens** — a second, independent real-time Krylov implementation (FCI-direct, not
@@ -2005,6 +2210,28 @@ hypothesis whose death is informative is worth more here than a safe one.
   this proves the specced leak does not occur here, NOT that no leak can ever exist, which is the
   natural follow-up; phase window calibrated, not derived).
 
+- [x] **CLOSED (chem-36m, follow-up to chem-z3h) — `GapBracket` gains the same oracle-free premise
+  flag `EnergyBracket` had, and a depth-convergence check on ODMD's ε(K) buys real (if partial)
+  safety: it never green-lights a K that the gated (M, K) map shows actually breaks the bracket,
+  but convergence is NOT correctness.** *G1:* `certified_gaps.GapBracket.premise_refuted`
+  (ε₁ > θ₁ + 1e-9, identical form/margin to `EnergyBracket`'s) never fires without a genuine
+  oracle overshoot, never in self mode, fires on a deliberately-bad oracle, and — like
+  `EnergyBracket`'s — is forced off under shot noise because `θ₁` is left at `+inf` there (a
+  latent noise-soundness gap in `gap_bracket`'s `theta1` field, fixed alongside the new property;
+  no existing caller passes a noisy solver, so this is a no-op everywhere today). *G2:* across H₄,
+  N₂ CAS(6,6), LiH CAS(2,5) and full-space LiH, requiring `odmd_depth_convergence.depth_converged`
+  (stable within 2 mHa over a trailing window of 3 already-measured K, no look-ahead) before
+  trusting ε(K) never coincides with a K that chem-z3h's gated map records as an actual containment
+  escape (`lower > E₀ + TOL`) at that K, for any base depth M — e.g. full-space LiH's escapes at
+  K=12,14,16 (M=6) sit inside a 280–700 mHa swing between adjacent grid points, nowhere near
+  converged. *G3, the honest boundary:* convergence is necessary, not sufficient — N₂'s ε(K) is
+  stable within ~1 mHa at K=28 while sitting +34.5 mHa *above* E₁ the whole time (a
+  stable-but-biased fixed point, not a transient); LiH CAS(2,5) similarly "converges" at K≥22 on
+  the premise-satisfying side. `depth_converged=True` means "stopped moving," never "verified."
+  → [`SPEC_odmd_depth_convergence.md`](SPEC_odmd_depth_convergence.md); `odmd_depth_convergence.py`;
+  `tests/test_odmd_depth_convergence_spec.py` (5/5, reuses chem-z3h's gated map, no new Krylov/ODMD
+  machinery). Lehmann/Kato rigorous E₁ floors remain out of scope, as chem-z3h already deferred.
+
 ## Killed
 
 - [-] **Certified PQG bracket for Hₙ ≤ 1 mHa/atom at n=12** (chem-3z8) — →
@@ -2018,3 +2245,17 @@ hypothesis whose death is informative is worth more here than a safe one.
   *Killed:* D=400 truncates too hard as chain entanglement grows — stderr balloons to ~5 mHa, the
   discarded-weight extrapolation falls back to `invD` by n=30, and leave-one-out = 1.07 mHa/atom
   (gate < 0.1). The ramp protocol is fine; cheap bond dims are not. Superseded by "done right" above.
+
+- [x] **Can qDRIFT replace exact evolution in real-time Krylov without breaking the variational
+  floor?** *(qdrift_krylov; triggered by an external "SqDRIFT Krylov" skill template that repeated
+  every REFACTOR_PLAN §2 failure and raises `LinAlgError` on H₂O)* — **YES, if one random walk
+  supplies a whole basis and (H, S) are averaged over walks** (a Gram pair in an R-fold direct sum
+  ⇒ proven floor). H₂O/STO-3G, M=6, R=20: median error at L=50/400/2000 samples per step is
+  **0.28/0.037/0.009 mHa** for CAS(2,2) and **6.9/3.4/0.89 mHa** for CAS(4,4); 36/36 runs above
+  sector FCI. **THE FINDING:** single Pauli strings do not conserve N̂, so the floor is the
+  FOCK-space minimum — CAS(4,4) leaks up to 15 % of the norm per walk, and with H + μN̂ (μ = −2 Ha)
+  un-postselected runs land **10–42 mHa below** sector FCI while N-sector postselection keeps them
+  above. Boundary: required L grows with λ (2.44 vs 11.2; CAS(4,4) misses chemical accuracy at
+  L=400). Gates G1–G6 in `tests/test_qdrift_krylov_spec.py`; `qdrift_krylov.py`.
+  → [`SPEC_qdrift_krylov.md`](SPEC_qdrift_krylov.md) (exact statevector of the channel, no shot
+  noise; reproduction of Campbell 2019 + Klymko 2022, not novelty; ≤ 8 qubits).

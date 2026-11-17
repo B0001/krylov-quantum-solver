@@ -19,6 +19,11 @@ bound by ~7.5 mHa (not float noise -- see G1's docstring and specs/SPEC_pds_exci
 G1 is scoped to exclude that combination rather than assert something empirically false.
 
 PySCF/qiskit only (no block2); `make gates` runs it in its own process.
+
+Every ``hamiltonian_moments`` call below passes ``centered=False``: this spec's whole point is the
+raw electronic frame's ill-conditioning at high K, which `moment_expansion.hamiltonian_moments`
+centers away by default since chem-nxn (specs/SPEC_centered_moments_default.md). ``centered=False``
+recovers the exact raw-frame numbers this file was written against.
 """
 import os
 
@@ -69,7 +74,7 @@ def test_G1_variational_bound_holds_for_every_root():
     """
     mh_eq = _h4_equilibrium()
     reachable_eq = _reachable_spectrum(mh_eq)
-    mu_eq, off_eq = hamiltonian_moments(mh_eq, 16)
+    mu_eq, off_eq = hamiltonian_moments(mh_eq, 16, centered=False)
     for K in range(3, 9):
         roots = pds_roots(mu_eq, K, off_eq)
         n = min(len(roots), len(reachable_eq))
@@ -78,7 +83,7 @@ def test_G1_variational_bound_holds_for_every_root():
 
     mh_st = _h4_stretched()
     reachable_st = _reachable_spectrum(mh_st)
-    mu_st, off_st = hamiltonian_moments(mh_st, 16)
+    mu_st, off_st = hamiltonian_moments(mh_st, 16, centered=False)
     for K in range(3, 7):
         roots = pds_roots(mu_st, K, off_st)
         n = min(len(roots), len(reachable_st))
@@ -94,7 +99,7 @@ def test_G1b_bound_can_break_at_K7_on_near_degenerate_stretched_h4():
     ill-conditioned for the strict bound to be a reliable claim at this K on this geometry, which is
     the actual, falsifiable reason G1 excludes it."""
     mh = _h4_stretched()
-    mu, off = hamiltonian_moments(mh, 16)
+    mu, off = hamiltonian_moments(mh, 16, centered=False)
     K = 7
     M = np.array([[mu[2 * K - i - j] for j in range(1, K + 1)] for i in range(1, K + 1)])
     cond = np.linalg.cond(M)
@@ -110,7 +115,7 @@ def test_G2_K8_first_excited_root_misses_chemical_accuracy():
     silence."""
     mh = _h4_equilibrium()
     reachable = _reachable_spectrum(mh)
-    mu, off = hamiltonian_moments(mh, 16)
+    mu, off = hamiltonian_moments(mh, 16, centered=False)
     roots8 = pds_roots(mu, 8, off)
     err_root1 = abs(roots8[1] - reachable[1])
     assert err_root1 > 5e-3, (err_root1, "usefulness claim unexpectedly holds -- update the spec")
@@ -122,7 +127,7 @@ def test_G3_ground_root_converges_orders_of_magnitude_faster_than_first_excited(
     more converged than the first excited root, from the same linear solve."""
     mh = _h4_equilibrium()
     reachable = _reachable_spectrum(mh)
-    mu, off = hamiltonian_moments(mh, 16)
+    mu, off = hamiltonian_moments(mh, 16, centered=False)
     roots = pds_roots(mu, 7, off)
     err0 = abs(roots[0] - reachable[0])
     err1 = abs(roots[1] - reachable[1])
@@ -139,7 +144,7 @@ def test_G4_index_matching_skips_a_level_on_near_degenerate_stretched_h4():
     the gate asserts the skip is reproducible, not that matching works."""
     mh = _h4_stretched()
     reachable = _reachable_spectrum(mh)
-    mu, off = hamiltonian_moments(mh, 16)
+    mu, off = hamiltonian_moments(mh, 16, centered=False)
     K = 6
     roots = pds_roots(mu, K, off)
     n_show = min(len(roots), 6)

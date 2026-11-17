@@ -1,20 +1,26 @@
 """
-Acceptance gates G1-G3 for specs/SPEC_qpe_precision_bound.md (chem-0ke): QPE's precision
-constant -- measured as ~2.175 on H2 CAS(2,2) by SPEC_qpe_readout_laws and explicitly left
-without a derivation there -- is tested here against a specific closed-form prediction,
+Acceptance gates G1-G4 for specs/SPEC_qpe_precision_bound.md (chem-0ke, revised chem-bu4): QPE's
+precision constant -- measured as ~2.175 on H2 CAS(2,2) by SPEC_qpe_readout_laws and explicitly
+left without a derivation there -- is tested here against a specific closed-form prediction,
 pi*sin(theta_0) with theta_0 = arccos(E_0/lambda), PRE-REGISTERED in
 specs/SPEC_qpe_precision_bound.md sec.3 (and reproducible via
 scripts/spec_qpe_precision_bound.py) from the exact spectrum alone, before any QPE sweep runs.
 
+G4 (chem-bu4) gates the EXACT nearest-dyadic-bin ceiling -- a strict per-t bound, unlike
+pi*sin(theta_0) which is only its large-t limit -- on both the ordinary (recenter=False) and
+recentered (recenter=True, SPEC_ft_identity_shift) walk operator, across all of t=4..14. This is
+the gate that would have caught chem-177's landing finding (recentered H2 at t=4 exceeds
+pi*sin(theta_0') by 2.9%) as a non-issue instead of a footnote.
+
 Deliberately no new library code: reuses `qpe_walk_readout.run_qpe` and
-`qubitization_blueprint.{build_qubit_hamiltonian,pauli_decompose}` unmodified.
+`qubitization_blueprint.{build_qubit_hamiltonian,pauli_decompose,split_identity}` unmodified.
 """
 import numpy as np
 import pytest
 from pyscf import ao2mo, gto, mcscf, scf
 
 from qpe_walk_readout import run_qpe
-from qubitization_blueprint import build_qubit_hamiltonian, pauli_decompose
+from qubitization_blueprint import build_qubit_hamiltonian, pauli_decompose, split_identity
 
 T_RANGE = list(range(4, 15))  # t = 4..14 inclusive, per the bead's pre-registered sweep
 
@@ -91,6 +97,50 @@ def test_G1_measured_ratio_never_exceeds_predicted_bound(system):
     ratios = _measured_ratios(system)
     bound = system["bound"]
     assert max(ratios) <= bound, (system["name"], bound, ratios)
+
+
+def _exact_nearest_bin_ceiling(theta0, t):
+    """Exact per-t ceiling on err(t)/(lambda/2^t) -- chem-bu4's G4. Unlike pi*sin(theta0) (the
+    t -> infinity envelope this spec otherwise tests), this is a strict bound at EVERY t: the
+    argmax decode rounds the true phase theta0 to the nearest dyadic grid point, at most pi/2^t
+    away, and cos is 1-Lipschitz (mean value theorem), so the realized error can never exceed the
+    exact worst case at the two neighboring grid points."""
+    return 2 ** t * max(abs(np.cos(theta0 + s * np.pi / 2 ** t) - np.cos(theta0)) for s in (1, -1))
+
+
+def _walk_theta0(h1, eri, norb, recenter):
+    """theta0 for the walk variant run_qpe uses internally, matching its own recentering exactly
+    (qubitization_blueprint.split_identity) -- so the ceiling is computed on the same spectrum
+    run_qpe decodes against, not a separately-reconstructed one."""
+    H, n = build_qubit_hamiltonian(h1, eri, norb)
+    Ek, _Vk = np.linalg.eigh(H)
+    terms = pauli_decompose(H, n)
+    if recenter:
+        non_identity, c_identity = split_identity(terms)
+        lam = sum(abs(c) for _, c in non_identity)
+    else:
+        c_identity, lam = 0.0, sum(abs(c) for _, c in terms)
+    E0 = float(Ek[0]) - c_identity
+    return float(np.arccos(np.clip(E0 / lam, -1, 1)))
+
+
+@pytest.mark.parametrize("recenter", [False, True])
+def test_G4_exact_nearest_bin_bound_never_exceeded(system, recenter):
+    """chem-bu4's real per-t falsifier: unlike G1's pi*sin(theta0) large-t envelope, this exact
+    half-bin ceiling must never be exceeded at ANY t, on BOTH the ordinary (recenter=False) walk
+    G1-G3 already cover and the recentered (recenter=True) walk SPEC_ft_identity_shift adds -- the
+    landing finding that killed pi*sin(theta0) as a strict bound (recentered H2 at t=4: ratio
+    2.6966 > bound 2.6212) does NOT exceed this ceiling (2.7739)."""
+    theta0 = _walk_theta0(system["h1"], system["eri"], system["norb"], recenter)
+    for t in T_RANGE:
+        E_est, lam_r, _ps, _olap = run_qpe(
+            system["h1"], system["eri"], system["norb"], system["e_core"], system["ground"], t,
+            recenter=recenter,
+        )
+        err = abs(E_est - system["casci"])
+        ratio = err / (lam_r / 2 ** t)
+        ceiling = _exact_nearest_bin_ceiling(theta0, t)
+        assert ratio <= ceiling + 1e-9, (system["name"], recenter, t, ratio, ceiling)
 
 
 def test_G2_bound_is_tight_on_at_least_one_system():

@@ -1,9 +1,14 @@
 # SPEC: The centered moment frame removes PDS's excited-root bound violation on stretched H₄
 
-**Status:** CLOSED, revised for chem-8tl. The revised gates G1–G3 (+G1b) PASS, 4/4, on macOS 27
-arm64 / Accelerate (2026-10-02). **The claim survives** on all 33 paths measured there. These gates
-have not been run on Linux in this form. The Linux/OpenBLAS numbers in §6 come from the chem-8tl
-authoring run (commit 1ff123a), whose G1 pinned shuffle 15 and had no term-order paths.
+**Status:** CLOSED, revised for chem-8tl, verified on Linux for chem-ffe. The revised gates G1–G3
+(+G1b) PASS, 4/4, on macOS 27 arm64 / Accelerate (2026-10-02) **and** on Linux x86_64 / OpenBLAS
+(2026-10-15, chem-ffe). **The claim survives** on all 33 paths measured on both platforms. The
+worst path is platform- (and apparently container-)specific: shuffle 15 on the chem-8tl authoring
+run's Linux container, shuffle 7 on macOS, and **shuffle 14** on this Linux container — three
+different answers across three runs, which sharpens R1 below past "platform-specific" to "not even
+stable across two Linux containers on the same package versions". The Linux/OpenBLAS numbers in §6
+below are from this run; the stale chem-8tl authoring numbers (commit 1ff123a, 17 paths, no
+term-order paths) are kept for the record but superseded.
 
 **Original (2026-10-01, chem-dcz):** gates G1–G3 (+G1b) PASS. The raw −mHa violation reproduces
 deterministically. Its "bimodality" was never BLAS threading. It is **`PYTHONHASHSEED`**:
@@ -94,8 +99,9 @@ Gates in `tests/test_centered_pds_roots_spec.py`.
 
 - **G1: raw violation reproduced, pinned.** Hash seed 2, 1 thread: on the worst of the 33 paths, raw
   PDS(7) min margin < −1e-3 Ha and raw cond(M₇) > 1e14. A second fresh process gives a bit-identical
-  result on every path. *Superseded:* "shuffle 15 violates". It held on Linux, where shuffle 15 was
-  measured and then pinned, but not on macOS (+0.0549 mHa).
+  result on every path. *Superseded:* "shuffle 15 violates". It held on the chem-8tl authoring run's
+  Linux container, where shuffle 15 was measured and then pinned, but neither on macOS (+0.0549 mHa,
+  shuffle 7 worst there) nor on this Linux container (chem-ffe: shuffle 14 worst, §6).
 - **G1b: hidden variable (revised).** Hash seeds 0 and 2 give identical results on every path
   (chem-8tl). Across the paths the raw moment bits differ, and raw PDS(7) both violates
   (< −1e-3) and respects the bound (≥ −1e-9). *Killed original:* "seed 0 vs seed 2 differ", and "4
@@ -107,8 +113,35 @@ Gates in `tests/test_centered_pds_roots_spec.py`.
 
 ## 6. Measured data (min_j root_j − E_j, mHa)
 
-**Revised (chem-8tl), Linux x86_64 / OpenBLAS, 1 thread.** From the authoring run (commit 1ff123a,
-17 paths, no term-order paths); not re-run for this revision:
+**Revised (chem-8tl), Linux x86_64 / OpenBLAS, 1 thread, all 33 paths** (chem-ffe, 2026-10-15; §3
+configuration, `PYTHONHASHSEED=2 OMP_NUM_THREADS=OPENBLAS_NUM_THREADS=MKL_NUM_THREADS=
+VECLIB_MAXIMUM_THREADS=1 uv run python tests/test_centered_pds_roots_spec.py`). Python 3.13.15,
+numpy 2.4.6 / scipy 1.15.3 (scipy-openblas 0.3.31.188.0, DYNAMIC_ARCH Haswell), qiskit 2.5.0,
+qiskit-nature 0.8.0, pyscf 2.13.1 — same package versions as the macOS run below, different BLAS
+build and container. 8 vCPU / 16 GB host; wall time 38 s for the 4 gates. A second fresh process
+gives a bit-identical result on all 33 paths (G1's own check), and hash seed 0 gives the identical
+JSON to hash seed 2 (G1b):
+
+| K | raw, canonical | raw, shuffle 14 (worst) | centered (all 33 paths) | cond raw (canon / s14) | cond centered |
+|---|---|---|---|---|---|
+| 3 | +2.4146 | +2.4146 | +2.4146 | 2.3e5 | 93 |
+| 4 | +1.0780 | +1.0780 | +1.0780 | 9.9e8 | 6.1e3 |
+| 5 | +0.8624 | +0.8624 | +0.8624 | 4.5e11 | 4.0e4 |
+| 6 | +0.6124 | +0.6119 | +0.6123 | 1.5e14 | 2.1e5 |
+| 7 | +0.2121 | **−9.8664** | +0.1198 | 1.2e17 / 1.3e17 | 2.4e6 |
+| 8 | +0.0767 | +0.1059 | +0.0042 | 2.5e19 / 1.8e19 | 7.2e7 |
+
+Raw K=7 across the 16 shuffles: only shuffle 14 violates by more than 1 mHa (−9.8664 mHa); the
+other 15 range +0.0207 to +0.1897 mHa (none of them near the chem-8tl authoring run's −5.9075 mHa
+s15 or −1.3318 mHa s4 — see below). Across the 16 term-order-only permutations none violate by more
+than 1 mHa: range +0.1122 to +0.2361 mHa. The centered margins agree across all 33 paths to
+6.1e-14 Ha, comfortably inside G2's 1e-8 Ha gate. All 33 raw-moment hashes are distinct (G1b).
+
+**Superseded — chem-8tl authoring run, Linux x86_64 / OpenBLAS, 1 thread, 17 paths (no term-order
+paths), commit 1ff123a.** Not re-run for the chem-8tl revision; re-run above for chem-ffe on a
+*different* Linux container. The worst path there was shuffle 15, not shuffle 14 — compare row K=7
+below with the table above. This is itself evidence for R1: the worst path is not even stable
+across two Linux runs on matching package versions, only the claim (G2) is:
 
 | K | raw, canonical | raw, shuffle 15 | centered (all 17 paths) | cond raw (canon / s15) | cond centered |
 |---|---|---|---|---|---|
@@ -121,8 +154,8 @@ Gates in `tests/test_centered_pds_roots_spec.py`.
 
 Raw K=7 across the 16 shuffles: −5.9075 (s15), −1.3318 (s4), then +0.0271 to +0.1708. *Removed:* a
 sentence here gave a term-order-only range on Linux (+0.029 to +0.178 mHa), but no code in the repo
-produced it. The child now measures that experiment (`"order*"` paths); its Linux numbers are a
-follow-up.
+produced it. The chem-ffe run above is the first to measure that experiment (`"order*"` paths) on
+Linux.
 
 **Revised (chem-8tl), macOS 27 arm64 / Accelerate, 1 thread, all 33 paths** (§3 configuration;
 regenerate with `PYTHONHASHSEED=2 OMP_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 uv run python
@@ -170,11 +203,16 @@ but both the term order and the coefficient bits differ. Raw K=6 already departs
 
 ## 8. Caveats and risks
 
-- **R1: the path map is platform-specific, and this has now been seen.** Shuffle 15 is the worst path on
-  Linux/OpenBLAS and respects the bound on macOS/Accelerate (+0.0549 mHa), where shuffle 7 is worst.
-  Two violating Linux shuffles out of 16 became 10 on macOS. This is why G1 takes the worst
+- **R1: the path map is platform-specific, and this has now been seen — including between two Linux
+  containers on matching package versions.** Shuffle 15 is the worst path on the chem-8tl authoring
+  run's Linux/OpenBLAS container and respects the bound on macOS/Accelerate (+0.0549 mHa), where
+  shuffle 7 is worst; on chem-ffe's Linux/OpenBLAS container, with the same qiskit/qiskit-nature/
+  pyscf/numpy/scipy versions as that macOS run, the worst path is **shuffle 14**, which respects the
+  bound (+0.19 mHa) on both of the other two runs. One violating shuffle out of 16 on chem-ffe's
+  Linux run became two on the authoring Linux run and 10 on macOS. This is why G1 takes the worst
   pre-registered path instead of a named one. If G1 fails somewhere, that means no path among the 33
   violates by 1 mHa there, and §1's claim cannot be tested on that platform; widen the
   pre-registered set in the spec before re-running, never after seeing the result. The general
-  mechanism, bits selecting the path at cond > 1e17, is what transfers.
+  mechanism, bits selecting the path at cond > 1e17, is what transfers — the specific worst bit-path
+  does not, even run-to-run on the same OS/library stack.
 - **R2: one geometry.** Stretched H₄ only.

@@ -50,7 +50,9 @@ Reference: FCI.
 ```
 rodeo.rodeo_survival(eigvals, overlaps, e_target, sigma, n_cycles) -> float   # P_bar(E)
 rodeo.reference_spectrum(mh, overlap_tol=1e-8) -> (eigvals, overlaps, offset)
-rodeo.rodeo_ground_energy(mh, sigma=2.0, n_cycles=12, n_grid=4000, window=(-0.5,1.5)) -> float
+rodeo.rodeo_ground_energy(mh, sigma=2.0, n_cycles=12, n_grid=4000, window=(-0.5,1.5),
+                          overlap_tol=1e-8) -> float
+    # overlap_tol is forwarded to reference_spectrum, the sole place that decides reachability
 ```
 
 ## 5. Acceptance criteria (validation gates)

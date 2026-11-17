@@ -8,6 +8,8 @@ the population cut again; the decision survives only as a best-effort **diagnost
 never changes a mask and never raises. G1–G8 are re-pinned to those semantics and G9–G10 added —
 pre-registered in this revision, committed before the revised gate file ran. Results: §9.
 
+**Revised 2026-11-05 (chem-8ls, `SPEC_scf_stability_rule.md`):** §9: the residue witness is built on purpose; G4 and the new G9 builder case gate the stable branch.
+
 ---
 
 ## 0. The kill (post-merge review, 2026-10-03)
@@ -223,32 +225,149 @@ exact-H eigenbasis** (exact evolution conserves them). It does not transfer to:
 
 The diagnostic can warn wrongly or stay silent; since the revision it never changes a number.
 
-- **L1 — compressed R_b (review).** β is rigorous only where `D_b R_b` is orthogonal (the full
+**L1–L4 fixed (chem-648, 2026-10-09)** — see the revision note in §9 for gate results and
+thresholds. Kept below as the original review record; each item now says what the fix is, not just
+the upgrade path.
+
+- **L1 — compressed R_b (fixed).** β is rigorous only where `D_b R_b` is orthogonal (the full
   orbital space). An active window that splits a degenerate shell compresses R_b far from orthogonal
   and β under-reports: symmetric CH₄ (Td, C–H 1.087 Å) CAS(2,2) flags a populated level (probe:
   −0.669500 Ha electronic, p = 3.3e-6) that `QuantumKrylovSolver.solve_excited(4)` returns as θ₁ —
   under the PR #62 veto `reachable_gap` was off by 0.81 Ha (review). The review also reports NH₃
   CAS(4,4) flagging populations up to 8.1e-4; not reproduced at our probe geometry (PySCF found only
-  Cs there). Upgrade path: an orthogonality check on R_b.
-- **L2 — symmetry PySCF detects only within its geometric tolerance is treated as exact (review).**
+  Cs there). Fix: `orbital_parity_bounds` now excludes a bit (β = ∞) when
+  `‖R_b R_b^T − I‖ > _R_ORTHOGONALITY_ATOL = 1e-6`, measured directly on `R_b` in `mh`'s own MO
+  basis. On the CH₄ CAS(2,2) witness this separates cleanly: ~1e-14 for a window that does not split
+  the degenerate t2 shell, ≥0.1 once it does (`test_L1_degenerate_shell_split_window_is_excluded_full_window_is_not`).
+- **L2 — symmetry PySCF detects only within its geometric tolerance is treated as exact (fixed).**
   sq-H₄ 1.1 with the fourth atom moved 5e-6 / 1e-5 Å along x, `conv_tol=1e-13`: a level whose
-  population is real distortion, 2.1e-9 / 5.8e-9 (probe), is flagged as residue. Upgrade path:
-  tolerance-aware symmetry detection.
-- **L3 — mapper not recorded (review).** `hf_symmetry_sector`'s Jordan–Wigner layout guard checks
+  population is real distortion, 2.1e-9 / 5.8e-9 (probe), is flagged as residue. Fix: a new
+  `_geometry_residuals` check applies each bit's claimed point-group operation directly to the real
+  (unsymmetrized) geometry and measures the atom-mapping residual in Bohr, independent of
+  `symm.geom.TOLERANCE` (which both PySCF's own detection and `symm_adapted_basis`'s atom-equivalence
+  grouping use, scaled by `1/sqrt(1+natm)`); a bit excluded (β = ∞) above
+  `_GEOMETRY_RESIDUAL_ATOL = 1e-8`. The spec's own 5e-6/1e-5 Å witness no longer fools PySCF's
+  detection on this host/pyscf version (Linux, pyscf 2.13.1 vs. the macOS run that recorded it) — the
+  boundary here is 1e-6 Å (still detected as D2h; fix correctly excludes) vs. 2e-6 Å (PySCF itself
+  falls back to C2h). A platform/version difference in where the tolerance bites, not a
+  re-derivation of the mechanism (`test_L2_geometry_pyscf_mistakes_for_exact_is_excluded`).
+- **L3 — mapper not recorded (fixed).** `hf_symmetry_sector`'s Jordan–Wigner layout guard checks
   only the HF index, which an `InterleavedQubitMapper` operator can share (linear H₄, spin = 2), and
-  `build_args` does not record the mapper. No in-repo caller. Upgrade path: record the mapper.
-- **L4 — accidental degeneracy.** Levels of different symmetry closer than 1e-9 Ha form one cluster
-  and share its majority verdict: a missed or a spurious warning for one of them. Never seen on a
-  gated system.
+  `build_args` does not record the mapper. No in-repo caller. Fix: `build_molecular_hamiltonian` now
+  records `build_args["mapper"] = type(mapper).__name__`; `hf_symmetry_sector` refuses the index
+  coincidence unless that field is absent (no provenance, e.g. the integrals-only builder, which only
+  ever uses Jordan–Wigner) or equals `"JordanWignerMapper"` (`test_L3_mapper_is_recorded_and_checked`,
+  reproduces end-to-end with no monkeypatching).
+- **L4 — accidental degeneracy (fixed).** Levels of different symmetry closer than 1e-9 Ha form one
+  cluster and share its majority verdict: a missed or a spurious warning for one of them. Never seen
+  on a gated system. Fix: `symmetry_allowed` abstains (treats as allowed, i.e. does not flag) when a
+  cluster's sector weight falls in `(_AMBIGUOUS_WEIGHT_MARGIN, 1 - _AMBIGUOUS_WEIGHT_MARGIN) =
+  (1e-3, 0.999)` instead of applying the `> 0.5` majority cut there — chosen to match G6's own
+  observed bound (every witnessed gated system's weight sits within 1e-3 of 0 or 1), so it changes
+  nothing for any system this file currently gates. No real gated witness for the accidental-
+  degeneracy condition itself exists, so this is checked with a synthetic cluster constructed to hit
+  exactly a 50/50 split (`test_L4_accidental_cross_sector_degeneracy_abstains`): the pre-fix
+  majority-only rule would flag both members of that tie as forbidden; the fix abstains on both.
 - **R2 — residual symmetry outside PySCF's abelian frame.** At broken-RHF geometries a level can
   still carry convergence-dependent population (sq-H₄ 1.20: 1.5e-9 → 6.2e-9 between `conv_tol` 1e-9
-  and 1e-6) that the D2h bits cannot see; the diagnostic is silent there.
+  and 1e-6) that the D2h bits cannot see; the diagnostic is silent there. **Mechanism identified
+  (chem-3fd, 2026-10-13):** sq-H₄/sto-3g is planar (every atom at z = 0) with an all-s-type basis, so
+  σ_xy — the D2h operation `_BIT_OPERATION` never names — acts as the identity on every AO. D2h's
+  group relation `i = σ_xy·C2z` then forces `rep(i) = rep(C2z)` exactly: `_BIT_OPERATION["D2h"] =
+  (C2y, C2z, i)` carries only 2 independent bits on this geometry/basis, not 3 (confirmed:
+  `orbital_parity_bounds`'s bit1/bit2 `R_b` matrices are byte-identical at every bond length probed).
+  Consequence for `hf_symmetry_sector`'s greedy budget: whenever the C2y-type bit is excluded for
+  any reason (genuine RHF symmetry-breaking, chem-3fd's a = 1.35 witness below; or an arbitrary
+  near-degenerate-pair rotation — sq-H₄ is a perfect square at every tested `a`, so it carries the
+  non-abelian D4h point group and PySCF's own symmetry detection only ever returns the D2h subgroup,
+  leaving an exactly-degenerate real irrep for the free, `symmetry=False` solve to mix arbitrarily;
+  observed directly at a = 1.00 flipping the same bit between β ≈ 0 and β ≈ 5.66 across fresh
+  process runs of the identical, fully-converged lowest-energy solution), only one effective
+  constraint beyond (N_α, N_β) remains — mathematically insufficient to cut 20 candidate levels down
+  to the true 10-level Ag sector. Not a defect in the projector or budget math (both are correct
+  given the bits available); D2h genuinely does not have a third independent generator for this
+  geometry/basis class. Out of scope to fix without a basis- or geometry-dependent bit set beyond
+  `_BIT_OPERATION["D2h"]`'s three names — not attempted here. `test_G2`'s square-H4 cases check
+  `orbital_parity_bounds`'s own C2y-bit trust on the run at hand and assert exact FCI agreement when
+  it is trusted, containment of the true Ag levels (the conservative direction) when it is not,
+  instead of assuming either outcome is fixed for a given bond length (chem-0m8, replacing an
+  earlier `xfail`-based version — see R5 below and `sandbox-handoffs/chem-0m8.md`).
 - **R3 — cost.** One extra SCF + JW map per Hamiltonian (cached on the instance), as in PR #62.
 - **R4 — Linux.** With the population cut restored, the Linux-only failures PR #62 predicted for
   `test_reachability_tolerance_spec` G2 and G5 (`constant_governs_the_certified_reference`) should
   not happen: those gates pin the residue the cut keeps. Not verifiable on this macOS host.
+- **R5 — superseded (chem-0m8, 2026-10-13).** A first chem-0m8 pass claimed the sq-H4 bit
+  degeneracy above made the 20-vs-10 over-inclusion a geometry/basis constant "regardless of RHF
+  branch" and marked `test_G2`'s square-H4 cases `xfail` on that basis. A later review on macOS 27
+  found all 8 of those cases `xpass` there (`41 passed, 8 xpassed`): the C2y bit (D2h bit 0) was
+  trusted on that host/branch, FCI agreement was exact, and the claim was wrong — R2 above already
+  had the correct, branch-dependent mechanism (the degeneracy only bites when the C2y bit itself is
+  excluded). The `xfail` is dropped; `test_G2` now checks `orbital_parity_bounds`'s C2y-bit trust
+  directly per R2's note above instead of assuming either outcome. Left here, not deleted, so the
+  wrong claim and why it was wrong both stay on the record (`sandbox-handoffs/chem-0m8.md`).
 
-## 9. Results (macOS 27, Apple M3, 2 BLAS/OMP threads)
+## 9. Results (macOS 27, Apple M3, 2 BLAS/OMP threads, unless an entry says otherwise)
+
+**chem-8ls (2026-11-05; macOS 27.2 arm64, and Linux x86_64 in the `claude-chem` image with OpenMP; pyscf 2.13.1, qiskit-nature 0.8.0, numpy 2.4.6 and scipy 1.15.3 on both).**
+
+*What changed.* Every builder now follows internal SCF instabilities to a stable minimum (`SPEC_scf_stability_rule.md`).
+- The residue references this spec gates came from the builder's free SCF stopping on square H₄'s D2h saddle point. That saddle has an orbital-Hessian eigenvalue of −0.57 Ha at a = 1.10 and −0.61 Ha at 1.19.
+- Which sides the SCF stopped on depended on the platform's rounding, so the builder no longer makes these references.
+- Before the change, the Linux container failed 7 gates here (the mayor's run of `sandbox/chem-g14`): G1 ×3, G7[1.19-1e-06], G9[1.19-1e-06], G9[1.19-None] and G9_control[1.1]. macOS failed none.
+- With the rule alone and this file unchanged, both platforms failed the same five: G1 ×3 and G9_control ×2.
+
+*Changes to the gates.*
+- **The residue witness is built on purpose** (`_saddle_witness`):
+  - Start from the symmetry-enforced RHF, which is the saddle, and rotate its HOMO/LUMO pair (the split e_u shell, B2u/B3u) by a fixed θ = 1e-3.
+  - Rotating that pair is one step along the saddle's unstable mode, the direction a free SCF used to drift in by rounding.
+  - B1g population is 1.874e-6 at a = 1.10 and 1.844e-6 at 1.19 (about 1.9 θ²). It is set by θ, not by rounding.
+  - The diagnostic reads it through a monkeypatched `_driver_orbitals`, as L1/L2 do.
+- **G1** runs on the witness at both sides and both cuts, 4 cases. It was 3 cases: a = 1.19 skipped the 1e-8 cut because its builder residue sat only 5.5× above it. The assertions are unchanged.
+- **G9** runs on the witness, with its assertions unchanged. Its control is now the exact saddle (θ = 0, B1g population ~1e-30), which stays on Ag. The control used to be the builder at `TIGHT_SCF_CONV_TOL`; that build stopped on the saddle then and reaches the minimum now.
+- **New G9 builder case:** the builder at (1.10, 1e-6), (1.19, 1e-6), (1.19, default), (1.10, tight) and (1.19, tight). At every one, p₀ > 0.4 and QKSD sits on B1g under G9's thresholds, so `conv_tol` no longer decides the level.
+- **G10** (any diagnostic failure means no diagnostic) runs on the witness, and first checks that the diagnostic does warn there. The builder reference it used would no longer warn, which would have made the check vacuous.
+- **G4** asserts the broken branch instead of skipping when the branch is symmetric (chem-0m8's guard). It also covers the former witnesses 1.10 and 1.19.
+- **G2, G6 and G7** are unchanged in code.
+  - Their square-H₄ cases are now on the minimum.
+  - G2 takes its conservative branch there, with the C2y bit excluded.
+  - G7's lowest level is the B1g ground state, now a physical overlap rather than a residue.
+
+*Witness numbers, old next to new.*
+
+| | a = 1.10 | a = 1.19 |
+|---|---|---|
+| builder residue at `conv_tol` 1e-6, before (macOS, §0 and §5) | 2.66e-6 | 5.48e-8 |
+| builder residue at the default 1e-9, before | macOS ~1e-29; Linux 5.07e-10 | 1.40e-8 (macOS) |
+| witness residue, θ = 1e-3, now (deterministic) | 1.874e-6 | 1.844e-6 |
+| builder p₀ now, at every `conv_tol` gated, both platforms | 0.4692 | 0.4621 |
+| G9: max over M = 28…32 of E − E_B1g, before (§9, 2026-10-03) | 3.0e-6 (at 1e-6) | 1.1e-3 (at 1e-6 and at the default) |
+| G9: the same on the witness, now (macOS) | 3.0e-6 | 4.9e-4 |
+
+*Gate run.* See `SPEC_scf_stability_rule` §9.
+
+**chem-648 (2026-10-09, Linux x86_64 container, pyscf 2.13.1; re-run on macOS 2026-10-10):** fixed
+L1–L4 (§8). Four new gates (`test_L1_*`..`test_L4_*`), each isolating the fix from the production
+`_driver_orbitals` rebuild path via monkeypatching known-good orbitals/sectors (L3 excepted — it
+reproduces end-to-end) because that path's reproducibility check is independently unreliable in the
+Linux container for near-degenerate geometries (chem-g14, filed and left open — out of scope here;
+see `sandbox-handoffs/chem-648.md`). All four pass on both platforms.
+
+- **macOS 27 (Apple M3, 8 cores; BLAS/OMP threads unset, i.e. library defaults, not the 2 of the
+  entries below; pyscf 2.13.1, numpy 2.4.6, scipy 1.15.3):** `uv run pytest
+  tests/test_eigenstate_reachability_spec.py -q`, three runs each: main b0d82fd (before the change)
+  **45 passed** every run; this revision **49 passed** every run (those 45 + the four `test_L*`),
+  ~36 s. No pre-existing gate changed outcome. `test_reachability_tolerance_spec`: 9 passed, 3
+  skipped (its Linux-only G1–G3), three runs each, before and after.
+- **Linux container: the pre-registered criterion (same failure count before and after) was NOT
+  met,** and the container cannot say why. Before: 16 failed / 29 passed (45 tests, one run). After:
+  17 failed / 32 passed in all four runs, i.e. 17 failed / 28 passed among the same 45, plus the four
+  `test_L*` passing — one more pre-existing gate failing. The failing IDs are not stable run-to-run on
+  an unmodified checkout there (re-running only `test_G9_control_tight_scf_stays_on_the_ag_level`
+  twice before the change flipped its [1.19] case), so a one-test difference cannot separate a
+  regression from that nondeterminism. Every failure observed is a `test_G1`/`test_G2`(sq-H4 or
+  linear-H4)/`test_G4`/`test_G5`/`test_G9_control` case — the chem-g14 category — never a
+  `test_G3`/`G6`/`G7`/`G8`/`G10` case or a `test_L*` gate. The macOS runs above, where the file is
+  deterministic, are what show the change regression-free.
 
 **Revision (2026-10-03):**
 

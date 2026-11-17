@@ -93,10 +93,10 @@ def test_g2_block_sizes_shrink(n):
 
 def test_g3_same_bound_as_full_t2_and_valid():
     """Group averaging: the adapted SDP has the same optimum as Sz-blocked T2, and certifies <= E0."""
-    from pyscf import fci
+    from hybrid_quantum_solver.dmrg_reference import fci_energy
 
     h1, eri, ne, e_nuc = V.sym_integrals(4)
-    e0 = fci.direct_spin1.kernel(h1, eri, 4, ne, conv_tol=1e-12)[0] + e_nuc
+    e0 = fci_energy(h1, eri, ne, e_core=e_nuc)
     out = {}
     for t2 in (True, "sym"):
         prob = V.build(h1, eri, *ne, t2)

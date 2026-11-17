@@ -19,7 +19,7 @@ stamped provenance cannot be labelled honestly and are reported as skipped,
 not guessed.
 
 Usage:
-    python compile_from_gcs.py [--bucket NAME] [--verify]
+    uv run python compile_from_gcs.py [--bucket NAME] [--verify]
 
     --verify  recompute CASCI from each recorded geometry and check that the
               certified bracket actually contains it. Slow, and the only part

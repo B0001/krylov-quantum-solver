@@ -84,7 +84,10 @@ def krylov_bracket(mh: MolecularHamiltonian, m: int, eps: Optional[float] = None
     solver = solver if solver is not None else QuantumKrylovSolver(mh)
     offset = mh.energy_offset
     H = mh.qubit_hamiltonian.to_matrix(sparse=True).tocsc()
-    energies, states = solver.eigenstates(m, n_states=2)
+    # The Ritz decomposition, not an energy claim: the bracket's own upper bound is the
+    # Rayleigh quotient computed below, so nothing here needs a checker run.
+    spectrum, states = solver.uncertified_eigenstates(m, n_states=2)
+    energies = spectrum.unverified_energies
     th0, var0 = mean_and_variance(H, states[0])
     if eps is None:
         if len(energies) > 1:

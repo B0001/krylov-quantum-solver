@@ -7,6 +7,10 @@ name: certkit regression certificates
 # solve -- and has every certificate it emits checked out of process, exactly as a third
 # party would. See specs/SPEC_certkit_regression_gate.md.
 #
+# It also runs the gate on the invariant itself (specs/SPEC_certificate_or_abstention.md,
+# portfolio-0pc): no return path hands back an energy without a VERIFIED certificate or an
+# explicit abstention, and nothing can switch the checker off.
+#
 # That costs a full solver install (~130 MB of wheels) and about a minute of compute, which
 # is why it is separate from the pin gate, which needs neither.
 
@@ -20,6 +24,8 @@ on:
       # break it and the gate dies before collecting a single test.
       - "pytest_invariants/**"
       - "tests/test_certkit_regression_gate_spec.py"
+      - "tests/test_certkit_return_paths_spec.py"
+      - "tests/test_certificate_or_abstention_spec.py"
       - "specs/SPEC_certkit_regression_gate.md"
       - "pyproject.toml"
       - ".github/workflows/certkit-regression.yml"
@@ -40,22 +46,26 @@ jobs:
         with:
           version: "0.12.3"
 
-      # The certkit extra is an exact git tag and is deliberately absent from uv.lock (the
-      # pin is a deliberate act -- see pyproject.toml), so this installs from pyproject
-      # rather than syncing the lock. `uv pip` keeps CLAUDE.md's rule that bare pip and bare
-      # python are never invoked. Editable, so the top-level modules the gate imports
-      # (certkit_bridge, temple_bounds) resolve the same way they do locally.
+      # certkit is a core dependency pinned to an exact commit (a deliberate act -- see
+      # pyproject.toml), so installing from pyproject gets exactly that checker; the rest of
+      # the environment resolves fresh rather than from uv.lock. `uv pip` keeps CLAUDE.md's
+      # rule that bare pip and bare python are never invoked. Editable, so the top-level
+      # modules the gate imports (certkit_bridge, temple_bounds) resolve the same way they do
+      # locally.
       - name: Install the solver and the pinned checker
         run: |
           uv venv --python 3.13
-          uv pip install -e ".[certkit,test]"
+          uv pip install -e ".[test]"
 
       # --no-sync: the environment above was built with `uv pip`, and `uv run` would
-      # otherwise re-sync it from uv.lock and drop the certkit extra. `python -m pytest`
+      # otherwise re-sync it from uv.lock and drop the test extra. `python -m pytest`
       # (not `pytest`) puts the repo root on sys.path, which is how the suite imports its
       # top-level modules -- same invocation as the Makefile.
       - name: Every emitted certificate must pass the independent checker
-        run: uv run --no-sync python -m pytest tests/test_certkit_regression_gate_spec.py -q
+        run: >-
+          uv run --no-sync python -m pytest -q
+          tests/test_certkit_regression_gate_spec.py tests/test_certkit_return_paths_spec.py
+          tests/test_certificate_or_abstention_spec.py
 
       # A failing gate is a claim that stopped verifying. Keep the evidence.
       - name: Keep the certificates when the gate fails

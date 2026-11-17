@@ -9,6 +9,13 @@ G8), the sites' population-cut frames (G7), the falsification (G9) and that it n
 
 Dense eigendecompositions here use the REAL matrix (these Hamiltonians are real): dsyevd is fast
 and not hit by the macOS Accelerate ZHEEVD bug, so the gate exercises the decision, not LAPACK.
+
+chem-8ls (2026-11-05): the residue references came from the builder's free SCF stopping on square
+H4's D2h saddle point, at sides that depended on the platform's rounding. The builder now follows
+that instability to the stable minimum (specs/SPEC_scf_stability_rule.md) and no longer makes them.
+G1, G9 and G10 therefore build the residue on purpose (`_saddle_witness`: the saddle displaced by a
+fixed angle along its unstable mode), G4 covers the former witnesses, and G9 also gates what the
+builder's reference does now (SPEC section 9, chem-8ls entry).
 """
 import dataclasses
 import warnings
@@ -31,6 +38,7 @@ from reachability import (
     orbital_parity_bounds,
     reachable_eigenpairs,
     reachable_mask,
+    scf_symmetry_status,
     symmetry_allowed,
 )
 
@@ -45,12 +53,13 @@ def _sq(a):                          # atom ORDER is load-bearing (SPEC_reachabi
 
 LIN_H4 = "H 0 0 0; H 0 0 1.0; H 0 0 2.0; H 0 0 3.0"
 H2 = "H 0 0 0; H 0 0 0.74"
-# (side, conv_tol). a = 1.19 left the default conv_tol, where its 1.40e-8 residue cleared the 1e-8
-# cut by only 1.4x. At 1e-6 it is 5.48e-8 (macOS; 2.66e-6 at a = 1.10) -- still only 5.5x above 1e-8
-# on a platform-dependent number, so the 1e-8 checks use a = 1.10 only (code review; SPEC G1, G7).
+# (side, conv_tol): the builder geometries that carried the residue until chem-8ls (G7, G9).
 WITNESSES = [(1.10, 1e-6), (1.19, 1e-6)]
-WITNESS_CUTS = [(1.10, 1e-6, ODMD_TOL), (1.10, 1e-6, REACHABLE_TOL_CERTIFIED),
-                (1.19, 1e-6, REACHABLE_TOL_CERTIFIED)]
+# The residue the witnesses get on purpose: population 1.87e-6 at a = 1.10 and 1.84e-6 at 1.19,
+# about 1.9 theta**2, at least 180x above both cuts at both sides. So G1 runs every (side, cut);
+# before chem-8ls the 1e-8 cut skipped a = 1.19, whose builder residue (5.48e-8, macOS) was 5.5x above it.
+WITNESS_THETA = 1e-3
+WITNESS_CUTS = [(a, tol) for a in (1.10, 1.19) for tol in TOLS]
 
 
 @lru_cache(maxsize=None)
@@ -65,17 +74,62 @@ def _system(atom, conv_tol=1e-9, **kw):
 
 @lru_cache(maxsize=None)
 def _fci(atom, wfnsym, symmetry="D2h"):
-    """PySCF symmetry-adapted FCI, S_z = 0, tight symmetric SCF -- independent of the qubit path."""
-    from pyscf import fci, gto, scf
+    """PySCF symmetry-adapted FCI, S_z = 0, tight symmetric SCF -- independent of the qubit path.
+
+    chem-0yh: pyscf's own multi-threaded integral evaluation is not bit-associative, so an
+    unpinned scf.RHF/fci.FCI call can land on ~1e-13-level noise in mf.e_tot that a near-degenerate
+    geometry (square H4 at a=1.19) amplifies through the Davidson solve enough to occasionally flip
+    which side of test_G2's classification boundary this reference lands on. Same mechanism and fix
+    as chem-7cx (build_molecular_hamiltonian) and chem-y6w (benchmark_nbn._tight_scf): pin
+    pyscf.lib.num_threads(1) around the call, restore the ambient count in a finally so this cached,
+    module-level helper does not leave other callers in the same process pinned to 1.
+    """
+    from pyscf import fci, gto, lib, scf
 
     mol = gto.M(atom=atom, basis="sto3g", symmetry=symmetry, verbose=0)
-    mf = scf.RHF(mol)
-    mf.conv_tol = 1e-13
-    mf.kernel()
-    solver = fci.FCI(mf)
-    solver.wfnsym, solver.nroots = wfnsym, 1000
-    e, _ = solver.kernel()
+    ambient_threads = lib.num_threads()
+    lib.num_threads(1)
+    try:
+        mf = scf.RHF(mol)
+        mf.conv_tol = 1e-13
+        mf.kernel()
+        solver = fci.FCI(mf)
+        solver.wfnsym, solver.nroots = wfnsym, 1000
+        e, _ = solver.kernel()
+    finally:
+        lib.num_threads(ambient_threads)
+    if not np.all(solver.converged):
+        raise RuntimeError(f"FCI Davidson did not converge for all roots: atom={atom!r} "
+                            f"wfnsym={wfnsym!r} converged={solver.converged} "
+                            f"(chem-60i: an unchecked Davidson call can silently report a wrong energy)")
     return np.sort(np.atleast_1d(e)) - mol.energy_nuc()
+
+
+def test_fci_helper_is_deterministic_across_ambient_thread_counts():
+    """chem-0yh regression floor for the lib.num_threads(1) pin above. Before the fix, _fci's own
+    unpinned scf.RHF+FCI call picked up ~1e-13-level bit noise from pyscf's multi-threaded integral
+    evaluation depending on the ambient thread count the caller happened to leave in place -- at
+    square H4's near-degenerate a=1.19 geometry, that noise occasionally flipped which FCI level
+    this reference landed on (the chem-0yh repro: 3 full-file runs post chem-7cx's fix still showed
+    test_G2[1.19] flipping). This reproduces that repro directly: fresh calls at ambient thread
+    counts 2 and 8 (bypassing lru_cache, which would otherwise mask the recompute) must agree
+    bit-for-bit, and the ambient setting the caller had before calling _fci must be restored."""
+    from pyscf import lib
+
+    atom = _sq(1.19)
+    ambient = lib.num_threads()
+    try:
+        lib.num_threads(2)
+        _fci.cache_clear()
+        e_2 = _fci(atom, "Ag")
+        lib.num_threads(8)
+        _fci.cache_clear()
+        e_8 = _fci(atom, "Ag")
+    finally:
+        lib.num_threads(ambient)
+        _fci.cache_clear()
+    assert np.array_equal(e_2, e_8), (e_2, e_8)
+    assert lib.num_threads() == ambient
 
 
 def _weights(mh, V):
@@ -91,11 +145,46 @@ def _residue_warnings(mh, w, V, pops, tol):
                   and "SCF residue" in str(r.message)]
 
 
+def _saddle_witness(a, theta=WITNESS_THETA):
+    """A residue reference built on purpose, the same on every platform (chem-8ls).
+
+    Start from the saddle: the symmetry-enforced RHF, whose irrep-blocked SCF cannot leave it. Its
+    HOMO/LUMO pair is the split degenerate e_u shell (B2u/B3u in PySCF's frame). Rotate that pair by
+    the FIXED angle theta: one step along the saddle's unstable mode, the direction a free SCF used
+    to drift by rounding. |HF> then carries population ~1.9 theta**2 on the B1g ground state.
+    Returns (mh, w, V, pops, mol, mo). mh comes from integrals, so it has no build_args: give
+    (mol, mo) to the diagnostic by monkeypatching reachability._driver_orbitals, as L1/L2 do.
+    Deliberately NOT cached: hf_symmetry_sector caches its sector on the mh instance, so a shared
+    mh would carry an unpatched (N_alpha, N_beta)-only sector from one gate into a patched one.
+    """
+    from pyscf import ao2mo, gto, scf, symm
+
+    mol_sym = gto.M(atom=_sq(a), basis="sto3g", symmetry=True, verbose=0)
+    mf = scf.RHF(mol_sym)
+    mf.conv_tol = 1e-13
+    mf.kernel()
+    labels = symm.label_orb_symm(mol_sym, mol_sym.irrep_name, mol_sym.symm_orb, mf.mo_coeff)
+    assert sorted(labels[1:3]) == ["B2u", "B3u"], labels
+    c, s = np.cos(theta), np.sin(theta)
+    mo = mf.mo_coeff.copy()
+    mo[:, 1:3] = mf.mo_coeff[:, 1:3] @ np.array([[c, -s], [s, c]])
+    # STO-3G hydrogen has only s functions, so these AO coefficients mean the same thing in the
+    # unrotated frame that the symmetry=True build re-oriented away from.
+    mol = gto.M(atom=_sq(a), basis="sto3g", verbose=0)
+    eri = ao2mo.restore(1, ao2mo.full(mol, mo), mo.shape[1])
+    mh = build_hamiltonian_from_integrals(mo.T @ scf.hf.get_hcore(mol) @ mo, eri, (2, 2),
+                                          mol.energy_nuc())
+    w, V = np.linalg.eigh(mh.qubit_hamiltonian.to_matrix().real)
+    pops = (V.T @ np.asarray(mh.hf_state().data).real) ** 2
+    return mh, w, V, pops, mol, mo
+
+
 # --- G1: the witnesses -- identified, warned, kept ------------------------------------------------
 
-@pytest.mark.parametrize("a, conv_tol, tol", WITNESS_CUTS)
-def test_G1_residue_level_identified_warned_and_kept(a, conv_tol, tol):
-    mh, w, V, pops = _system(_sq(a), conv_tol)
+@pytest.mark.parametrize("a, tol", WITNESS_CUTS)
+def test_G1_residue_level_identified_warned_and_kept(a, tol, monkeypatch):
+    mh, w, V, pops, mol, mo = _saddle_witness(a)
+    monkeypatch.setattr(reachability, "_driver_orbitals", lambda _mh: (mol, mo))
     mask, rec = _residue_warnings(mh, w, V, pops, tol)
     cut = pops > tol
     assert np.array_equal(mask, cut) and len(rec) == 1, len(rec)
@@ -106,6 +195,20 @@ def test_G1_residue_level_identified_warned_and_kept(a, conv_tol, tol):
 
 # --- G2: brute force against an independent symmetry-adapted FCI, every populated level -----------
 
+# sq-H4/sto-3g is planar with an all-s-orbital basis: sigma_xy (z -> -z) fixes every atom and maps
+# every s AO to itself, so it acts as the IDENTITY operator on the AO space, independent of bond
+# length and of which RHF branch built the orbitals. D2h's group relation i = sigma_xy . C2z then
+# forces rep(i) == rep(C2z) EXACTLY in any MO basis -- _BIT_OPERATION["D2h"] = (C2y, C2z, i) carries
+# only 2 independent constraints here, not 3, so sigma_xy == identity alone does not determine
+# whether the decision matches FCI: with only C2z/i usable, sq-H4 is D2h-degenerate in the (N_a, N_b)
+# sector between {Ag, B1g} and {B2u, B3u} (sigma_xy = +1 for every level, so C2z alone splits the 8
+# irreps into only 4 distinguishable pairs) UNLESS the C2y bit (bit 0, excluded only when the free
+# RHF breaks symmetry or an exactly-degenerate pair rotates arbitrarily -- chem-7cx, SPEC section 8
+# R2) is also trusted, in which case C2y and C2z together isolate Ag exactly. So G2 branches on
+# whether orbital_parity_bounds trusts the C2y bit on THIS run, instead of assuming either outcome
+# (chem-0m8, after a macOS review of the prior xfail/R5-based version found it xpassed there: the
+# over-inclusion is RHF-branch-dependent after all, see SPEC section 8 R2, not a geometry/basis
+# constant as R5 claimed -- R5 is dropped, superseded by this branch-aware check and R2).
 G2_CASES = [(_sq(a), ct) for a in (1.05, 1.10, 1.19, 1.35) for ct in (1e-6, 1e-9)]
 G2_CASES += [(LIN_H4, 1e-9), (H2, 1e-9)]
 
@@ -115,12 +218,29 @@ def test_G2_decision_equals_symmetry_adapted_fci(atom, conv_tol):
     mh, w, V, pops = _system(atom, conv_tol)
     ref = _fci(atom, "Ag")
     in_sector = np.sort(w[_weights(mh, V) > 0.5])          # the sector itself, every eigenvector
-    assert len(in_sector) == len(ref), (len(in_sector), len(ref))
-    assert np.abs(in_sector - ref).max() < 1e-8
     defined = pops > DEFINED
     in_ag = np.array([np.abs(ref - e).min() < 1e-8 for e in w[defined]])
+    allowed = symmetry_allowed(mh, w, V)
+
+    bounds = orbital_parity_bounds(mh)
+    # D2h bit 0 is C2y (_BIT_OPERATION["D2h"][0]); untrustworthy is reported as beta == inf, a large
+    # finite beta (chem-7cx's degenerate-pair-rotation case) is just as unusable by the >= 1.0 greedy
+    # budget in hf_symmetry_sector, so both are "not trusted" here.
+    c2y_trusted = bounds is not None and bounds[0][1] < 1.0
+    if c2y_trusted:
+        assert len(in_sector) == len(ref), (len(in_sector), len(ref))
+        assert np.abs(in_sector - ref).max() < 1e-8
+        assert np.array_equal(allowed[defined], in_ag)
+    else:
+        # C2y not trusted: C2z/i alone cannot separate Ag from the other D2h irrep sharing sigma_xy
+        # = +1 and HF's (N_a, N_b) -- over-inclusion is the conservative direction (SPEC section 8
+        # R2): every true Ag level must still appear, and never get flagged forbidden, but the
+        # sector/the "allowed" mask may keep extra, non-Ag levels too.
+        assert len(in_sector) >= len(ref)
+        for e in ref:
+            assert np.abs(in_sector - e).min() < 1e-8
+        assert allowed[defined][in_ag].all()
     assert in_ag.sum() >= 2                                 # above the minimum, not just the ground
-    assert np.array_equal(symmetry_allowed(mh, w, V)[defined], in_ag)
 
 
 # --- G3: no false alarm on the ordinary gated systems ---------------------------------------------
@@ -161,15 +281,35 @@ def _naive_weights(mh, V):
     return (V[sec] ** 2).sum(axis=0)
 
 
-@pytest.mark.parametrize("a", (1.20, 1.40))
+def _require_broken_rhf(a):
+    """The builder's reference at side a is the broken-symmetry minimum. chem-0m8 made this a skip,
+    because the free SCF's branch was platform-dependent. chem-8ls's stability rule makes it the
+    branch at every side on every platform, so it is now an assertion."""
+    broken, de = scf_symmetry_status(_sq(a))
+    assert broken, (a, de)
+
+
+# 1.10 and 1.19: the former residue witnesses (G1, G9), now on the broken branch too (chem-8ls).
+@pytest.mark.parametrize("a", (1.10, 1.19, 1.20, 1.40))
 def test_G4_broken_rhf_bit_is_excluded_and_nothing_is_flagged(a):
+    _require_broken_rhf(a)
     mh, w, V, pops = _system(_sq(a))
-    assert max(beta for _, beta in orbital_parity_bounds(mh)) >= 1.0
+    bounds = orbital_parity_bounds(mh)
+    assert bounds is not None, (
+        "scf_symmetry_status confirms a broken reference but orbital_parity_bounds returned None "
+        "-- this is chem-g14's _driver_orbitals rebuild-reproducibility issue, not a chem-0m8 "
+        "branch mismatch")
+    assert max(beta for _, beta in bounds) >= 1.0
     assert symmetry_allowed(mh, w, V)[pops > REACHABLE_TOL_CERTIFIED].all()
 
 
 def test_G4_naive_labels_would_flag_a_physical_level():
+    _require_broken_rhf(1.20)
     mh, w, V, pops = _system(_sq(1.20))
+    assert orbital_parity_bounds(mh) is not None, (
+        "scf_symmetry_status confirms a broken reference but orbital_parity_bounds returned None "
+        "-- this is chem-g14's _driver_orbitals rebuild-reproducibility issue, not a chem-0m8 "
+        "branch mismatch")
     flagged = (pops > 1e-3) & (_naive_weights(mh, V) < 0.5)
     assert flagged.any(), "naive labels flag nothing -- the bound would be untested"
 
@@ -254,8 +394,8 @@ def test_G7_threshold_sites_use_the_population_cut(a, conv_tol):
 
     e_b1g = _fci(_sq(a), "B1g")[0]
     assert reachable_eigenpairs(mh)[0][0] == pytest.approx(e_b1g, abs=1e-8)   # certified arc
-    assert exact_reachable_overlap(mh) == pytest.approx(
-        lowest_overlap(REACHABLE_TOL_CERTIFIED), rel=1e-8)                  # = the residue level
+    assert exact_reachable_overlap(mh) == pytest.approx(                    # B1g: was the residue
+        lowest_overlap(REACHABLE_TOL_CERTIFIED), rel=1e-8)                  # level, now physical
     assert exact_hf_subspace_overlap(mh, 1) == pytest.approx(lowest_overlap(ODMD_TOL), rel=1e-8)
 
 
@@ -301,10 +441,7 @@ def _qksd_electronic(mh):
     return np.array([s.energy for s in steps]) - mh.energy_offset       # index M - 1
 
 
-@pytest.mark.parametrize("a, conv_tol", WITNESSES + [(1.19, None)])    # None: builder default
-def test_G9_qksd_from_hf_converges_to_the_residue_level(a, conv_tol):
-    mh = build_molecular_hamiltonian(atom=_sq(a), **({} if conv_tol is None
-                                                     else {"conv_tol": conv_tol}))
+def _assert_qksd_sits_on_b1g(mh, a):
     e_b1g, e_ag = _fci(_sq(a), "B1g")[0], _fci(_sq(a), "Ag")[0]
     e = _qksd_electronic(mh)[[m - 1 for m in G9_M]]
     assert (e - e_b1g).min() >= -1e-9, e - e_b1g            # the variational floor
@@ -314,12 +451,34 @@ def test_G9_qksd_from_hf_converges_to_the_residue_level(a, conv_tol):
 
 
 @pytest.mark.parametrize("a", (1.10, 1.19))
-def test_G9_control_tight_scf_stays_on_the_ag_level(a):
-    mh = build_molecular_hamiltonian(atom=_sq(a), conv_tol=TIGHT_SCF_CONV_TOL)
+def test_G9_qksd_from_hf_converges_to_the_residue_level(a):
+    """The kill of the veto, on the residue reference built on purpose (chem-8ls; until then on the
+    builder's own residue at the WITNESSES conv_tols and at a = 1.19's default)."""
+    _assert_qksd_sits_on_b1g(_saddle_witness(a)[0], a)
+
+
+@pytest.mark.parametrize("a", (1.10, 1.19))
+def test_G9_control_saddle_without_residue_stays_on_the_ag_level(a):
+    """theta = 0: the exact saddle, B1g population ~1e-30. Until chem-8ls the control was the
+    builder at TIGHT_SCF_CONV_TOL, which then stopped on the saddle; now it reaches the minimum
+    (next gate)."""
+    mh = _saddle_witness(a, 0.0)[0]
     e_ag = _fci(_sq(a), "Ag")[0]
     e = _qksd_electronic(mh)                                # every M <= 32
     assert e.min() >= e_ag - 1e-8, e.min() - e_ag
     assert reachable_eigenpairs(mh)[0][0] == pytest.approx(e_ag, abs=1e-8)
+
+
+@pytest.mark.parametrize("a, conv_tol", WITNESSES + [(1.19, None), (1.10, TIGHT_SCF_CONV_TOL),
+                                                     (1.19, TIGHT_SCF_CONV_TOL)])  # None: default
+def test_G9_builder_reference_reaches_the_b1g_level_at_every_conv_tol(a, conv_tol):
+    """What the builder's reference does since chem-8ls. It is the broken-symmetry minimum, whose HF
+    overlap with the B1g ground state is physical (population 0.469 at a = 1.10, 0.462 at 1.19). So
+    QKSD reaches B1g at every conv_tol, and conv_tol no longer decides the level."""
+    mh = build_molecular_hamiltonian(atom=_sq(a), **({} if conv_tol is None
+                                                     else {"conv_tol": conv_tol}))
+    assert reachability.hf_population_spectrum(mh)[0] > 0.4
+    _assert_qksd_sits_on_b1g(mh, a)
 
 
 # --- G10: the diagnostic never raises -------------------------------------------------------------
@@ -336,7 +495,9 @@ def test_G10_half_detected_symmetry_does_not_raise(atom):
 
 
 def test_G10_any_diagnostic_failure_means_no_diagnostic(monkeypatch):
-    mh, w, V, pops = _system(_sq(1.10), 1e-6)              # a witness: the diagnostic would warn
+    mh, w, V, pops, mol, mo = _saddle_witness(1.10)
+    monkeypatch.setattr(reachability, "_driver_orbitals", lambda _mh: (mol, mo))
+    assert len(_residue_warnings(mh, w, V, pops, ODMD_TOL)[1]) == 1    # the diagnostic warns here
 
     def boom(*_):
         raise RuntimeError("diagnostic failure")
@@ -351,3 +512,141 @@ def test_G10_odd_electron_active_space_is_verified():
                              active_orbitals=4)
     assert orbital_parity_bounds(mh) is not None             # the rebuild reproduced the operator
     assert symmetry_allowed(mh, w, V)[pops > REACHABLE_TOL_CERTIFIED].all()
+
+
+# --- L1-L4: the known limitations in SPEC section 8 (chem-648) -------------------------------------
+#
+# These four witnesses are reproduced with _driver_orbitals (or hf_symmetry_sector) monkeypatched to
+# supply known orbitals/sectors directly, rather than through the production PySCFDriver rebuild
+# path. That path's reproducibility check (_SAME_OPERATOR_ATOL) is independently flaky on this Linux
+# environment for near-degenerate geometries (chem-g14, filed and out of scope here: see
+# sandbox-handoffs/chem-648.md) -- it fails even for an EXACT, unperturbed square/rectangle H4 at
+# conv_tol=1e-13, because free (symmetry=False) SCF leaves an arbitrary, non-reproducible rotation
+# inside a geometrically-degenerate MO shell. Monkeypatching isolates the L1-L4 logic itself from
+# that unrelated bug so these gates are deterministic. L3 is the exception: it reproduces end-to-end
+# with no monkeypatch at all, since its witness has no degenerate-shell SCF involved. (chem-g14 has
+# since made that rebuild the builder's own computation -- bit-identical on one host,
+# specs/SPEC_rebuild_gauge_search.md -- so the monkeypatch is now isolation only, not a workaround.)
+
+def _rhf(atom, conv_tol=1e-12):
+    from pyscf import gto, scf
+
+    mol = gto.M(atom=atom, basis="sto-3g", symmetry=False, verbose=0)
+    mf = scf.RHF(mol)
+    mf.conv_tol = conv_tol
+    mf.kernel()
+    assert mf.converged
+    return mol, mf
+
+
+def test_L1_degenerate_shell_split_window_is_excluded_full_window_is_not(monkeypatch):
+    """CH4 Td (reduced to D2 by PySCF), C-H 1.087 A, STO-3G (SPEC L1 witness). CAS(2,2) on 2 of the
+    3 degenerate HOMO (t2) MOs compresses R_b away from orthogonal -- excluded (beta=inf). A
+    non-degenerate CAS(2,2) window (HOMO-1, LUMO; both singly-degenerate 'a1'-like MOs under this
+    SCF) is not."""
+    r = 1.087 / 0.529177210903
+    d = r / np.sqrt(3)
+    hpos = [(d, d, d), (d, -d, -d), (-d, d, -d), (-d, -d, d)]
+    atom = "C 0 0 0; " + "; ".join(f"H {x} {y} {z}" for x, y, z in hpos)
+    mol, mf = _rhf(atom)
+    assert np.ptp(mf.mo_energy[2:5]) < 1e-8, "HOMO shell is not degenerate here -- witness stale"
+
+    mh0 = _system(H2)[0]
+
+    def bounds_for(mo_window):
+        mh = dataclasses.replace(mh0, num_particles=(1, 1))
+        monkeypatch.setattr(reachability, "_driver_orbitals", lambda _mh: (mol, mo_window))
+        return orbital_parity_bounds(mh)
+
+    split = bounds_for(mf.mo_coeff[:, [2, 3]])         # 2 of the 3 degenerate t2 MOs
+    assert all(beta == float("inf") for _, beta in split)
+
+    whole = bounds_for(mf.mo_coeff[:, [1, 5]])         # non-degenerate HOMO-1/LUMO window
+    assert all(beta < 1e-10 for _, beta in whole)
+
+
+def _rect_h4(dx_angstrom, conv_tol=1e-13):
+    """D2h rectangle H4 (a != b: no orbital degeneracy), one atom shifted by dx along x."""
+    from pyscf import gto
+
+    a, b = 1.1, 1.3
+    dx = dx_angstrom / 0.529177210903
+    atom = f"H 0 0 0; H {a + dx} 0 0; H {a} {b} 0; H 0 {b} 0"
+    mol, mf = _rhf(atom, conv_tol)
+    ref = gto.M(atom=mol.atom, symmetry=True, verbose=0)
+    return mol, mf, ref.groupname
+
+
+def test_L2_geometry_pyscf_mistakes_for_exact_is_excluded(monkeypatch):
+    """Rectangle H4 (a=1.1, b=1.3 A), one atom shifted 1e-6 A along x: real D2h symmetry is broken,
+    but PySCF's own (natm-scaled) detection tolerance still reports D2h -- SPEC L2's witness (the
+    spec recorded 5e-6/1e-5 A on macOS; this environment's boundary is an order of magnitude tighter,
+    1e-6 vs 2e-6 A, a platform/pyscf-version difference, not a re-derivation of the mechanism). The
+    exact (dx=0) geometry is a clean control: no orbital degeneracy, so no SCF-rotation ambiguity,
+    and every D2h bit should be (and is) trusted."""
+    mh0 = _system(H2)[0]
+
+    def bounds_for(dx):
+        mol, mf, groupname = _rect_h4(dx)
+        mh = dataclasses.replace(mh0, num_particles=(2, 2))
+        monkeypatch.setattr(reachability, "_driver_orbitals", lambda _mh: (mol, mf.mo_coeff))
+        return groupname, orbital_parity_bounds(mh)
+
+    gp, exact = bounds_for(0.0)
+    assert gp == "D2h" and all(beta < 1e-10 for _, beta in exact)
+
+    gp, fooled = bounds_for(1e-6)
+    assert gp == "D2h", "witness stale: PySCF no longer fooled at this perturbation"
+    assert all(beta == float("inf") for _, beta in fooled)
+
+
+def test_L3_mapper_is_recorded_and_checked():
+    """Linear H4, spin=2 (SPEC L3 witness): an InterleavedQubitMapper build shares its HF
+    computational-basis INDEX with a Jordan-Wigner build of the same system, despite a different
+    qubit layout. Reproduces end-to-end (no monkeypatch): build_args now records the mapper, and
+    hf_symmetry_sector refuses the coincidence rather than trusting the index alone."""
+    from qiskit_nature.second_q.mappers import InterleavedQubitMapper, JordanWignerMapper
+
+    mh_jw = build_molecular_hamiltonian(atom=LIN_H4, spin=2)
+    mh_int = build_molecular_hamiltonian(atom=LIN_H4, spin=2,
+                                         mapper=InterleavedQubitMapper(JordanWignerMapper()))
+    hf_jw = int(np.argmax(np.abs(np.asarray(mh_jw.hf_state().data))))
+    hf_int = int(np.argmax(np.abs(np.asarray(mh_int.hf_state().data))))
+    assert hf_jw == hf_int, "witness stale: the two mappers no longer share an HF index"
+
+    assert mh_jw.build_args["mapper"] == "JordanWignerMapper"
+    assert mh_int.build_args["mapper"] == "InterleavedQubitMapper"
+    assert hf_symmetry_sector(mh_jw) is not None
+    assert hf_symmetry_sector(mh_int) is None
+
+
+def test_L4_accidental_cross_sector_degeneracy_abstains(monkeypatch):
+    """Two eigenvectors merged into one cluster (|E1 - E2| < _DEGENERATE_ATOL) whose HF-projection
+    splits the cluster's weight exactly 50/50 between in-sector and out-of-sector rows: the
+    majority-only rule (weight > 0.5) would flag BOTH as forbidden on this tie; the abstention band
+    (chem-648 L4) instead leaves both allowed. A cluster clearly on one side (weight=0.95) is
+    unaffected and still decided normally."""
+    from qiskit.circuit import QuantumCircuit
+
+    mh0 = _system(H2)[0]
+    mh = dataclasses.replace(mh0, hf_circuit=QuantumCircuit(2))     # |HF> = |00> (row 0)
+    sector = np.array([True, True, False, False])
+    monkeypatch.setattr(reachability, "hf_symmetry_sector", lambda _mh: sector)
+
+    def weight_of(a2):
+        a, b = np.sqrt(a2), np.sqrt(1 - a2)
+        vecs = np.array([[a, 0.0], [0.0, 1.0], [b, 0.0], [0.0, 0.0]])
+        w = np.array([0.0, 0.5e-9])                 # one cluster: within _DEGENERATE_ATOL
+        return w, vecs
+
+    w, vecs = weight_of(0.5)                          # exactly ambiguous
+    allowed = symmetry_allowed(mh, w, vecs)
+    assert allowed.all(), "exact 50/50 tie should abstain (allowed), not flag"
+
+    w, vecs = weight_of(0.95)                         # clearly outside the ambiguous band
+    allowed = symmetry_allowed(mh, w, vecs)
+    assert allowed.all(), "0.95 is > 1 - margin, so it is decided (allowed) normally"
+
+    w, vecs = weight_of(0.0005)                       # clearly outside the band, on the other side
+    allowed = symmetry_allowed(mh, w, vecs)
+    assert not allowed.any(), "0.0005 is < margin, so it is decided (forbidden) normally"

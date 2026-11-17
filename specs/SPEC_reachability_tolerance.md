@@ -4,6 +4,8 @@
 hypothesis (specs/BACKLOG.md, Open → Certified-bounds arc): the chained bound appeared to *violate*
 its reference, and the cause was not the bound.
 
+**Revised 2026-11-05 (chem-8ls, `SPEC_scf_stability_rule.md`):** §11: the a = 1.1 witness was the SCF stopping on a saddle point; G1, G2, G6 and G8 re-pinned, G3 retired.
+
 ---
 
 ## 1. Goal
@@ -66,6 +68,17 @@ while the amplitude moves **19 orders of magnitude**:
 | 1e-13 | −4.5562107647 | **1.53e-28** |
 
 A physical overlap does not depend on how tightly the SCF was converged. Gated as **G6**.
+
+*Maintenance (chem-ffe, 2026-10-15):* `test_G6`'s helper (`_p0_at_conv_tol`) built its qubit
+Hamiltonian with a bare `mapper.map(...)`, which chem-8tl's `map_canonical` finding (see
+`SPEC_centered_pds_roots.md`) means is `PYTHONHASHSEED`-dependent in its low coefficient bits and
+term order. Switched it to `map_canonical` for consistency with `build_molecular_hamiltonian`. The
+RHF branch and SCF residue this table reports are decided by PySCF before any qubit mapping runs,
+and this Hamiltonian is nowhere near the cond ~ 1e17 regime where chem-8tl's bit-path sensitivity
+shows up, so no number here is expected to move. Not independently re-verified: G6 already fails on
+this Linux container for an unrelated, already-filed reason (chem-8ls: RHF branch selection does not
+reproduce this spec's §2b Linux witness here), so this table could not be regenerated end-to-end on
+this run either way.
 
 **(ii) The mechanism: the state is symmetry-forbidden.** Square H₄ is D2h. The RHF MO irreps are
 `[Ag, B2u, B3u, Ag]` with occupation (2,2,0,0), so the **HF determinant is Ag**. Symmetry-resolved
@@ -206,11 +219,68 @@ numbers in the reason; no threshold changed and Linux behaviour is untouched. Th
 claim is carried by G6 (residue moves 19 orders with `conv_tol`), G7 (symmetry mechanism) and G8
 (no fixed constant is safe), all of which pass on macOS. G4 and G5 also pass everywhere.
 
-**G8 weakness (not changed).** On macOS a = 1.185 is a symmetry-broken solve (ΔE = −7.6e-2 Ha,
-p₀ = 0.4625) and also counts as an offender (p₀ > 1e-8), so G8 would pass even if a = 1.190 did not
-breach. The symmetric offender carries §2b(iii): a = 1.190 gives p₀ = 1.401e-8 (symmetric, ΔE =
-−8.9e-16 Ha), matching the Linux 1.4e-8; a = 1.195 (symmetric) gives 3.8e-12. Requiring a
-symmetric-SCF offender would make G8 stricter; not done because it cannot be verified on Linux here.
-(Source: throwaway probe, `scf_symmetry_status` plus the default-build p₀ at these three a; not committed.)
+**G8 weakness, fixed (2026-10-15, chem-qhi).** On macOS a = 1.185 is a symmetry-broken solve
+(ΔE = −7.6e-2 Ha, p₀ = 0.4625) and also counts as an offender (p₀ > 1e-8), so the original G8 would
+pass even if a = 1.190 did not breach. Verified on Linux (thread-pinned — see below — this freeze,
+`uv run python` one-off, `build_molecular_hamiltonian` default conv_tol, `reachability.scf_symmetry_status`):
 
-**Not verified:** Linux. The Linux column rests on the numbers this spec recorded in §2b.
+| a | p₀ (amp2[0]) | offender (p₀ > 1e-8) | symmetry-broken | ΔE (Ha) |
+|---|---|---|---|---|
+| 1.185 | 4.625293e-01 | yes | **yes** | −7.575e-02 |
+| 1.190 | 3.249996e-11 | no | no | −3.286e-14 |
+| 1.195 | 4.616719e-01 | yes | **yes** | −7.620e-02 |
+| 1.220 | 1.256102e-08 | yes | **no** | −8.882e-16 |
+
+The original three-point set (1.185, 1.190, 1.195) has no symmetric offender on Linux: 1.185 and
+1.195 are genuine symmetry-broken RHF solutions here (unlike macOS's claim for 1.195), and 1.190's
+residue does not breach 1e-8. A widened sweep (step 0.005, range 1.15–1.40, same pinning) found new
+Linux-native symmetric-SCF offenders at a = 1.22 (1.256e-8), 1.275 (2.549e-8), 1.335 (2.245e-8); the
+nearest, a = 1.22, was added to the candidate set. `test_G8_neither_constant_is_safe` now pins
+`pyscf.lib.num_threads(1)` locally (restored in `finally`, not module-wide — this near-degenerate
+family's RHF branch selection is sensitive to PySCF's OpenMP thread count, chem-7cx-root-cause) and
+asserts, in addition to the original non-vacuity check, that at least one offender is ALSO a
+symmetric-SCF solve (`scf_symmetry_status(...)[0] is False`). Reproduced 3/3 runs. The "cannot be
+verified on Linux here" caveat is resolved; the macOS numbers above are unchanged and still show the
+same weakness would exist on macOS without the widened/pinned candidate set — a macOS-side fix is
+out of scope here (no macOS environment in this session).
+
+**Not verified:** macOS, for this addendum's pinned/widened measurements (no macOS environment in
+this session). The original macOS numbers in this section were measured independently (2026-10-02,
+chem-7rb) and are unaffected. The rest of the Linux column rests on the numbers this spec recorded
+in §2b.
+
+## 11. chem-8ls (2026-11-05): the witness was the SCF stopping on a saddle
+
+**What changed.** Every builder now follows internal SCF instabilities to a stable minimum (`SPEC_scf_stability_rule.md`).
+- Square H₄'s D2h-symmetric RHF is a saddle at every side: lowest orbital-Hessian eigenvalue −0.53 to −0.67 Ha.
+- The §2 witness (a residue on the B1g level at a = 1.1) existed only while the free SCF stopped on that saddle. Whether it stopped there depended on the platform's rounding. That is why the witness did not reproduce on macOS (§10), and why the bead found the a = 1.1 SCF on the broken branch on its Linux container.
+- With the rule, the a = 1.1 reference is the broken-symmetry minimum on both platforms. Its lowest level is the B1g ground state with HF population 0.4692, overlap 0.685, and both cuts select it.
+
+**Old values next to new.** a = 1.1, builder default `conv_tol` = 1e-9:
+
+| source | lowest level, 1e-10 cut | lowest level, 1e-8 cut | overlap at 1e-10 | overlap at 1e-8 | p₀ |
+|---|---|---|---|---|---|
+| Linux freeze, before (§2) | B1g (residue) | Ag | 2.25e-5 | 0.667 | 5.07e-10 |
+| macOS 27, before (§10) | Ag | Ag | 0.667 | 0.667 | ~1e-29 |
+| chem-8ls: macOS 27.2 arm64 and Linux x86_64 | B1g | B1g | 0.6850 | 0.6850 | 0.46922809 |
+
+New values: pyscf 2.13.1, qiskit-nature 0.8.0, numpy 2.4.6 and scipy 1.15.3 on both platforms. On Linux the `claude-chem` image ran with OpenMP.
+
+**Gates.**
+- **G1 is re-pinned and runs everywhere.** Both cuts select index 0, and its overlap is 0.685 ± 0.005. It was: different indices, Linux-only since §10.
+- **G2 is re-pinned.** The two shipped d=1 references agree to rel 1e-8; they used to differ by more than 1000×. `SPEC_hf_overlap_subspace`'s d=1 vs d=2 head-to-head now certifies one target at this geometry.
+- **G3 is retired.** At the default `conv_tol` the (1e-10, 1e-8) window at a = 1.1 now holds one *excited* level on macOS (6.3e-10) and none on Linux. That depends on the SCF trajectory, so it is not gated.
+- **G4, G5 and G7 are unchanged.**
+- **G6 is re-pinned through the builder.** p₀ at `conv_tol` 1e-6 and 1e-13 agree to 1e-4 and exceed 0.4; measured 0.46922808 and 0.46922809. The raw-driver residue of §2b(i) is the record of the free SCF.
+  - That raw driver had no thread pin and no rule. On this Mac it still gives 2.66e-6 at 1e-6 and 1.8e-29 at 1e-13, re-measured 2026-11-05.
+  - An unpinned PySCF SCF is the configuration chem-7cx found non-deterministic on Linux. chem-8ls recorded G5/G6 varying from run to run there; the cause was not isolated further.
+  - The gate no longer uses it.
+- **G8 is re-pinned.** At 1.185, 1.19, 1.195 and 1.22 every candidate is broken-symmetry, with p₀ = 0.4625, 0.4621, 0.4617 and 0.4595. It was: some candidate is a symmetric-SCF offender with p₀ > 1e-8 (a = 1.22: 1.26e-8 on Linux, §10).
+
+**What this does to the findings.**
+- §2b(i)–(iii) stand as the record of the pre-rule builder: the residue was SCF residue, and no fixed constant separated it from physics.
+- The remedy is now at the source. On this family the builder's lowest level is never a residue, so the two constants agree on the ground state.
+- They can still disagree about *excited* levels at the default `conv_tol`, as with the 6.3e-10 level above. `SPEC_scf_conv_tol` §11 gives the sector sizes and Ritz leakage.
+- So unifying the two constants (§7) is still open, but it now affects only the size of the sector, not which ground state is certified.
+
+**Gate run.** See `SPEC_scf_stability_rule` §9.

@@ -33,7 +33,7 @@ from qiskit.quantum_info import SparsePauliOp
 from hybrid_quantum_solver.hardware_krylov import HardwareKrylovSolver
 from hybrid_quantum_solver.molecular_hamiltonian import MolecularHamiltonian
 from odmd import noise_edge, odmd_spectrum
-from reachability import _dense_hf_projection, reachable_mask
+from reachability import reachable_frame
 
 
 def centered_frame(mh: MolecularHamiltonian):
@@ -45,15 +45,12 @@ def centered_frame(mh: MolecularHamiltonian):
     diagonalization: validation scale only).
     """
     # shared dense eigh carries the macOS Accelerate ZHEEVD -> ZHEEVR fallback (chem-a0y, chem-aj1)
-    w_eig, V, pops = _dense_hf_projection(mh)
-    reach = w_eig[reachable_mask(mh, w_eig, V, pops, 1e-8)].real    # population cut (chem-obf)
-    mu = float(0.5 * (reach.max() + reach.min()))
-    tau = float(np.pi / (reach.max() - reach.min()))
+    frame = reachable_frame(mh)
     shifted = (mh.qubit_hamiltonian
-               - SparsePauliOp("I" * mh.num_qubits, coeffs=[mu])).simplify()
+               - SparsePauliOp("I" * mh.num_qubits, coeffs=[frame.mu])).simplify()
     mh_c = dataclasses.replace(mh, qubit_hamiltonian=shifted,
-                               energy_offset=mh.energy_offset + mu)
-    return mh_c, tau, mu
+                               energy_offset=mh.energy_offset + frame.mu)
+    return mh_c, frame.tau, frame.mu
 
 
 def device_odmd_energy(s, tau: float, sigma: float, amp_floor: float = 0.05,

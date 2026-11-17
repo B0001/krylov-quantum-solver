@@ -19,8 +19,10 @@ It accepts either a pyscf mean-field object or raw active-space integrals (h1, e
 na, nb) -- the same tensors your run_nbn_sqd_sweep.py already produces from a CIF -- so you can
 estimate the FT cost of the exact Nb active space you are sweeping on the near-term side.
 
-Requires: openfermion (with resource_estimates), pyscf, pytest installed.
-    pip install openfermion pytest
+Requires: openfermion (with resource_estimates), pyscf, pytest installed. This is the
+fault-tolerant/openfermion stack, which lives in the separate `chem-ft` conda env (not this
+repo's uv-managed main env -- openfermion is not in pyproject.toml's dependencies). Build it
+with: bash setup_chem_ft.sh
 """
 
 import os

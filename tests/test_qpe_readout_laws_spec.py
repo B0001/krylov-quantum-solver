@@ -50,14 +50,17 @@ def test_G1_precision_error_monotonically_non_increasing(h2_system):
         assert e_next <= e_prev + 1e-15, (errs)
 
 
-def test_G2_precision_bounded_by_constant_times_lambda_over_2t(h2_system):
-    """A real, provable upper bound -- err(t) <= 3 * lambda/2^t at every tested t -- replacing the
-    docstring's bare '~lambda/2^t' with an actually-checked bound."""
+def test_G2_precision_bounded_by_pi_lambda_over_2t(h2_system):
+    """A real, PROVABLE upper bound -- err(t) <= pi * lambda/2^t at every tested t -- not the
+    empirical '3x' constant this gate used to assert was 'provable' (chem-aob: it wasn't, it was a
+    bare fit to this one sweep). The argmax decode's phase error is at most half a dyadic bin,
+    pi/2^t out of a 2*pi circle of 2^t bins; |cos(a)-cos(b)| <= |a-b| (mean value theorem), so
+    err(t) <= lambda*pi/2^t unconditionally -- a hard ceiling, true for any system."""
     h1, eri, e_core, casci, ground = h2_system
     for t in T_RANGE:
         E_est, lam, _ps, _olap = run_qpe(h1, eri, 2, e_core, ground, t)
         err = abs(E_est - casci)
-        assert err <= 3.0 * lam / 2 ** t, (t, err, lam / 2 ** t)
+        assert err <= np.pi * lam / 2 ** t, (t, err, lam / 2 ** t)
 
 
 def _overlap_sweep_ratios(h2_system, t, seed=0):

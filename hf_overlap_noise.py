@@ -96,7 +96,7 @@ def hf_overlap_noise_coverage(mh: MolecularHamiltonian, m: int, shots: float, z:
     r = residual_norm(H, u, lam)
     exact_overlap = exact_reachable_overlap(mh)
 
-    _, states = solver.eigenstates(m, n_states=2)
+    _, states = solver.uncertified_eigenstates(m, n_states=2)
     if len(states) < 2:
         raise ValueError(f"Krylov subspace at M={m} is rank-1: no first-excited Ritz state to "
                          "floor E1 from. Increase m.")

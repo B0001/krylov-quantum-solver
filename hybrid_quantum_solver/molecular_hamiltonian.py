@@ -33,6 +33,7 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import numpy as np
+from pyscf import lib
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import SparsePauliOp, Statevector
 from qiskit_nature.second_q.circuit.library import HartreeFock
@@ -77,6 +78,74 @@ class MolecularHamiltonian:
         return self.total_energy(eigenvalue)
 
 
+# Matches reachability.TIGHT_SCF_CONV_TOL (specs/SPEC_scf_conv_tol.md G3: collapses the
+# symmetry-forbidden-level SCF residue to machine zero). Duplicated as a literal rather than
+# imported -- this package does not depend on the top-level research scripts (reachability.py is
+# one of those; see CLAUDE.md "Architecture"), so the two constants are kept in sync by hand and by
+# tests/test_symmetric_scf_spec.py G6.
+_SYMMETRIC_TIGHT_CONV_TOL = 1e-13
+
+
+def _point_group(atom: str, basis: str, charge: int, spin: int) -> str:
+    """PySCF's point-group label for this geometry/basis (``"C1"`` if none detected).
+
+    Geometry-only: this does not run SCF, so it says nothing about whether RHF will land on a
+    symmetric or a spontaneously symmetry-broken solution (square H4's symmetric solution is a
+    saddle point, which the builder leaves for the broken minimum -- specs/SPEC_scf_stability_rule.md).
+    """
+    from pyscf import gto
+
+    mol = gto.M(atom=atom, basis=basis, charge=charge, spin=spin, symmetry=True, verbose=0)
+    return mol.groupname
+
+
+def _follow_instabilities(mf, max_steps: int = 5) -> None:
+    """Descend from an SCF saddle point to a stable minimum, in place (chem-8ls).
+
+    A free SCF started from a symmetric guess keeps the symmetry up to rounding, so it can stop on
+    a symmetric SADDLE point, and whether it escapes depends on the platform's rounding. Square H4
+    (STO-3G) is the witness. Its D2h-symmetric RHF is a saddle at every side from 1.00 to 1.40 A,
+    with lowest orbital-Hessian eigenvalue -0.53 to -0.67 Ha. The free SCF stopped on it at
+    a = 1.05/1.10/1.19/1.22/1.35 on macOS and at a different set on Linux. One step along the
+    unstable mode reaches the stable broken-symmetry minimum, 0.066-0.084 Ha lower. A solution that
+    is already stable is left untouched: the check reads ``mf``, it does not move it.
+    Internal stability only (real, same RHF/ROHF space): what the qubit Hamiltonian can use.
+    specs/SPEC_scf_stability_rule.md."""
+    from pyscf.scf import rohf, stability
+
+    internal = stability.rohf_internal if isinstance(mf, rohf.ROHF) else stability.rhf_internal
+    for _ in range(max_steps):
+        mo, stable = internal(mf, with_symmetry=False, return_status=True)
+        if stable:
+            return
+        mf.kernel(dm0=mf.make_rdm1(mo, mf.mo_occ))
+    raise RuntimeError(f"SCF still has an internal instability after {max_steps} steps along it")
+
+
+def _driver_problem(atom: str, basis: str, charge: int, spin: int, conv_tol: float,
+                    symmetric_scf: bool):
+    """``(PySCFDriver problem, effective conv_tol, driver)`` -- the one SCF path shared by
+    ``build_molecular_hamiltonian``, ``build_dipole_operators`` and the rebuild in
+    ``reachability._driver_orbitals``, so a Hamiltonian, its dipole and its verification rebuild
+    sit on bit-identical SCF orbitals (chem-9ud, chem-g14). It applies the ``symmetric_scf``
+    conv_tol floor and the ``pyscf.lib.num_threads(1)`` pin (chem-7cx) to the whole run, integral
+    transform included, and follows any internal SCF instability to a stable minimum before the
+    transform (chem-8ls, ``_follow_instabilities``); see ``build_molecular_hamiltonian``.
+    ``driver`` holds the run's ``_mol`` and ``_calc`` (MO coefficients)."""
+    if symmetric_scf and _point_group(atom, basis, charge, spin) != "C1":
+        conv_tol = min(conv_tol, _SYMMETRIC_TIGHT_CONV_TOL)
+    ambient_threads = lib.num_threads()
+    lib.num_threads(1)
+    try:
+        driver = PySCFDriver(atom=atom, basis=basis, charge=charge, spin=spin, conv_tol=conv_tol)
+        driver.run_pyscf()
+        _follow_instabilities(driver._calc)
+        problem = driver.to_problem()
+    finally:
+        lib.num_threads(ambient_threads)
+    return problem, conv_tol, driver
+
+
 def map_canonical(mapper, fermionic_op: FermionicOp) -> SparsePauliOp:
     """Map a fermionic operator to qubits bit-for-bit independently of PYTHONHASHSEED.
 
@@ -104,6 +173,7 @@ def build_molecular_hamiltonian(
     active_orbitals: Optional[int] = None,
     mapper: Optional[JordanWignerMapper] = None,
     conv_tol: float = 1e-9,
+    symmetric_scf: bool = False,
 ) -> MolecularHamiltonian:
     """Build the correct qubit Hamiltonian for a molecule.
 
@@ -123,14 +193,46 @@ def build_molecular_hamiltonian(
             of magnitude between conv_tol=1e-9 and 1e-13 while the eigenvalue itself is
             unchanged to 10 digits. That artifact is specific to exact-symmetry
             geometries (e.g. square H4); it is not a general reason to tighten the
-            default.
+            default. On square H4 the lowest-level artifact came from an SCF stopped on a
+            saddle point, which the stability rule (see Note) now leaves. Tightening still
+            removes the smaller residue a loose SCF can leave on forbidden EXCITED levels
+            (``specs/SPEC_scf_conv_tol.md`` section 11).
+        symmetric_scf: opt-in (default ``False``, so every existing call site is
+            unaffected). When ``True`` and PySCF detects nontrivial point-group symmetry
+            in ``atom``/``basis``/``charge``/``spin``, ``conv_tol`` is floored to
+            ``reachability.TIGHT_SCF_CONV_TOL`` (1e-13) before the SCF runs -- fixing the
+            residue artifact above at its source (the loose SCF that creates it) rather
+            than downstream, in whatever consumes the returned ``MolecularHamiltonian``.
+            A no-op (bit-identical build) on geometries PySCF labels ``"C1"``. See
+            ``specs/SPEC_symmetric_scf.md`` for why this is opt-in rather than the default.
+            Since chem-8ls's stability rule the default build carries no lowest-level
+            residue on square H4, so the flag now only removes the excited-level one
+            (``SPEC_symmetric_scf.md`` section 10).
 
     Returns:
         A populated :class:`MolecularHamiltonian`.
+
+    Note:
+        The underlying RHF/ROHF solve runs with ``pyscf.lib.num_threads(1)`` pinned for its
+        duration (ambient count restored in a ``finally``, same pattern as
+        ``benchmark_nbn._tight_scf``, chem-y6w/``specs/SPEC_nbn_scf_determinism.md``). Without
+        this, multi-threaded BLAS/OpenMP reductions inside PySCF's integral evaluation are not
+        bit-associative, and on a near-degenerate geometry (e.g. square H4) that noise is enough
+        to tip the free (``symmetry=False``) SCF onto a different locally-stable solution from one
+        call to the next -- same input, different output (chem-7cx; measured: pinning
+        ``OMP_NUM_THREADS`` alone reproduces the flip, pinning only ``OPENBLAS_NUM_THREADS`` does
+        not, so the integral evaluation is the actual source, not the linear algebra). Pinning
+        makes a given (atom, basis, charge, spin, conv_tol) build bit-identical across repeated
+        calls and across ambient thread counts on this host/pyscf build -- see
+        ``specs/SPEC_scf_branch_determinism.md``. Pinning alone did not make the branch match
+        another platform's, because one of square H4's two "solutions" is a saddle point that
+        the free SCF stopped on or escaped by rounding. The SCF now also follows any internal
+        instability to a stable minimum (``_follow_instabilities``, chem-8ls), so the branch is
+        the same on every platform measured (specs/SPEC_scf_stability_rule.md).
     """
     mapper = mapper or JordanWignerMapper()
-
-    problem = PySCFDriver(atom=atom, basis=basis, charge=charge, spin=spin, conv_tol=conv_tol).run()
+    problem, effective_conv_tol, _ = _driver_problem(atom, basis, charge, spin, conv_tol,
+                                                     symmetric_scf)
 
     if active_electrons is not None and active_orbitals is not None:
         problem = ActiveSpaceTransformer(active_electrons, active_orbitals).transform(problem)
@@ -155,8 +257,10 @@ def build_molecular_hamiltonian(
         num_particles=problem.num_particles,
         num_spatial_orbitals=problem.num_spatial_orbitals,
         hf_energy=hf_energy,
-        build_args=dict(atom=atom, basis=basis, charge=charge, spin=spin, conv_tol=conv_tol,
-                        active_electrons=active_electrons, active_orbitals=active_orbitals),
+        build_args=dict(atom=atom, basis=basis, charge=charge, spin=spin,
+                        conv_tol=effective_conv_tol, symmetric_scf=symmetric_scf,
+                        active_electrons=active_electrons, active_orbitals=active_orbitals,
+                        mapper=type(mapper).__name__),
     )
 
 
@@ -217,6 +321,8 @@ def build_dipole_operators(
     charge: int = 0,
     spin: int = 0,
     mapper: Optional[JordanWignerMapper] = None,
+    conv_tol: float = 1e-9,
+    symmetric_scf: bool = False,
 ) -> list[SparsePauliOp]:
     """Total molecular dipole operator per Cartesian axis, on the same qubit basis as the
     Hamiltonian.
@@ -230,9 +336,15 @@ def build_dipole_operators(
     Full orbital space only (no active-space transform): the property gates run on full-space
     molecules, which keeps the dipole convention exactly as probed. An active-space dipole (with
     the frozen-core contribution folded in) is a follow-up. See specs/SPEC_qksd_properties.md.
+
+    ``conv_tol`` and ``symmetric_scf`` must match whatever was used to build the paired
+    Hamiltonian (defaults 1e-9 and ``False``, same as ``build_molecular_hamiltonian``) --
+    otherwise the dipole and the Hamiltonian are evaluated on different SCF orbitals (chem-qhi,
+    chem-9ud). Both builders run the same ``_driver_problem`` (same conv_tol floor, same thread
+    pin), so matching arguments give bit-identical orbitals.
     """
     mapper = mapper or JordanWignerMapper()
-    problem = PySCFDriver(atom=atom, basis=basis, charge=charge, spin=spin).run()
+    problem, _, _ = _driver_problem(atom, basis, charge, spin, conv_tol, symmetric_scf)
     dipole = problem.properties.electronic_dipole_moment
     elec_ops = dipole.second_q_ops()                 # {'XDipole', 'YDipole', 'ZDipole'}
     nuclear = np.asarray(dipole.nuclear_dipole_moment, dtype=float)

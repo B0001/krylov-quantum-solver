@@ -51,7 +51,7 @@ sampled only the nearest neighbour; coordination and the full chain (above) move
 as the likely explanation for the 5.3x (Nb3Cl8) / 2.3x (Nb3Br8) overprediction of the singlet-formation
 Tc by the isolated-dimer J. Running ``coordination_spin_gap`` -- the IDENTICAL cluster topology as
 ``coordination_gap``, just measuring E(Sz=1 lowest) - E(Sz=0 lowest) at half-filling instead of the
-charge gap -- shows J_eff does NOT fall monotonically, for either halide (``python nb3x8_gaps.py``):
+charge gap -- shows J_eff does NOT fall monotonically, for either halide (``uv run python nb3x8_gaps.py``):
 
   Nb3Cl8: z=0 (isolated) 66.20 -> z=1 71.08 -> z=2 66.55 -> z=3 71.12 meV
   Nb3Br8: z=0 (isolated) 119.11 -> z=1 126.50 -> z=2 120.11 -> z=3 126.63 meV
@@ -74,6 +74,18 @@ cannot see and did not test: the cooperative/first-order structural transition i
 kagome exchange, or a lattice renormalization of t_s directly. See ``coordination_spin_gap`` /
 ``tests/test_nb3x8_gaps_spec.py::test_G8_*`` and specs/BACKLOG.md ("Coordination cannot rescue the
 5.3x Tc overprediction").
+
+*** chem-phh (nb3x8_tc_attribution.py, SPEC_nb3x8_tc_attribution.md): the "lattice renormalization of
+t_s directly" candidate above is now tested too, and also KILLED in its narrow (same dimerized
+structural motif) form -- the t_s shrinkage needed to match measured Tc is 17-600x the largest
+bulk-vs-bilayer |t_s| spread this family's own table shows. chem-cfl (same module): the cooperative
+structural-transition candidate is now tested too, sourcing elastic/lattice data from a second
+primary reference (arXiv:2412.03360) via WebFetch -- and SURVIVES (the E_lattice needed to match
+measured Tc is a small fraction of the sourced exfoliation-energy bound).
+chem-b0y (same module): the in-plane kagome exchange candidate is also now tested and KILLED --
+an in-plane J sourced from arXiv:2508.17352 Table 1 falls 35-9156x short of what the standard RPA
+self-consistency closure would need to explain the Tc miss alone. All three candidates are now
+tested. ***
 """
 from __future__ import annotations
 

@@ -34,7 +34,11 @@ def _pyscf_fci_total(atom, basis):
     mol = gto.M(atom=atom, basis=basis, verbose=0)
     mf = scf.RHF(mol)
     mf.kernel()
-    e_fci, _ = fci.FCI(mf).kernel()
+    solver = fci.FCI(mf)
+    e_fci, _ = solver.kernel()
+    if not solver.converged:
+        raise RuntimeError(f"FCI Davidson did not converge for atom={atom!r} basis={basis!r} "
+                            f"(chem-60i: an unchecked Davidson call can silently report a wrong energy)")
     return float(e_fci)
 
 

@@ -5,6 +5,8 @@ not a marginal tightening"*. Unblocked by [`SPEC_reachability_tolerance.md`](SPE
 and [`SPEC_symmetry_reachability.md`](SPEC_symmetry_reachability.md), which made the certified target
 well defined.
 
+**Revised 2026-11-05 (chem-8ls, `SPEC_scf_stability_rule.md`):** §11: square H₄ is gated only at `TIGHT_SCF_CONV_TOL`; G5's witness is the exact saddle, built on purpose; G7's positive control is the family of default builds.
+
 ---
 
 ## 1. Goal
@@ -165,3 +167,59 @@ certified_overlap.krylov_refine.SATURATION_SLACK = 1e-14
 
 - `hybrid_quantum_solver/certified_overlap/krylov_refine.py` — the implementation.
 - `tests/test_chained_overlap_spec.py` — G1–G7.
+
+## 10. Addendum (2026-10-15, chem-qhi): square H₄ a = 1.35 re-admitted at `TIGHT_SCF_CONV_TOL`
+
+§2's "possible — a follow-up" line is now done. `specs/SPEC_scf_conv_tol.md` §10 measured that
+tightening square H₄ a = 1.35's build from the default `conv_tol` to `TIGHT_SCF_CONV_TOL` (1e-13)
+collapses the SCF-residue artifact (Ritz leakage 1.6e-6 → 1.8e-14, nine orders below `LEAK_TOL`),
+making the certified target well-defined there. This spec's gated set gains that geometry **at the
+tight build only** — the default-build exclusion and its G7 positive control (R2b/R3 above) are
+unchanged, because at the default conv_tol the residue is still present and the target is still
+ill-defined; the two builds of the same atom string are different, deliberately coexisting cases.
+
+Measured (Linux, this repo's freeze; `tests/test_chained_overlap_spec.py`,
+`H4_SQUARE_135_TIGHT = "H 0 0 0; H 1.35 0 0; H 1.35 1.35 0; H 0 1.35 0"`, `conv_tol=TIGHT_SCF_CONV_TOL`):
+
+- The direct bound is **vacuous** at every M ∈ {6,8,12} (same shape as the other DIRECT_VACUOUS
+  members), so it joins G1/G3/G4/G7, not G2 (G2 only applies where the direct bound survives).
+- **G1** (validity): oracle/self chained bound ≤ exact overlap (0.668076) + `SATURATION_SLACK` at
+  M = 6, 8, 12 (self values 0.6066, 0.6628, 0.6680759096384864 at those depths).
+- **G3** (rescue): self mode is non-vacuous and > 0 at M = 8, 12 (direct confirmed vacuous there).
+- **G4** (self cost): γ_self/γ_oracle = 0.9866 (M=6), 0.99989 (M=8), ~1.0 (M=12) — all ≥ 0.9.
+- **G7** (leakage): ‖P_unreach v‖ = 2.365e-14 at M = 6, below `LEAK_TOL = 1e-12` by two orders — this
+  is the measurement that makes re-admission valid, mirroring R2b's collapse-at-tight-tolerance
+  argument for the eigenvalue itself.
+
+New test functions (suffixed `_tight_scf_square_h4_135`) were added alongside, not merged into, the
+existing parametrized G1/G3/G4/G7 tests, so the default-build a = 1.35 exclusion/positive-control
+behavior has zero diff.
+
+## 11. Addendum (2026-11-05, chem-8ls): square H₄ is gated only at `TIGHT_SCF_CONV_TOL`
+
+**What changed.** Every builder now follows internal SCF instabilities to a stable minimum (`SPEC_scf_stability_rule.md`).
+- The "symmetric-SCF geometries" this spec gated on were the free SCF stopped on square H₄'s D2h saddle point: a = 1.05 clean, and 1.10/1.35 with a residue. Which sides it stopped on depended on the platform.
+- Every square-H₄ build is now the broken-symmetry minimum. Its lowest level is physical.
+- A default (1e-9) build can still leave a residue on a symmetry-forbidden *excited* level, and that residue leaks into the Ritz vector. Which sides do so depends on the SCF trajectory, so on the platform.
+
+Measured with the rule alone and this file unchanged, gate by gate:
+- **G7 at a = 1.05** failed on macOS (leakage 2.7e-7) and passed on Linux (8.1e-15).
+- **G7's Linux-only a = 1.10 positive control** failed on Linux (1.6e-14).
+- **G5** failed on both, with identical values: the bound at a = 1.05 is now monotone (oracle 0.6388 → 0.6837 → 0.6875 at M = 6, 8, 12).
+- Everything else passed on both platforms: 60 of 62 on macOS, 61 of 63 on Linux.
+
+**Changes.**
+- **a = 1.05 is built at `TIGHT_SCF_CONV_TOL`** in the gated set (`_CONV_TOL`), as a = 1.35 already was. Leakage there is ≤ 2.1e-14 on both platforms.
+  - Its exact overlap is now 0.6875, the B1g ground state on the minimum. It was 0.6739, the Ag level on the saddle.
+  - The direct bound is still vacuous at M = 8 and 12, and the chained bound still rescues it (G3).
+- **G5's witness is the exact saddle, built on purpose.** That is `test_eigenstate_reachability_spec._saddle_witness(1.05, θ = 0)`: the symmetry-enforced RHF, which is what the default macOS build used to be.
+  - The oracle bound there is 0.5514 → 0.5289 → 0.6733, so M = 8 is again worse than M = 6, on every platform.
+  - On every builder reference measured the bound is monotone: square H₄ 1.05 and 1.35 (tight and default), linear H₄ and H₆, H₂.
+  - So the caveat stands as a property of the bound. It shows on a saddle-point reference, which the builder no longer produces.
+- **G7's positive control is the family.** At least one default build at a ∈ {1.00, 1.05, 1.19, 1.20, 1.35} must leak with leak² > `SATURATION_SLACK`.
+  - The builds that leak: macOS at 1.05 (2.7e-7), 1.19 (3.0e-7), 1.20 (5.1e-7) and 1.35 (3.7e-6); Linux at 1.00 (1.6e-7), 1.19 (3.0e-7), 1.20 (2.9e-7) and 1.35 (2.0e-7).
+  - It replaces the per-geometry controls [1.10] (Linux-only) and [1.35], whose answers depend on the platform.
+
+**Not changed.** G1–G4 and G6 thresholds; the tight a = 1.35 gates; the 12-qubit linear H₆ cases (the rule does not fire there).
+
+**Gate run.** See `SPEC_scf_stability_rule` §9.

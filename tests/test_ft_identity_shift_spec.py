@@ -79,17 +79,21 @@ def test_G2_drop_is_free_and_exact(label):
     assert max_err < 1e-8, (label, max_err)
 
 
-def _t_star(lam, eps, const=3.0):
+def _t_star(lam, eps, const=np.pi):
+    """chem-bu4: const defaults to the exact hard ceiling pi (mean-value theorem on cos, see
+    SPEC_ft_identity_shift sec.3d/10 and SPEC_qpe_precision_bound's G4), not the older empirical
+    `3` fit from SPEC_qpe_readout_laws G2 -- pi > 3, so this is strictly more conservative."""
     return int(np.ceil(np.log2(const * lam / eps)))
 
 
 @pytest.mark.parametrize("label", SYSTEMS)
 def test_G3_budget_reduction_is_real_and_honored(label):
     """DEFINITION OF DONE -- the real falsifier: at a fixed target precision eps, the phase-bit
-    count needed by the validated bound err(t) <= 3*lambda/2^t (SPEC_qpe_readout_laws G2) is no
-    larger for the recentered/identity-free variant than for the raw one, and running run_qpe
-    END TO END at each variant's own computed budget actually lands under eps for BOTH -- so the
-    reduced budget is a real, honored guarantee, not just algebra on paper."""
+    count needed by the derived hard-ceiling bound err(t) <= pi*lambda/2^t (chem-bu4; see
+    SPEC_qpe_precision_bound's G4 for the exact, tighter, per-t/per-theta0 version) is no larger
+    for the recentered/identity-free variant than for the raw one, and running run_qpe END TO END
+    at each variant's own computed budget actually lands under eps for BOTH -- so the reduced
+    budget is a real, honored guarantee, not just algebra on paper."""
     h1, eri, e_core, norb, casci, H, n, terms, lam, non_identity, c_identity, lam_excl = (
         _terms_and_lambda(label)
     )

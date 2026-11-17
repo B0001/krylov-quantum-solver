@@ -35,14 +35,13 @@ cd "${SLURM_SUBMIT_DIR}"
 # 2. Build explicit logs directory tracking matrix if not yet present
 mkdir -p logs
 
-# 3. Load native cluster module tools and switch to your specific conda workspace
+# 3. Ensure uv (this repo's exclusive package manager) is on PATH, then sync + activate the venv
 echo "[STEP 1] Initializing system environments and application dependencies..."
 module purge
-module load conda/24.1.2  # Loads HiPerGator's base module package manager wrapper
-
-# Activate your verified chemistry conda channel workspace
-# If your environment is isolated within personal user home space paths:
-conda activate chem
+command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="${HOME}/.local/bin:${PATH}"
+uv sync --extra dmrg --extra test --extra dev
+source .venv/bin/activate
 
 # 4. Enforce strict PYTHONPATH declaration 
 # This ensures that headless nodes can instantly discover the edited package root

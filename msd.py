@@ -38,7 +38,7 @@ from scipy.sparse.linalg import expm_multiply
 
 from hybrid_quantum_solver.molecular_hamiltonian import MolecularHamiltonian
 from hybrid_quantum_solver.quantum_krylov_solver import solve_generalized_eig
-from reachability import _dense_hf_projection, reachable_mask
+from reachability import reachable_frame
 
 # Central finite-difference weights for the first derivative: f'(0) ~ sum_j w_j f(j*delta) / delta.
 _STENCILS = {
@@ -110,15 +110,12 @@ def build_msd_problem(mh: MolecularHamiltonian, n: int = 8, order: int = 8,
     """
     H_full = mh.qubit_hamiltonian.to_matrix(sparse=True).tocsc()
     psi0 = np.asarray(mh.hf_state().data, dtype=complex)
-    w_eig, V, pops = _dense_hf_projection(mh)       # shared eigh: macOS ZHEEVD fallback
-    reach = w_eig[reachable_mask(mh, w_eig, V, pops, 1e-8)].real    # population cut (chem-obf)
-    width = float(reach.max() - reach.min())
-    mu = float(0.5 * (reach.max() + reach.min()))
+    frame = reachable_frame(mh)                     # shared eigh + reachable mask + mu/tau (chem-mg8)
+    mu, tau, width = frame.mu, frame.tau, frame.width
     H_s = (H_full - mu * identity(H_full.shape[0], format="csc")).tocsc()
 
     is_id = np.array([str(p) == "I" * mh.num_qubits for p in mh.qubit_hamiltonian.paulis])
     lam = float(np.sum(np.abs(mh.qubit_hamiltonian.coeffs - mu * is_id)))
-    tau = float(np.pi / width)
 
     s = _overlaps(H_s, psi0, [k * tau for k in range(n)])
     h_kqd = np.array([psi0.conj() @ (H_s @ expm_multiply(-1j * (k * tau) * H_s, psi0))

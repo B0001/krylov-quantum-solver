@@ -15,8 +15,9 @@ repo broke the first time.
 
 ## Non-negotiables (read `CLAUDE.md` first)
 
-- **Every shell command uses `conda run -n chem`.** (Fault-tolerant/openfermion work uses the
-  separate `chem-ft` env — see the memory notes.) Never assume the env is active.
+- **Every shell command uses `uv run`** (e.g. `uv run pytest`, `uv run python script.py`) — `uv`
+  is the exclusive dependency manager here, never bare `python`/`pip`/`conda`. (Fault-tolerant/
+  openfermion work uses the separate `chem-ft` conda env — see the memory notes.)
 - **block2/DMRG process isolation:** block2 segfaults if it loads into a process that already
   imported pyscf or qiskit-aer. `make gates` runs each `tests/test_*_spec.py` in its own process
   and keeps DMRG tests separate — preserve this; the `test_*_spec.py` glob keeps it correct.
@@ -57,8 +58,8 @@ repo broke the first time.
    `hybrid_quantum_solver/` and get exported. Match the surrounding style: ~100-col lines, honest
    docstrings that state scope and the found boundary.
 
-5. **`conda run -n chem python -m pytest tests/test_<slug>_spec.py`** to green, then
-   `conda run -n chem ruff check <new files>`. If a gate proves unsatisfiable, **revise the gate
+5. **`uv run pytest tests/test_<slug>_spec.py`** to green, then
+   `uv run ruff check <new files>`. If a gate proves unsatisfiable, **revise the gate
    in the spec with a note on what reality showed** (see `SPEC_hchain_tdl.md` G1 and the `[-]`
    killed entries in `specs/BACKLOG.md` for worked examples) — do not weaken it silently.
 

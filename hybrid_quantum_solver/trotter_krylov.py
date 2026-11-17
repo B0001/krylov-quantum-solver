@@ -15,6 +15,7 @@ reproduce, up to Trotter error (which shrinks with more Trotter ``reps`` / highe
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import List, Optional
 
 import numpy as np
@@ -24,8 +25,9 @@ from qiskit.quantum_info import SparsePauliOp, Statevector
 from qiskit.synthesis import SuzukiTrotter
 from scipy.sparse.linalg import eigsh
 
+from hybrid_quantum_solver.certification import certify_energies
 from hybrid_quantum_solver.molecular_hamiltonian import MolecularHamiltonian
-from hybrid_quantum_solver.quantum_krylov_solver import KrylovStep, solve_generalized_eig
+from hybrid_quantum_solver.quantum_krylov_solver import KrylovStep, ritz_pairs
 
 
 def canonical_term_order(hamiltonian: SparsePauliOp) -> SparsePauliOp:
@@ -129,21 +131,41 @@ class TrotterKrylovSolver:
         while len(self._basis) < dim:
             self._basis.append(self._basis[-1].evolve(self.step_circuit))
 
-    def solve(self, krylov_dim: int) -> KrylovStep:
-        if krylov_dim < 1:
-            raise ValueError("krylov_dim must be >= 1")
-        self._ensure_basis(krylov_dim)
-        B = np.array([s.data for s in self._basis[:krylov_dim]])
-        S = B.conj() @ B.T
-        H = B.conj() @ self._H.dot(B.T)
-        energy, rank = solve_generalized_eig(
-            0.5 * (H + H.conj().T), 0.5 * (S + S.conj().T), self.threshold
-        )
-        return KrylovStep(dim=krylov_dim, rank=rank, energy=energy + self.offset)
+    def _rows(self, dim: int) -> np.ndarray:
+        """The first ``dim`` Krylov vectors as rows, shape (M, N)."""
+        return np.array([s.data for s in self._basis[:dim]])
 
-    def convergence(self, max_dim: int) -> List[KrylovStep]:
-        self._ensure_basis(max_dim)
-        return [self.solve(m) for m in range(1, max_dim + 1)]
+    def _steps(self, dims, certificate_dir, names) -> List[KrylovStep]:
+        """Solve every dimension in ``dims``, then certify the energies in one call
+        (``certification.certify_energies``: always, lowest energy first)."""
+        ritz = []
+        for m in dims:
+            if m < 1:
+                raise ValueError("krylov_dim must be >= 1")
+            self._ensure_basis(m)
+            B = self._rows(m)
+            S = B.conj() @ B.T
+            H = B.conj() @ self._H.dot(B.T)
+            ritz.append(ritz_pairs(0.5 * (H + H.conj().T), 0.5 * (S + S.conj().T),
+                                   self.threshold))
+        certs = certify_energies(
+            self.mh, [(vals[0], lambda C=C, m=m: C[:, 0] @ self._rows(m))
+                      for m, (vals, C, _) in zip(dims, ritz)], certificate_dir, names)
+        return [KrylovStep(dim=m, rank=rank, unverified_energy=float(vals[0]) + self.offset,
+                           certificate=cert)
+                for m, (vals, _, rank), cert in zip(dims, ritz, certs)]
+
+    # Certified on every call, as in ``QuantumKrylovSolver``: read ``.energy`` for the
+    # certified number and ``.unverified_energy`` for the raw estimate.
+    def solve(self, krylov_dim: int, certificate_dir: str | Path | None = None) -> KrylovStep:
+        """Ground-state Ritz energy with the checker's verdict on it."""
+        return self._steps([krylov_dim], certificate_dir, None)[0]
+
+    def convergence(self, max_dim: int,
+                    certificate_dir: str | Path | None = None) -> List[KrylovStep]:
+        """Steps for M = 1 .. max_dim; one checker run covers the sweep."""
+        dims = range(1, max_dim + 1)
+        return self._steps(dims, certificate_dir, [f"M{m}" for m in dims])
 
 
 if __name__ == "__main__":
@@ -154,6 +176,7 @@ if __name__ == "__main__":
     solver = TrotterKrylovSolver(mh, trotter_order=2, trotter_reps=2)
     print(f"H2 FCI={fci:.6f}  dt={solver.dt:.4f}  (2nd-order Trotter, 2 reps/step)")
     for s in solver.convergence(6):
-        print(f"  M={s.dim} rank={s.rank} E={s.energy:.6f} err={(s.energy - fci) * 1e3:+.4f} mHa")
+        print(f"  M={s.dim} rank={s.rank} E={s.unverified_energy:.6f} "
+              f"err={(s.unverified_energy - fci) * 1e3:+.4f} mHa  {s.certificate.line.split()[0]}")
     e_exact = estimate_energy_aer(mh.hf_circuit, mh.qubit_hamiltonian, mh.energy_offset)
     print(f"Aer exact HF expectation = {e_exact:.6f} (RHF={mh.hf_energy:.6f})")

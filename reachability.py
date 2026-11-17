@@ -25,10 +25,14 @@ never changes the mask and never raises. Its known blind spots: the spec's secti
 The per-SYSTEM question (specs/SPEC_symmetry_reachability.md, ``symmetry_filter_available``): with
 a symmetric SCF the residue is present AND the irrep labelling succeeds; with a broken-symmetry SCF
 the reference genuinely overlaps that level (population ~0.45, not ~1e-10) AND labelling refuses.
+On square H4 the symmetric SCF is a saddle point. Since chem-8ls the builder follows its
+instability, so the builder's reference is always the broken-symmetry case there
+(specs/SPEC_scf_stability_rule.md).
 """
 from __future__ import annotations
 
 import warnings
+from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import numpy as np
@@ -46,11 +50,13 @@ TIGHT_SCF_CONV_TOL = 1e-13
 # The HF-reachable sector is defined by |<HF|psi_k>|^2 > tol. This is the CERTIFIED ARC's value,
 # shared by certified_gaps.py, certified_dipole.py, certified_noise.py and
 # hf_overlap_certificate.py -- but NOT by hf_overlap_subspace.py, which uses 1e-8. That divergence
-# is not cosmetic: at square H4 a = 1.1 A the two thresholds select DIFFERENT ground states (HF
+# was not cosmetic: at square H4 a = 1.1 A the two thresholds selected DIFFERENT ground states (HF
 # overlap 2.25e-5 vs 0.667), so the d=1 and d=2 certificates whose head-to-head is
-# SPEC_hf_overlap_subspace's headline are certifying different targets there. Named here so the
-# divergence is visible and gated (tests/test_reachability_tolerance_spec.py); unifying it decides
-# which of two recorded findings is right and is deliberately left to a follow-up.
+# SPEC_hf_overlap_subspace's headline certified different targets there. The residue behind it was
+# an SCF stopped on a saddle point, which chem-8ls's stability rule removed; the thresholds now agree
+# on the ground state and can still disagree on excited levels. Named here so the divergence is
+# visible and gated (tests/test_reachability_tolerance_spec.py); unifying it decides which of two
+# recorded findings is right and is deliberately left to a follow-up.
 # See specs/SPEC_reachability_tolerance.md. The sites cut through ``reachable_mask`` (this cut plus
 # a residue warning); SPEC_eigenstate_reachability G9 is why a symmetry veto cannot settle it.
 REACHABLE_TOL_CERTIFIED = 1e-10
@@ -58,21 +64,33 @@ REACHABLE_TOL_CERTIFIED = 1e-10
 
 def scf_symmetry_status(atom: str, basis: str = "sto-3g",
                         conv_tol: float = TIGHT_SCF_CONV_TOL) -> Tuple[bool, float]:
-    """(is_broken, dE) for the RHF reference: does the unsymmetrized solve find a LOWER solution?
+    """(is_broken, dE) for the builder's RHF reference: is it LOWER than the symmetry-enforced RHF?
 
-    ``dE = E_unsymmetrized - E_symmetry_enforced``; negative beyond SYMMETRY_BREAK_TOL means RHF
+    ``dE = E_reference - E_symmetry_enforced``; negative beyond SYMMETRY_BREAK_TOL means RHF
     broke symmetry. On square H4 this is textbook behaviour for a strongly-correlated square, not a
     defect -- the broken solution is variationally better by ~0.08 Ha.
-    """
-    from pyscf import gto, scf
 
-    free = scf.RHF(gto.M(atom=atom, basis=basis, symmetry=False, verbose=0))
-    free.conv_tol = conv_tol
-    free.kernel()
-    enforced = scf.RHF(gto.M(atom=atom, basis=basis, symmetry=True, verbose=0))
-    enforced.conv_tol = conv_tol
-    enforced.kernel()
-    d_e = float(free.e_tot - enforced.e_tot)
+    The reference is the builder's own SCF (``molecular_hamiltonian._driver_problem``: thread pin,
+    chem-7cx/chem-s6c, and the stability rule, chem-8ls), so the answer describes the reference
+    ``build_molecular_hamiltonian`` builds. Before chem-8ls this was a separate free RHF that could
+    stop on the symmetric saddle point. Which sides it stopped on depended on the platform's
+    rounding: square H4 a = 1.1 gave (False, -5e-15) on macOS and (True, -0.0716) on Linux
+    (specs/SPEC_scf_stability_rule.md). The symmetry-enforced solve runs with the same thread pin.
+    """
+    from pyscf import gto, lib, scf
+
+    from hybrid_quantum_solver.molecular_hamiltonian import _driver_problem
+
+    _, _, drv = _driver_problem(atom, basis, 0, 0, conv_tol, False)
+    ambient_threads = lib.num_threads()
+    lib.num_threads(1)
+    try:
+        enforced = scf.RHF(gto.M(atom=atom, basis=basis, symmetry=True, verbose=0))
+        enforced.conv_tol = conv_tol
+        enforced.kernel()
+    finally:
+        lib.num_threads(ambient_threads)
+    d_e = float(drv._calc.e_tot - enforced.e_tot)
     return (d_e < -SYMMETRY_BREAK_TOL), d_e
 
 
@@ -96,7 +114,7 @@ def hf_orbital_irreps(atom: str, basis: str = "sto-3g",
     Only the first is a refusal. Distinguishing them by ENERGY (not by whether labelling threw) is
     what makes the refusal meaningful.
     """
-    from pyscf import gto, scf, symm
+    from pyscf import gto, lib, scf, symm
 
     broken, _ = scf_symmetry_status(atom, basis=basis, conv_tol=conv_tol)
     if broken:
@@ -105,7 +123,14 @@ def hf_orbital_irreps(atom: str, basis: str = "sto-3g",
     mol_sym = gto.M(atom=atom, basis=basis, symmetry=True, verbose=0)
     mf_sym = scf.RHF(mol_sym)
     mf_sym.conv_tol = conv_tol
-    mf_sym.kernel()
+    # Same thread-pin as scf_symmetry_status (chem-s6c): this is a second, independent RHF solve
+    # (symmetry-enforced, but still subject to the same non-bit-associative integral evaluation).
+    ambient_threads = lib.num_threads()
+    lib.num_threads(1)
+    try:
+        mf_sym.kernel()
+    finally:
+        lib.num_threads(ambient_threads)
     try:
         return list(symm.label_orb_symm(mol_sym, mol_sym.irrep_name, mol_sym.symm_orb,
                                         mf_sym.mo_coeff))
@@ -119,9 +144,15 @@ def symmetry_filter_available(atom: str, basis: str = "sto-3g",
     return hf_orbital_irreps(atom, basis=basis, conv_tol=conv_tol) is not None
 
 
-def _dense_hf_projection(mh):
-    """(eigenvalues ascending, eigenvectors, HF populations) -- dense, O(2^n)."""
-    h = mh.qubit_hamiltonian.to_matrix()
+def _dense_hf_projection(mh, H: Optional[np.ndarray] = None):
+    """(eigenvalues ascending, eigenvectors, HF populations) -- dense, O(2^n).
+
+    Pass ``H`` (an already-built ``mh.qubit_hamiltonian.to_matrix()``) to reuse it instead of
+    building the dense matrix a second time -- the extra build cost 268 MB at 12 qubits for
+    callers (trotter_odmd.py, trotter_resolution_floor.py) that also need the raw matrix for
+    ``expm``/circuit eigendecomposition (chem-mg8).
+    """
+    h = mh.qubit_hamiltonian.to_matrix() if H is None else H
     try:
         w, vecs = np.linalg.eigh(h)
     except np.linalg.LinAlgError:
@@ -138,41 +169,113 @@ def hf_population_spectrum(mh) -> np.ndarray:
     return _dense_hf_projection(mh)[2]
 
 
-# A rebuild from ``build_args`` must reproduce the operator to this. Summation-order roundoff is
-# ~1e-16; a different MO basis (another degenerate-pair rotation, another geometry) moves the
-# coefficients by orders of magnitude more. A reproducibility check, not a physics threshold.
+# The rebuild below IS the builder's computation (same _driver_problem, same map_canonical), so it
+# reproduces the operator exactly: residual 0.0 on all 45 builder configurations measured, and one
+# SCF every time (macOS arm64, chem-g14, specs/SPEC_rebuild_gauge_search.md section 9). 1e-12 keeps
+# headroom over summation-order roundoff (<= 5.3e-15 measured, from the unsorted mapping the rebuild
+# used to apply) and sits 360x below the smallest above-roundoff difference a SEPARATE SCF
+# trajectory to the same solution leaves (3.6e-10; up to 3.2e-6 at conv_tol=1e-9 and 8.1e-5 at
+# 1e-6) -- a provenance check (these are mh's own MO coefficients), not a closeness one. The 1e-4
+# this replaced absorbed exactly that trajectory noise, which PySCF's unpinned OpenMP threads used to
+# inject into the rebuild (chem-7cx/chem-50w pinned them at the source).
 _SAME_OPERATOR_ATOL = 1e-12
 
 
 def _driver_orbitals(mh):
     """(PySCF mol, active MO coefficients) of the run that built ``mh`` -- or None when ``mh`` has
     no ``build_args`` or rebuilding from them does not reproduce ``mh.qubit_hamiltonian`` (stale or
-    edited operator). The identity term is ignored: a centered frame is the same operator."""
+    edited operator). The identity term is ignored: a centered frame is the same operator.
+
+    The rebuild replays ``build_args`` through the builder's own ``_driver_problem`` (same conv_tol
+    floor, same ``pyscf.lib.num_threads(1)`` pin) and ``map_canonical`` (same term order), so it is
+    the builder's computation, not a second SCF near it: one SCF, then match or refuse. It also
+    follows any later change to the builder's SCF path (chem-g14, specs/SPEC_rebuild_gauge_search.md;
+    that spec's section 10 records the SCF retry and sign-gauge search this replaced).
+    """
     args = getattr(mh, "build_args", None)
     if not args:
         return None
-    from qiskit_nature.second_q.drivers import PySCFDriver
     from qiskit_nature.second_q.mappers import JordanWignerMapper
     from qiskit_nature.second_q.transformers import ActiveSpaceTransformer
 
-    drv = PySCFDriver(atom=args["atom"], basis=args["basis"], charge=args["charge"],
-                      spin=args["spin"], conv_tol=args["conv_tol"])
-    problem = drv.run()
-    mo = drv._calc.mo_coeff                 # private, but the driver has no public MO accessor
+    from hybrid_quantum_solver.molecular_hamiltonian import _driver_problem, map_canonical
+
+    problem, _, drv = _driver_problem(args["atom"], args["basis"], args["charge"], args["spin"],
+                                      args["conv_tol"], args["symmetric_scf"])
+    mo = drv._calc.mo_coeff
     n_e, n_o = args["active_electrons"], args["active_orbitals"]
     if n_e is not None:
         problem = ActiveSpaceTransformer(n_e, n_o).transform(problem)
         # the transformer's own active window; a tuple (n_alpha, n_beta) is summed, as it does
-        first = (drv._mol.nelectron - int(np.sum(n_e))) // 2
-        mo = mo[:, first:first + n_o]
+        start = (drv._mol.nelectron - int(np.sum(n_e))) // 2
+        mo = mo[:, start:start + n_o]
     if mh.qubit_hamiltonian.num_qubits != 2 * mo.shape[1]:
         return None
-    rebuilt = JordanWignerMapper().map(problem.hamiltonian.second_q_op())
-    diff = (rebuilt - mh.qubit_hamiltonian).simplify(atol=0)
+    diff = (map_canonical(JordanWignerMapper(), problem.hamiltonian.second_q_op())
+            - mh.qubit_hamiltonian).simplify(atol=0)
     non_identity = diff.paulis.x.any(axis=1) | diff.paulis.z.any(axis=1)
     if np.abs(diff.coeffs[non_identity]).max(initial=0.0) > _SAME_OPERATOR_ATOL:
         return None
     return drv._mol, mo
+
+
+# D_b R_b bounds the Z-string error only where R_b (the point-group operation g_b restricted to the
+# active MO window, oblique-projected) is itself orthogonal. An active window that splits a
+# point-group-degenerate shell compresses R_b into something far from orthogonal, and the beta bound
+# built from it can then be small (and so get greedily ACCEPTED by hf_symmetry_sector) while being
+# physically wrong -- chem-648 L1, CH4 Td CAS(2,2): a populated level solve_excited reports as theta_1
+# got flagged forbidden this way. Measured separation on that witness: ||R_b R_b^T - I|| ~ 1e-14 for
+# the full orbital space or a window that does not split a degenerate shell, >= 5.7e-4 once it does.
+_R_ORTHOGONALITY_ATOL = 1e-6
+
+# Bit -> the Cartesian operation it is the sign of, derived from pyscf.symm.param.CHARACTER_TABLE
+# (column order matches OPERATOR_TABLE; bit b's column is the one whose +-1 pattern across irrep ids
+# equals (-1)**((id >> b) & 1)). Only the finite abelian point groups symm_adapted_basis actually
+# returns for a non-linear molecule; Dooh/Coov (linear) are out of scope for the geometric check
+# below -- their ids are folded into a D2h/C2v parent by ``% 10`` and the bit layout differs.
+_BIT_OPERATION = {
+    "D2h": ("C2y", "C2z", "i"),
+    "D2": ("C2y", "C2z"),
+    "C2h": ("C2z", "i"),
+    "C2v": ("sy", "C2z"),
+    "Cs": ("sz",),
+    "Ci": ("i",),
+    "C2": ("C2z",),
+    "C1": (),
+}
+
+# A real symmetry operation applied to the ACTUAL (unsymmetrized) geometry, independent of whatever
+# geometric tolerance PySCF's own detection used. Exact-to-double-precision geometries land at
+# ~1e-15 Bohr; chem-648 L2's witness (square H4, one atom moved 1e-6 Angstrom -- still inside PySCF's
+# natm-scaled detection tolerance, so ``ref.groupname`` still reports D2h) lands at ~1e-6 Bohr under
+# the operations that atom's shift actually breaks. Fixed and size-independent, unlike
+# ``symm.geom.TOLERANCE`` (which both PySCF's detection AND symm_adapted_basis's own atom-equivalence
+# grouping use, scaled by ``1/sqrt(1+natm)``) -- that is the point: this check does not inherit it.
+_GEOMETRY_RESIDUAL_ATOL = 1e-8
+
+
+def _geometry_residuals(mol, ref):
+    """{op_name: max atom-mapping residual (Bohr)} for each bit's claimed operation, checked against
+    the REAL geometry directly -- not PySCF's own (size-scaled) detection tolerance."""
+    from pyscf import symm
+
+    ops = _BIT_OPERATION.get(ref.groupname, ())
+    if not ops:
+        return {}
+    prop_atoms = mol.format_atom(mol._atom, ref._symm_orig, ref._symm_axes, "Bohr")
+    coords = np.array([a[1] for a in prop_atoms])
+    elems = [a[0] for a in prop_atoms]
+    opdic = symm.geom.symm_ops(ref.groupname)
+    out = {}
+    for name in ops:
+        op = opdic[name]
+        newc = coords * op if np.ndim(op) == 0 else coords @ op
+        residual = 0.0
+        for i, elem in enumerate(elems):
+            same = [j for j, e in enumerate(elems) if e == elem]
+            residual = max(residual, float(np.min(np.linalg.norm(coords[same] - newc[i], axis=1))))
+        out[name] = residual
+    return out
 
 
 def orbital_parity_bounds(mh):
@@ -184,8 +287,12 @@ def orbital_parity_bounds(mh):
     ||Z-string - exact operator|| on N-electron states: the sum of the N largest spin-orbital
     |1 - lambda| over the eigenvalues of D_b R_b (specs/SPEC_eigenstate_reachability.md section 3).
     Rigorous for the full orbital space, where D_b R_b is orthogonal; heuristic for active spaces
-    (and wrong when the window splits a degenerate shell). May raise where PySCF only half-detects
-    the symmetry; ``reachable_mask`` treats any failure here as "no diagnostic".
+    (and wrong when the window splits a degenerate shell) -- guarded by an explicit orthogonality
+    check on R_b, below which a bit is excluded (beta = inf) rather than trusted (chem-648 L1). A bit
+    whose claimed operation does not actually map the real geometry onto itself to
+    ``_GEOMETRY_RESIDUAL_ATOL``, independent of PySCF's own detection tolerance, is excluded the same
+    way (chem-648 L2). May raise where PySCF only half-detects the symmetry; ``reachable_mask`` treats
+    any failure here as "no diagnostic".
     """
     found = _driver_orbitals(mh)
     if found is None:
@@ -201,10 +308,18 @@ def orbital_parity_bounds(mh):
     s = mol.intor_symmetric("int1e_ovlp")
     proj = [mo.T @ s @ c @ np.linalg.solve(c.T @ s @ c, c.T @ s @ mo) for c in so]
     n_elec = sum(mh.num_particles)
+    geom_residuals = _geometry_residuals(mol, ref)
+    op_names = _BIT_OPERATION.get(ref.groupname, ())
     bounds = []
     for b in range(int(ids.max()).bit_length()):
         r = sum((-1.0) ** ((i >> b) & 1) * p for i, p in zip(ids, proj))   # g_b, MO basis
         odd = np.diag(r) < 0
+        untrustworthy = np.linalg.norm(r @ r.T - np.eye(r.shape[0])) > _R_ORTHOGONALITY_ATOL
+        if b < len(op_names):
+            untrustworthy |= geom_residuals.get(op_names[b], 0.0) > _GEOMETRY_RESIDUAL_ATOL
+        if untrustworthy:
+            bounds.append((odd, float("inf")))   # compressed/not-really-symmetric: not trustworthy
+            continue
         lam = np.linalg.eigvals(np.where(odd, -1.0, 1.0)[:, None] * r)
         dev = np.sort(np.repeat(np.abs(1.0 - lam), 2))[::-1]               # alpha and beta
         bounds.append((odd, float(dev[:n_elec].sum())))
@@ -219,16 +334,22 @@ def hf_symmetry_sector(mh) -> Optional[np.ndarray]:
     projector within 1/2 of the exact one so the majority test in ``symmetry_allowed`` cannot flip
     for a non-degenerate symmetry eigenstate. None when |HF> is not a Jordan-Wigner HF bitstring
     (other mapper, tapered operator): no sector, so no diagnostic. The layout check sees only the HF
-    index, which an interleaved-mapper operator can share (a known limitation of the diagnostic).
+    index, which an interleaved-mapper operator CAN share with a Jordan-Wigner one for some
+    (n_alpha, n_beta, n_orb) -- chem-648 L3 -- so it additionally requires ``build_args`` (when
+    present) to record ``mapper="JordanWignerMapper"``; absent ``build_args`` (no provenance, e.g.
+    ``build_hamiltonian_from_integrals``, which only ever uses Jordan-Wigner) still trusts the index.
     """
     cached = mh.__dict__.get("_hf_sector")
     if cached is not None and cached[0] is mh.qubit_hamiltonian:
         return cached[1]        # ponytail: per-instance cache; the rebuild is an SCF + a JW map
+    build_args = getattr(mh, "build_args", None)
+    mapper_name = build_args.get("mapper", "JordanWignerMapper") if build_args else "JordanWignerMapper"
     n, n_orb = mh.num_qubits, mh.num_spatial_orbitals
     n_a, n_b = mh.num_particles
     hf = int(np.argmax(np.abs(np.asarray(mh.hf_state().data))))
     sector = None
-    if n == 2 * n_orb and hf == (1 << n_a) - 1 + (((1 << n_b) - 1) << n_orb):
+    if (mapper_name == "JordanWignerMapper" and n == 2 * n_orb
+            and hf == (1 << n_a) - 1 + (((1 << n_b) - 1) << n_orb)):
         occ = ((np.arange(2 ** n)[:, None] >> np.arange(n)) & 1).astype(np.int8)
         sector = (occ[:, :n_orb].sum(1) == n_a) & (occ[:, n_orb:].sum(1) == n_b)
         budget = 0.0
@@ -248,6 +369,14 @@ def hf_symmetry_sector(mh) -> Optional[np.ndarray]:
 # wrong one -- a missed or spurious diagnostic warning; the reachable mask never depends on it.
 _DEGENERATE_ATOL = 1e-9
 
+# A cluster's sector weight is 0 or 1 to within this on every witnessed gated system (also G6's own
+# bound) -- real symmetry (even a true degeneracy spanning two sectors, e.g. an open-shell M_s pair)
+# concentrates HF's overlap on one side. A weight meaningfully away from 0 or 1 is the signature of
+# chem-648 L4: an ACCIDENTAL <1e-9 Ha degeneracy merging two different-symmetry, both-populated
+# levels into one cluster, where the majority rule's 1/2 cut is no longer backed by physics. Abstain
+# (do not flag) rather than guess which side the majority verdict actually belongs to.
+_AMBIGUOUS_WEIGHT_MARGIN = 1e-3
+
 
 def symmetry_allowed(mh, w, vecs) -> np.ndarray:
     """Per eigenvector: does HF's component in its eigenspace lie mostly in HF's symmetry sector?
@@ -256,7 +385,10 @@ def symmetry_allowed(mh, w, vecs) -> np.ndarray:
     basis-independent projection phi_C = V_C V_C^dagger |HF>: allowed iff ||P_sector phi_C||^2 >
     ||phi_C||^2 / 2 -- exactly 1 or 0 under exact symmetry, so 1/2 is its rounding, not a tuned
     constant. Per vector this is the majority test; per cluster it survives ``eigh`` mixing exactly
-    degenerate levels across sectors (open-shell M_s pairs), which a per-vector test does not.
+    degenerate levels across sectors (open-shell M_s pairs), which a per-vector test does not. A
+    cluster whose weight falls in the ambiguous band around 1/2 (chem-648 L4: an accidental,
+    non-symmetry degeneracy merging two real sectors) abstains -- treated as allowed -- rather than
+    applying the majority cut, since neither side of 1/2 is trustworthy there.
     Meaningful only where HF's projection is above roundoff (populated levels). All True when no
     sector can be formed. A DIAGNOSTIC: no reference depends on it (see ``reachable_mask``)."""
     sector = hf_symmetry_sector(mh)
@@ -267,7 +399,11 @@ def symmetry_allowed(mh, w, vecs) -> np.ndarray:
     for idx in np.split(np.arange(len(w)), np.flatnonzero(np.diff(w) > _DEGENERATE_ATOL) + 1):
         c = vecs[hf, idx].conj()                         # <psi_k|HF>, k in the cluster
         inside = vecs[np.ix_(sector, idx)] @ c           # P_sector phi_C
-        allowed[idx] = np.vdot(inside, inside).real > 0.5 * np.vdot(c, c).real
+        c_norm = np.vdot(c, c).real
+        weight = np.vdot(inside, inside).real / c_norm if c_norm > 0 else 0.0
+        if _AMBIGUOUS_WEIGHT_MARGIN < weight < 1.0 - _AMBIGUOUS_WEIGHT_MARGIN:
+            continue                                    # accidental cross-sector degeneracy: abstain
+        allowed[idx] = weight > 0.5
     return allowed
 
 
@@ -293,6 +429,41 @@ def reachable_mask(mh, w, vecs, pops, tol: float) -> np.ndarray:
                       f"({TIGHT_SCF_CONV_TOL:g}) to remove the residue.",
                       RuntimeWarning, stacklevel=2)
     return keep
+
+
+@dataclass
+class ReachableFrame:
+    """The odmd.py/msd.py/trotter_odmd.py/trotter_resolution_floor.py/device_odmd.py centered-
+    frame convention: ``mu`` centers the HF-reachable spectrum, ``tau = pi/width`` keeps every
+    reachable eigenphase inside the closed band ``[-width/2, width/2]``. ``w``/``V``/``pops`` are
+    the FULL (unmasked) dense spectrum -- callers that need the global ground or the raw
+    population array (e.g. a drift-prone ``ref``, or a second reachability cut at a different
+    ``tol``) still have it; ``reach`` is ``w`` restricted to the reachable mask.
+    """
+    mu: float
+    tau: float
+    width: float
+    reach: np.ndarray
+    w: np.ndarray
+    V: np.ndarray
+    pops: np.ndarray
+
+
+def reachable_frame(mh, tol: float = 1e-8, H: Optional[np.ndarray] = None) -> ReachableFrame:
+    """mu/tau centering frame from the HF-reachable sector, from ONE dense eigh.
+
+    Replaces the five copies of ``eigh + reachable_mask + mu/tau`` that used to be pasted into
+    odmd.py, msd.py, trotter_odmd.py, trotter_resolution_floor.py and device_odmd.py (chem-mg8).
+    Pass ``H`` (an already-built ``mh.qubit_hamiltonian.to_matrix()``) when the caller also needs
+    the raw dense matrix for something else -- that is what used to force a second ``to_matrix()``
+    build (+268 MB at 12 qubits) in trotter_odmd.py / trotter_resolution_floor.py.
+    """
+    w, V, pops = _dense_hf_projection(mh, H=H)
+    reach = w[reachable_mask(mh, w, V, pops, tol)].real
+    width = float(reach.max() - reach.min())
+    mu = float(0.5 * (reach.max() + reach.min()))
+    tau = float(np.pi / width)
+    return ReachableFrame(mu=mu, tau=tau, width=width, reach=reach, w=w, V=V, pops=pops)
 
 
 def reachable_eigenpairs(mh, tol: float = REACHABLE_TOL_CERTIFIED):

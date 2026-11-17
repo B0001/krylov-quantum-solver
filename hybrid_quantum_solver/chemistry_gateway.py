@@ -132,7 +132,7 @@ if __name__ == "__main__":
     import sys
 
     if len(sys.argv) < 2:
-        print("Usage: python -m hybrid_quantum_solver.chemistry_gateway <path_to_cif> [cas_e,cas_o]")
+        print("Usage: uv run python -m hybrid_quantum_solver.chemistry_gateway <path_to_cif> [cas_e,cas_o]")
         sys.exit(1)
 
     cif = sys.argv[1]

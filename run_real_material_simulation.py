@@ -2,7 +2,7 @@
 """
 Materials driver: CIF -> PySCF CASCI -> validated quantum Krylov solver.
 
-    python run_real_material_simulation.py <path_to_cif> [--active_space E,O] [--krylov_dim M] [--shots N]
+    uv run python run_real_material_simulation.py <path_to_cif> [--active_space E,O] [--krylov_dim M] [--shots N]
 
 This is the CIF/materials front end for the validated pipeline. It reuses the same classical
 pre-processing as the main CLI (hybrid_quantum_solver.chemistry_gateway.load_and_compute_integrals:
@@ -36,6 +36,9 @@ def main():
     parser.add_argument("--shots", "-s", type=int, default=None,
                         help="Model finite-sampling shot noise (omit for exact statevector).")
     parser.add_argument("--seed", type=int, default=None, help="RNG seed for shot noise.")
+    parser.add_argument("--uncertified-estimates-only", action="store_true",
+                        help="Skip certification: no checker run, and the result is an UNVERIFIED "
+                             "estimate. One checker run is about half an hour at 16 qubits.")
     args = parser.parse_args()
 
     try:
@@ -52,17 +55,26 @@ def main():
     )
     print(f"[CLASSICAL] CASCI total (active-space FCI target): {casci_total:.6f} Ha | nelecas={nelecas}")
 
+    if not args.uncertified_estimates_only:
+        print("   Certifying the result out of process: seconds up to 12 qubits, about half an "
+              "hour at 16.\n   --uncertified-estimates-only skips it and returns an "
+              "UNVERIFIED estimate.")
     result = run_from_integrals(
         h1, eri, num_particles=nelecas, e_core=float(e_core),
         krylov_dim=args.krylov_dim, shots=args.shots, seed=args.seed,
         reference_energy=float(casci_total), track_convergence=True,
+        uncertified_estimates_only=args.uncertified_estimates_only,
     )
 
+    # Certificate-or-abstention: the number is an energy only if the checker VERIFIED it.
+    estimate, certificate = result.unverified_energy, result.certificate
+    label = "Ground-state energy:  " if certificate.ok else "UNVERIFIED estimate:  "
     print("\n" + "=" * 80)
-    print(f"[RESULT] Ground-state estimate: {result.computed_energy:.6f} Ha")
+    print(f"[RESULT] {label} {estimate:.6f} Ha")
+    print(f"         Certificate:           {certificate.line}")
     print(f"         Hartree-Fock:          {result.hf_energy:.6f} Ha")
     print(f"         CASCI (active FCI):     {casci_total:.6f} Ha")
-    print(f"         |error| vs CASCI:       {result.error_vs_reference:.3e} Ha")
+    print(f"         |error| vs CASCI:       {abs(estimate - casci_total):.3e} Ha")
     print(f"         qubits={result.n_qubits} rank={result.rank} dt={result.dt:.4f} shots={args.shots}")
     print("=" * 80)
     print("NOTE: finite-cluster approximation of a periodic crystal (see module docstring).")

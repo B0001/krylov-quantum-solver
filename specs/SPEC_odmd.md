@@ -1,6 +1,12 @@
 # SPEC: ODMD — ground-state energy from the survival amplitude alone
 
-**Status:** IMPLEMENTED — gates G1–G4 green (`tests/test_odmd_spec.py`).
+**Status:** IMPLEMENTED — gates G1–G5 green (`tests/test_odmd_spec.py`).
+
+**Addendum (chem-1x3, 2026-10-14):** chem-3ds changed `ODMDProblem.ref` from the global
+(`w_eig[0]`) to the HF-reachable (`reach[0]`) ground energy, matching `trotter_odmd.py`'s
+existing convention — but no system gated by G1–G4 (H2, H4 chain, N2 CAS(6,6)) has HF missing the
+global ground, so every existing gate passes identically under either formula and the fix was a
+read-only inference. G5 adds a witness that separates them: see §5.
 
 ---
 
@@ -86,6 +92,16 @@ All in `tests/test_odmd_spec.py` (test-first). Median over noise seeds, as in
 - **G4 — SVD truncation is the mechanism.** At 1e4 shots the noise-aware truncation keeps the
   median error < 5 mHa, and removing it (`svd_threshold = 1e-10`) inflates the median by > 20x
   (measured ~900x).
+- **G5 — `ref` tracks the HF-reachable ground, not the global FCI ground (chem-1x3).** Witness:
+  square H4, a = 1.19 Angstrom, `conv_tol=TIGHT_SCF_CONV_TOL` (same symmetry-forbidden-ground
+  family as `tests/test_eigenstate_reachability_spec.py`'s G9 control; pyscf pinned to 1 thread
+  for the free-RHF branch's determinism, chem-7cx). There, HF's population on the global FCI
+  ground is numerically zero (< 1e-20) and the HF-reachable ground sits > 1e-2 Ha above it.
+  `build_odmd_problem(mh).ref` equals the HF-reachable ground (`reach[0] - mu`, abs 1e-8) and
+  differs from the global ground (`w_eig[0] - mu`) by more than 1e-3 Ha; and the noiseless
+  survival-amplitude signal itself (not just the label) converges to `ref` to < 1e-5 Ha while
+  sitting > 1e-2 Ha away from the global ground — the signal has no amplitude to converge to the
+  level HF cannot reach, so `ref` must describe what it does converge to.
 
 ## 6. Implementation plan (test-first)
 

@@ -8,7 +8,7 @@ Hadamard-test circuit, the number of distinct circuits (M(M+1)/2), observable ev
 total shot budget. This replaces the previous code's fictitious wall-clock "benchmarks" (e.g. a
 19-hour 16-qubit job) with reproducible circuit-level resource estimates.
 
-Run:  python benchmark_resources.py   ->  prints a resource table and writes data/krylov_resources.csv
+Run:  uv run python benchmark_resources.py   ->  prints a resource table and writes data/krylov_resources.csv
 """
 import csv
 

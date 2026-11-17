@@ -8,7 +8,7 @@ beyond FCI's reach), DMRG is the reference. This module provides both behind one
 benchmark ladder can be extended in an environment that has `block2` installed.
 
   fci_energy(...)        exact active-space FCI via PySCF        (always available; tested here)
-  dmrg_energy(...)       DMRG via block2 / pyblock2              (requires: pip install block2)
+  dmrg_energy(...)       DMRG via block2 / pyblock2              (requires: uv sync --inexact --extra dmrg)
   reference_energy(...)  DMRG if available (method="auto"), else exact FCI
 
 Integral convention (identical to ``molecular_hamiltonian.build_hamiltonian_from_integrals``):
@@ -53,9 +53,9 @@ def _scratch_dir(scratch):
     An explicit ``scratch`` string is passed straight to the driver, untouched and NOT cleaned up
     here -- callers that already namespace their own scratch (e.g. per-PID, per-case subdirectories
     in nbn_dmrg_reference.py / benchmark_hubbard_lieb_wu.py) are relying on it surviving the call.
-    It IS created (with any missing parents) first: block2 only creates the leaf directory, so a
-    nested path like ``./.dmrg_tmp/g8_free`` failed in a fresh checkout with no ``.dmrg_tmp`` yet
-    (``SparseMatrix:save_data ... failed`` -- chem-qqu).
+    It IS created here if missing (chem-qqu): block2 opens scratch files by path and fails with a
+    RuntimeError rather than creating missing parent directories, so a fresh checkout (no
+    ``.dmrg_tmp/`` yet) fails the first call with any explicit, not-yet-existing scratch path.
     """
     if scratch is not None:
         os.makedirs(scratch, exist_ok=True)
@@ -122,7 +122,7 @@ def dmrg_energy(
     scratch: Optional[str] = None,
     n_threads: int = 4,
 ) -> float:
-    """DMRG total energy via block2 / pyblock2. Requires ``pip install block2``.
+    """DMRG total energy via block2 / pyblock2. Requires ``uv sync --inexact --extra dmrg``.
 
     Intended for active spaces too large for exact FCI. On small spaces it reproduces
     ``fci_energy`` (the natural validation in an environment that has block2).
@@ -135,7 +135,7 @@ def dmrg_energy(
         from pyblock2.driver.core import DMRGDriver, SymmetryTypes
     except Exception as exc:  # pragma: no cover - exercised only without block2
         raise ImportError(
-            "dmrg_energy requires the 'block2' package (pip install block2). "
+            "dmrg_energy requires the 'block2' package (uv sync --inexact --extra dmrg). "
             "For active spaces where exact FCI is tractable, use fci_energy(...) instead."
         ) from exc
 
@@ -385,7 +385,7 @@ def dmrg_energy_extrapolated(
     try:
         from pyblock2.driver.core import DMRGDriver, SymmetryTypes
     except Exception as exc:  # pragma: no cover - only without block2
-        raise ImportError("dmrg_energy_extrapolated requires block2 (pip install block2).") from exc
+        raise ImportError("dmrg_energy_extrapolated requires block2 (uv sync --inexact --extra dmrg).") from exc
     if protocol not in ("perD", "ramp"):
         raise ValueError(f"protocol must be 'perD' or 'ramp', got {protocol!r}")
 

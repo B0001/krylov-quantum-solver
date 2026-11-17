@@ -3,11 +3,12 @@ Acceptance gates G1-G5 for specs/SPEC_certkit_regression_gate.md (the regression
 CI gate).
 
 Claim: every certificate this repo's producer emits still verifies under the exact certkit
-release pinned in pyproject.toml, and the energy each verified certificate certifies is still
+commit pinned in pyproject.toml, and the energy each verified certificate certifies is still
 within chemical accuracy of the exact lowest eigenvalue of the qubit matrix -- the GLOBAL one
 over every symmetry sector, not the HF-reachable minimum SPEC_temple_bracket.md brackets; a
 lambda_min_enclosure is a claim about the whole matrix. The checker runs out of process over
-the files, per certkit's INTEGRATION.md -- nothing here imports check().
+the files, per certkit's INTEGRATION.md -- nothing here imports check(). "Every certificate"
+includes, per case, the one the solver's own return path emits (solve/<route>, portfolio-cir).
 
 Why the checker is not enough on its own, and why G4 exists: the gershgorin_rayleigh route
 certifies [gershgorin_lower(H), <x|H|x>], a true enclosure for ANY unit vector x. A witness of
@@ -19,33 +20,20 @@ Electronic frame throughout: certificates are about the qubit matrix, and mh.ene
 a trusted addition made outside it. The references below are therefore NOT the total energies
 the rest of the suite asserts.
 
-Needs the pinned checker (`uv pip install -e ".[certkit]"`). PySCF/qiskit, no block2;
-`make gates` runs it in its own process.
+The pinned checker is a core dependency since portfolio-0pc, so there is no skip guard: a
+missing certkit is an import error, never a gate that quietly did not run. PySCF/qiskit, no
+block2; `make gates` runs it in its own process.
 """
-import importlib.util
 import json
 import os
 from pathlib import Path
 
 import numpy as np
-import pytest
+from certkit.producer import pad_claim
 
-if importlib.util.find_spec("certkit") is None:
-    # Locally the extra is optional, and skipping says so. In CI its absence is the gate not
-    # running at all, which must never be reported as a pass. GitHub Actions sets CI=true.
-    if os.environ.get("CI"):
-        raise RuntimeError(
-            "certkit is not installed: the regression-certificate gate cannot run. "
-            'Install the pinned checker with `uv pip install -e ".[certkit]"`.'
-        )
-    pytest.skip('certkit extra not installed (uv pip install -e ".[certkit]")',
-                allow_module_level=True)
-
-from certkit.producer import pad_claim  # noqa: E402  -- only once the checker is present
-
-import certkit_bridge  # noqa: E402
-from hybrid_quantum_solver.molecular_hamiltonian import build_molecular_hamiltonian  # noqa: E402
-from temple_bounds import mean_and_variance  # noqa: E402
+import certkit_bridge
+from hybrid_quantum_solver.molecular_hamiltonian import build_molecular_hamiltonian
+from temple_bounds import mean_and_variance
 
 # Ha. The threshold this repo measures energy claims against; ~1.6 mHa.
 CHEMICAL_ACCURACY = 1.6e-3
@@ -71,27 +59,39 @@ OUT = Path(__file__).resolve().parent.parent / "certkit_out"
 # may sit). The floor needs its own pin because the checker accepts ANY lower bound below the
 # one it re-derives -- a certificate claiming lambda_min > -1e6 Ha is perfectly VERIFIED and
 # perfectly useless. Values are ~2x what the producer emits today.
+#
+# solve/<route> is what the solver's own return path emits for the energy it returns
+# (QuantumKrylovSolver.solve, portfolio-cir): certify_ground_state, whose ceiling is
+# the returned energy itself, so G4's upper end gates the solver's answer and not a witness.
+# It returns the first route that verifies, so pinning the name pins which route won. Its
+# floors are the same numbers as run_case's for that route, and so are the pins.
 EXPECTED = {
     "H2": (-1.8523881735695822, {
         "certificate_sector": ("ABSTAIN", None),
         "certificate_temple": ("VERIFIED", 1e-8),
         "certificate_gershgorin": ("VERIFIED", 0.2),
+        "solve/certificate_temple": ("VERIFIED", 1e-8),
     }),
     "H4": (-4.728206889123854, {
         "certificate_sector": ("ABSTAIN", None),
         "certificate_temple": ("VERIFIED", 1e-4),
         "certificate_gershgorin": ("VERIFIED", 1.0),
+        "solve/certificate_temple": ("VERIFIED", 1e-4),
     }),
     # Self mode gives no finite Temple bound here (eps <= theta), so no sector certificate is
     # emitted at all -- certificate-or-abstention, applied by the producer.
     "H4-stretched": (-3.04433126964987, {
         "certificate_temple": ("VERIFIED", 2e-2),
         "certificate_gershgorin": ("VERIFIED", 1.5),
+        "solve/certificate_temple": ("VERIFIED", 2e-2),
     }),
     # 12 qubits: n = 4096 exceeds certkit's DENSE_LIMIT, so there is no inertia route and the
     # loose Gershgorin enclosure (2.6 Ha wide) is all this case can certify. G4 is the only
     # thing standing between that certificate and vacuity, at both ends.
-    "N2": (-11.392972038179622, {"certificate_gershgorin": ("VERIFIED", 3.0)}),
+    "N2": (-11.392972038179622, {
+        "certificate_gershgorin": ("VERIFIED", 3.0),
+        "solve/certificate_gershgorin": ("VERIFIED", 3.0),
+    }),
 }
 
 _CACHE = {}
@@ -111,13 +111,42 @@ def test_G1_every_certificate_gets_the_verdict_it_is_pinned_to():
         for v in verdicts:
             got = "VERIFIED" if v.ok else "ABSTAIN"
             # Exit 1 means ABSTAIN *or* a crash, and a crash must never be accepted as an
-            # expected abstention. The checker's own word has to agree with its exit code.
+            # expected abstention. The checker's own word has to agree with its exit code;
+            # check_certificate makes a crash's word CRASH (test_G1_crash_guard below).
             assert v.line.startswith(got), (
                 f"{case}/{v.name} ({v.rule}): exit code says {got}, the checker's output "
                 f"does not -- {v.line}")
             assert got == expected[v.name][0], (
                 f"{case}/{v.name} ({v.rule}): checker said {got}, pinned "
                 f"{expected[v.name][0]} -- {v.line}")
+
+
+def test_G1_crash_guard_a_crashing_checker_is_never_read_as_an_abstention(tmp_path, monkeypatch):
+    """G1's crash guard holds for each way the pinned checker can crash.
+
+    Since certkit-3zr an exception inside a rule comes out as "ABSTAIN   internal error: ...",
+    exit 1 -- exactly what the sector certificates are pinned to -- and the CLI's own errors
+    exit 2. Both are injected into the real checker process here and must come back CRASH.
+    Without the first, a checker crashing on every sector certificate passes G1.
+    """
+    _case("H2")
+    cert = OUT / "H2" / "certificate_sector.json"
+    op_ref = json.loads(cert.read_text())["claim"]["operator_ref"]
+
+    (tmp_path / "sitecustomize.py").write_text(
+        "import certkit.checker as c\n"
+        "def _boom(*a, **k):\n"
+        "    raise RuntimeError('injected by the gate')\n"
+        "kind, _, needs_vector = c.RULES['temple_inertia']\n"
+        "c.RULES['temple_inertia'] = (kind, _boom, needs_vector)\n")
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join(
+        filter(None, [str(tmp_path), os.environ.get("PYTHONPATH")])))
+    ok, line = certkit_bridge.check_certificate(cert, OUT / "H2" / "operator.json", op_ref)
+    assert not ok and line.startswith("CRASH") and "internal error" in line, line
+
+    monkeypatch.undo()
+    ok, line = certkit_bridge.check_certificate(cert, tmp_path / "missing.json", op_ref)
+    assert not ok and line.startswith("CRASH  exit 2"), line
 
 
 def test_G2_the_emitted_certificate_set_is_exactly_the_pinned_set():

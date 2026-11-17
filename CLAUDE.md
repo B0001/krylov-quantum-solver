@@ -92,6 +92,15 @@ The public API is exported from `__init__.py`. The pipeline flows:
 - `hardware_krylov.py` — on-hardware Krylov (Hij/Sij via ancilla Hadamard tests).
 - `noise.py` — shot-noise model (added Hermitian-symmetrically), Aer `NoiseModel`, ZNE.
 - `pipeline.py` — end-to-end `run_geometry` / `run_from_integrals` → `PipelineResult`.
+- `certification.py` — certificate-or-abstention (`specs/SPEC_certificate_or_abstention.md`).
+  Every energy-returning method of the solvers and the pipeline ends in `certify_energies`:
+  a certkit certificate, judged by certkit's checker in a subprocess. Results store the number
+  as `unverified_energy`; `.energy` returns it only if the checker VERIFIED it and raises
+  `EnergyAbstained` otherwise. **Do not add a public method that returns a bare energy, or an
+  argument that skips the checker** — `tests/test_certificate_or_abstention_spec.py` pins the
+  public surface and will fail. Analysis code that needs raw Ritz values or states uses
+  `QuantumKrylovSolver.uncertified_eigenstates` (no checker run; returns an abstention). One
+  checker run costs 0.06 s at 4 qubits, ~4 s at 8–12, ~half an hour at 16.
 - `dmrg_reference.py` — classical reference: `reference_energy(method="auto")` uses DMRG (block2)
   when installed, falls back to exact FCI. The integral convention here is shared with
   `build_hamiltonian_from_integrals` and pinned by the test suite — keep them in sync.

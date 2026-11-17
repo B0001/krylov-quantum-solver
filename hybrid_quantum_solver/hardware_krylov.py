@@ -21,16 +21,18 @@ to add error mitigation (ZNE / readout) next.
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import List, Optional, Sequence
 
 import numpy as np
 from qiskit import QuantumCircuit, transpile
-from qiskit.quantum_info import SparsePauliOp
+from qiskit.quantum_info import SparsePauliOp, Statevector
 from scipy.sparse.linalg import eigsh
 
+from hybrid_quantum_solver.certification import certify_energies
 from hybrid_quantum_solver.molecular_hamiltonian import MolecularHamiltonian
 from hybrid_quantum_solver.noise import extrapolate_zero_noise, fold_global_circuit
-from hybrid_quantum_solver.quantum_krylov_solver import KrylovStep, solve_generalized_eig
+from hybrid_quantum_solver.quantum_krylov_solver import KrylovStep, ritz_pairs
 from hybrid_quantum_solver.trotter_krylov import build_trotter_step
 
 _BASIS_GATES = ["cx", "u", "rz", "h", "x", "sx", "p", "s", "sdg"]
@@ -65,8 +67,8 @@ class HardwareKrylovSolver:
         self.trotter_order = trotter_order
         self.trotter_reps = trotter_reps
 
-        step = build_trotter_step(self._Hop, self.dt, trotter_order, trotter_reps)
-        self._ustep = step.to_gate(label="U")           # uncontrolled Trotter step
+        self._step = build_trotter_step(self._Hop, self.dt, trotter_order, trotter_reps)
+        self._ustep = self._step.to_gate(label="U")     # uncontrolled Trotter step
         self._cstep = self._ustep.control(1)            # ancilla-controlled Trotter step
         self._observables = self._ancilla_observables()
         self._estimator = self._build_estimator(noise_model, seed)
@@ -163,12 +165,41 @@ class HardwareKrylovSolver:
         """
         return np.array([self._measure_pair(0, k)[0] for k in range(n)])
 
-    def solve(self, krylov_dim: int) -> KrylovStep:
+    def _witness(self, c) -> np.ndarray:
+        """The Ritz state sum_k c_k U^k|phi_HF> as a statevector, for its certificate.
+
+        Rebuilt classically: the measured matrices give only the coefficients. Affordable here
+        because the device is simulated; on real hardware this is the step that does not scale.
+        With shot or device noise the coefficients are noisy but the state is genuine, so its
+        certificate stays sound -- it just may not verify the noisy energy.
+        """
+        sv = Statevector(self.mh.hf_circuit)
+        psi = c[0] * sv.data
+        for ck in c[1:]:
+            sv = sv.evolve(self._step)
+            psi = psi + ck * sv.data
+        return psi
+
+    def _steps(self, H, S, dims, certificate_dir, names) -> List[KrylovStep]:
+        """Solve every leading block in ``dims``, then certify the energies in one call
+        (``certification.certify_energies``: always, lowest energy first)."""
+        ritz = [ritz_pairs(H[:d, :d], S[:d, :d], self.threshold, self._noise_floor)
+                for d in dims]
+        certs = certify_energies(
+            self.mh, [(vals[0], lambda C=C: self._witness(C[:, 0])) for vals, C, _ in ritz],
+            certificate_dir, names)
+        return [KrylovStep(dim=d, rank=rank, unverified_energy=float(vals[0]) + self.offset,
+                           certificate=cert)
+                for d, (vals, _, rank), cert in zip(dims, ritz, certs)]
+
+    # Certified on every call, as in ``QuantumKrylovSolver``: read ``.energy`` for the
+    # certified number and ``.unverified_energy`` for the raw estimate.
+    def solve(self, krylov_dim: int, certificate_dir: str | Path | None = None) -> KrylovStep:
+        """Ground-state Ritz energy with the checker's verdict on it."""
         if krylov_dim < 1:
             raise ValueError("krylov_dim must be >= 1")
         H, S = self._measure_matrices(krylov_dim)
-        energy, rank = solve_generalized_eig(H, S, self.threshold, self._noise_floor)
-        return KrylovStep(dim=krylov_dim, rank=rank, energy=energy + self.offset)
+        return self._steps(H, S, [krylov_dim], certificate_dir, None)[0]
 
     def resource_report(self, krylov_dim: int, shots: Optional[int] = None) -> dict:
         """Estimate the quantum resources to run the solver at dimension ``krylov_dim``.
@@ -207,14 +238,13 @@ class HardwareKrylovSolver:
             "total_shots": (shots or 0) * observable_evals,
         }
 
-    def convergence(self, max_dim: int) -> List[KrylovStep]:
-        """Measure the full max_dim x max_dim problem once, then solve every leading block."""
+    def convergence(self, max_dim: int,
+                    certificate_dir: str | Path | None = None) -> List[KrylovStep]:
+        """Measure the full max_dim x max_dim problem once, then solve every leading block.
+        One checker run covers the sweep."""
         H, S = self._measure_matrices(max_dim)
-        out = []
-        for d in range(1, max_dim + 1):
-            energy, rank = solve_generalized_eig(H[:d, :d], S[:d, :d], self.threshold, self._noise_floor)
-            out.append(KrylovStep(dim=d, rank=rank, energy=energy + self.offset))
-        return out
+        dims = range(1, max_dim + 1)
+        return self._steps(H, S, dims, certificate_dir, [f"M{d}" for d in dims])
 
 
 if __name__ == "__main__":
@@ -224,4 +254,5 @@ if __name__ == "__main__":
     fci = mh.ground_state_energy()
     print(f"H2 FCI = {fci:.6f} Ha  (subspace matrices measured by Hadamard tests on Aer)")
     for s in HardwareKrylovSolver(mh).convergence(4):
-        print(f"  M={s.dim} rank={s.rank} E={s.energy:.6f}  err={(s.energy - fci) * 1e3:+.4f} mHa")
+        print(f"  M={s.dim} rank={s.rank} E={s.unverified_energy:.6f}  "
+              f"err={(s.unverified_energy - fci) * 1e3:+.4f} mHa  {s.certificate.line.split()[0]}")

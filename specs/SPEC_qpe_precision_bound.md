@@ -3,6 +3,20 @@
 **Status:** CLOSED (chem-0ke) — CONFIRMED. G1–G3 green (`tests/test_qpe_precision_bound_spec.py`,
 7 passed); measured numbers in §10.
 
+**Revision (2026-10-09, chem-bu4):** §10's landing finding (recentered H₂ at `t=4` exceeding
+`π·sin θ₀'` by 2.9%) is promoted from a footnote to a gated claim. Everywhere below, `π·sin θ₀` is
+restated as a **large-t envelope**, not a per-`t` ceiling — it is the `t → ∞` limit of the *exact*
+nearest-dyadic-bin bound `2^t · max_{s=±1} |cos(θ₀ + s·π/2^t) − cos θ₀|`. That exact bound is a
+strict per-`t` ceiling (by the mean-value theorem, `|cos(θ+δ) − cos θ| ≤ |δ|`, so the ceiling
+itself is `≤ π` for every `θ₀`, every `t`), and it is now gated as **G4** on both the ordinary
+(`recenter=False`) and recentered (`recenter=True`, `SPEC_ft_identity_shift`) walk operator, on
+every system already here, `t=4..14`. G4 never fails — that is what explains why the recentered
+excursion above `π·sin θ₀'` does not kill the derivation. G1–G3 are unchanged; they were always
+scoped to the ordinary walk only. This revision also retires the "empirical constant 3" used for
+worst-case phase-bit *budgets* elsewhere (`SPEC_ft_identity_shift` §3d/G3): since the exact
+ceiling's own hard limit is `π`, budgets now use `t* = ⌈log₂(π·λ/ε)⌉`, a derived hard bound, not a
+fitted one.
+
 ---
 
 ## 1. Goal
@@ -31,7 +45,10 @@ tested (a real bound, but the wrong mechanism).
 - **What you cannot claim:** that the bound is *tight* at every `t` (it is an upper envelope; a
   short sweep can sit well under it by chance — see Caveat R1), or that the mechanism is fully
   characterized (the derivation is a first-order geometric argument, not a rigorous worst-case proof
-  over all possible bin alignments).
+  over all possible bin alignments). **Nor, since the chem-bu4 revision above, that it is a strict
+  per-`t` ceiling at all:** it is a large-`t` envelope only, and on the recentered walk operator
+  (`run_qpe(recenter=True)`) H₂ at `t=4` already exceeds it (2.6966 > 2.6212). The strict per-`t`
+  ceiling is the separate, exact nearest-bin bound gated in G4, not `π·sin θ₀` itself.
 - **Reference:** the exact ground energy and exact diagonalization of the qubit Hamiltonian
   (`np.linalg.eigh`), same reference `qpe_walk_readout.py` and `SPEC_qpe_readout_laws` already use.
   `theta_0` and the predicted bound are derived from this exact spectrum directly — never from a
@@ -67,7 +84,9 @@ the table above.
 No new library code. Reuses `qpe_walk_readout.run_qpe`, `qubitization_blueprint.build_qubit_hamiltonian`,
 `qubitization_blueprint.pauli_decompose` unchanged. One tracked script,
 `scripts/spec_qpe_precision_bound.py`, prints the pre-registration table above (no
-QPE sweep inside it — only the exact-spectrum-derived prediction).
+QPE sweep inside it — only the exact-spectrum-derived prediction). **(chem-bu4)** G4 additionally
+reuses `qpe_walk_readout.run_qpe(..., recenter=True)` and `qubitization_blueprint.split_identity`
+— both already implemented by `SPEC_ft_identity_shift`, still no new library code here.
 
 ## 5. Acceptance criteria (validation gates)
 
@@ -82,9 +101,21 @@ QPE sweep inside it — only the exact-spectrum-derived prediction).
 - **G3 — reproducibility of the pre-registration.** The table's `theta_0` / bound values, recomputed
   from the exact spectrum at test time, match the committed table to `1e-6` (protects against the
   table being hand-edited out of sync with the code that generates it).
+- **G4 — the exact per-`t` ceiling, never violated by construction (chem-bu4).** For every system
+  and every `t = 4..14`, on BOTH the ordinary walk (`run_qpe(..., recenter=False)`) and the
+  identity-free recentered walk (`run_qpe(..., recenter=True)`, `SPEC_ft_identity_shift`):
+  `err(t)/(lambda/2^t) <= 2^t * max(|cos(theta0 + pi/2^t) - cos(theta0)|, |cos(theta0 - pi/2^t) -
+  cos(theta0)|)`, with `theta0` and `lambda` recomputed per walk variant — the recentered walk uses
+  the identity-free `lambda' = lambda - |c_identity|` and shifted `theta0' = arccos((E0 -
+  c_identity)/lambda')`, matching `run_qpe`'s own internals (`qubitization_blueprint.split_identity`).
+  This is the bound `pi*sin(theta0)` approaches as `t -> infinity`; unlike G1, it is a strict per-`t`
+  ceiling, derived from the mean-value theorem (not fitted to a sweep), and is what actually explains
+  why the recentered-H₂-at-`t=4` excursion above `pi*sin(theta0')` (`SPEC_ft_identity_shift` §3d)
+  does not kill the broader claim.
 
-> Definition of done: **G1 and G2 both hold.** G3 is a bookkeeping gate that keeps the committed
-> prediction honest, not a physics claim.
+> Definition of done: **G1 and G2 both hold** for the large-`t` envelope claim on the ordinary walk.
+> **G4 holds** for the strict per-`t` ceiling claim, across both walks. G3 is a bookkeeping gate that
+> keeps the committed prediction honest, not a physics claim.
 
 ## 6. Implementation plan (test-first)
 
@@ -93,6 +124,9 @@ QPE sweep inside it — only the exact-spectrum-derived prediction).
 2. Write `tests/test_qpe_precision_bound_spec.py` encoding G1-G3.
 3. No changes to `qpe_walk_readout.py` or `qubitization_blueprint.py`.
 4. `uv run pytest -q tests/test_qpe_precision_bound_spec.py`, ruff clean.
+5. **(chem-bu4 revision)** Add G4: reuse `qpe_walk_readout.run_qpe(..., recenter=...)` and
+   `qubitization_blueprint.split_identity`, both already implemented by `SPEC_ft_identity_shift`
+   — no further library changes needed here either.
 
 ## 7. Out of scope
 
@@ -108,7 +142,9 @@ QPE sweep inside it — only the exact-spectrum-derived prediction).
   ratio over the dyadic phase grid; at any single `t` the realized ratio can sit well under it if
   that `t`'s phase bin happens to align favorably. This is why the sweep must cover enough `t`
   values (4..14, eleven points) to have a real chance of hitting near-worst-case alignment before
-  drawing a conclusion — a 2- or 3-point sweep could look like a miss by chance alone.
+  drawing a conclusion — a 2- or 3-point sweep could look like a miss by chance alone. **(chem-bu4)**
+  It can also sit *over* it at small `t` on a different walk variant (recentered H₂ at `t=4`) — the
+  strict per-`t` ceiling is G4's exact nearest-bin bound, not this envelope.
 - **R2 — first-order geometric argument, not a formal proof.** The derivation combines a half-bin
   dyadic error with the arccos-to-cos Jacobian `d(cos theta)/d theta = -sin(theta)` at `theta_0`;
   it is a plausibility argument for *why* the constant is `O(pi*sin(theta_0))`, not a rigorous bound
@@ -120,7 +156,7 @@ QPE sweep inside it — only the exact-spectrum-derived prediction).
 ## 9. Deliverables
 
 - `scripts/spec_qpe_precision_bound.py` — pre-registration script (no library changes).
-- `tests/test_qpe_precision_bound_spec.py` — gates G1-G3.
+- `tests/test_qpe_precision_bound_spec.py` — gates G1-G4 (G4 added chem-bu4).
 - This file's §3 table — the committed, before-the-fact prediction.
 
 ## 10. Results
@@ -145,5 +181,21 @@ with this spec) moves θ₀ toward π/2. On recentered H₂ at t = 4 the measure
 finite-bin term that R2's "first-order argument, not a proof" leaves out. It does not touch G1–G3,
 which were pre-registered on the identity-included walk; there the raw sweep stays under
 `π·sin θ₀` through t = 20 on all four of SPEC_ft_identity_shift's systems. "Portable" holds as a
-large-t envelope, not as a bound at every t. Regenerate with
-`uv run python tests/test_ft_identity_shift_spec.py`. Not gated; see the PR follow-ups.
+large-t envelope, not as a bound at every t.
+
+**G4 (chem-bu4): the exact nearest-bin ceiling, gated on both walks, t = 4..14.** Previously
+"not gated; see the PR follow-ups" — now `tests/test_qpe_precision_bound_spec.py::test_G4_*`
+asserts it directly, on all three systems, both `recenter=False` and `recenter=True`:
+
+| System       | walk | worst `t` | measured ratio | exact ceiling | measured/ceiling |
+|--------------|------|----------:|----------------:|---------------:|------------------:|
+| H2 CAS(2,2)  | ordinary   |  11 | 2.1752 | 2.2867 | 95.1% |
+| H2 CAS(2,2)  | recentered |   4 | 2.6966 | 2.7739 | 97.2% |
+| LiH CAS(2,2) | ordinary   |  14 | 2.2846 | 2.3517 | 97.1% |
+| LiH CAS(2,2) | recentered |  10 | 2.4417 | 2.8862 | 84.6% |
+| N2 CAS(3,4)  | ordinary   |  14 | 2.3032 | 2.3966 | 96.1% |
+| N2 CAS(3,4)  | recentered |   7 | 2.9399 | 2.9946 | 98.2% |
+
+Never exceeded anywhere in the table — the exact ceiling is a real strict per-`t` bound, unlike
+`π·sin θ₀` itself. Regenerate with `uv run pytest -q tests/test_qpe_precision_bound_spec.py` or
+`uv run python tests/test_ft_identity_shift_spec.py` (whose `__main__` prints the same quantities).

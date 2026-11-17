@@ -13,10 +13,12 @@ Hadamard-test noise scales, pinned by tests/test_msd_sampling_spec.py). Errors u
 noise seeds. PySCF/qiskit, no block2; `make gates` runs it in its own process.
 """
 import numpy as np
+import pytest
 
 from hybrid_quantum_solver.molecular_hamiltonian import build_molecular_hamiltonian
 from msd import build_msd_problem, sample_ground_energy
 from odmd import build_odmd_problem, odmd_energy, sample_odmd_energy
+from reachability import _dense_hf_projection, reachable_mask
 
 SYSTEMS = {
     "h2": dict(atom="H 0 0 0; H 0 0 0.74"),
@@ -80,3 +82,36 @@ def test_G4_svd_truncation_is_the_mechanism():
     m_off = _median_abs_err(prob, 10_000, n=16, svd_threshold=1e-10)
     assert m_on < 5e-3, m_on
     assert m_off / m_on > 20.0, (m_off, m_on)
+
+
+def test_G5_ref_is_hf_reachable_not_global_fci_ground():
+    """chem-1x3: none of G1-G4's systems (H2, H4 chain, N2 CAS(6,6)) separate the global FCI
+    ground from the HF-reachable one -- HF reaches the true ground on all three, so
+    ``build_odmd_problem``'s ``ref = reach[0] - mu`` (chem-3ds's fix, from the earlier
+    ``w_eig[0] - mu``) is unexercised by every existing gate. HeH+ is a witness where it is not:
+    the global ground of its qubit Hamiltonian lies in another particle-number sector, so HF's
+    determinant has zero population there (7.9e-31), and the survival-amplitude signal
+    s_k = <phi_0|e^{-ik tau H}|phi_0> has no component at that energy and can never converge to
+    it -- `ref` must be the lower bound the signal actually targets, the HF-reachable level.
+
+    chem-8ls: the witness was square H4 a = 1.19 at TIGHT_SCF_CONV_TOL, a symmetric SCF whose
+    global ground HF could not reach. That SCF was the D2h saddle point. The builder now follows the
+    saddle's instability to the broken-symmetry minimum, whose ground state HF does reach (0.462),
+    so the witness moved to HeH+. Particle number is exact, so no SCF branch is involved.
+    """
+    mh = build_molecular_hamiltonian(atom="He 0 0 0; H 0 0 0.772", charge=1)
+
+    w_eig, V, pops = _dense_hf_projection(mh)
+    reach = w_eig[reachable_mask(mh, w_eig, V, pops, 1e-8)].real
+    assert pops[0] < 1e-20, pops[0]                          # global ground: HF-unreachable
+    assert reach.min() - w_eig[0] > 1e-2, reach.min() - w_eig[0]  # ...and it's a DIFFERENT level
+
+    prob = build_odmd_problem(mh, n=20)
+    assert prob.ref == pytest.approx(reach.min() - prob.mu, abs=1e-8)    # the fix
+    assert prob.ref != pytest.approx(w_eig[0] - prob.mu, abs=1e-3)       # not the old formula
+
+    # and the signal itself backs this: noiseless ODMD converges to ref, not the unreachable
+    # global ground -- the fix matches what the observable can actually see, not just a relabeling.
+    energy, _ = odmd_energy(prob.s, prob.tau)
+    assert abs(energy - prob.ref) < 1e-5, (energy, prob.ref)
+    assert abs(energy - (w_eig[0] - prob.mu)) > 1e-2, (energy, w_eig[0] - prob.mu)

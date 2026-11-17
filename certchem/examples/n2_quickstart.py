@@ -1,6 +1,6 @@
 """CertChem quickstart: N2 CAS(6,6) — watch Hartree-Fock fail, then bracket the truth.
 
-Run:  python -m certchem.examples.n2_quickstart
+Run:  uv run python -m certchem.examples.n2_quickstart
 
 Hartree-Fock leaves ~0.13 Ha (>80x chemical accuracy) of correlation energy on the table
 for N2 at 1.1 A. CertChem returns a *certified* two-sided bracket that provably encloses the

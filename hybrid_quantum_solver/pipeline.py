@@ -19,43 +19,101 @@ Two entry points:
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from pathlib import Path
 from typing import List, Optional, Tuple
 
 import numpy as np
 
+from hybrid_quantum_solver.certification import Verdict
 from hybrid_quantum_solver.molecular_hamiltonian import (
     MolecularHamiltonian,
     build_hamiltonian_from_integrals,
     build_molecular_hamiltonian,
 )
 from hybrid_quantum_solver.noise import shot_noise_sigma
-from hybrid_quantum_solver.quantum_krylov_solver import QuantumKrylovSolver
+from hybrid_quantum_solver.quantum_krylov_solver import KrylovStep, QuantumKrylovSolver
 
 # Dense exact-reference diagonalisation is only attempted below this qubit count
 # (2**14 = 16384 -> ~4 GB dense complex matrix). Larger systems must supply a reference.
 _EXACT_REFERENCE_MAX_QUBITS = 12
 
 
-@dataclass
+@dataclass(frozen=True)
 class PipelineResult:
-    computed_energy: float
+    """What the pipeline returns: the solved steps, each carrying the checker's verdict.
+
+    Certificate-or-abstention (specs/SPEC_certificate_or_abstention.md): the Krylov energies
+    live in ``steps``. ``computed_energy``, ``error_vs_reference`` and ``convergence`` are the
+    certified readings and raise ``EnergyAbstained`` unless the checker VERIFIED the energies
+    they return; ``unverified_energy`` is the raw estimate. ``summary()`` prints either state.
+    ``hf_energy`` and ``reference_energy`` are classical references, not solver output.
+    """
+    steps: List[KrylovStep]                      # every solved dimension; [-1] is the answer
     hf_energy: float
     reference_energy: Optional[float]            # exact diag / CASCI total (same frame), if known
-    error_vs_reference: Optional[float]
-    krylov_dim: int
-    rank: int
     n_qubits: int
     dt: float
     shots: Optional[int]
-    convergence: List[Tuple[int, int, float]] = field(default_factory=list)  # (M, rank, energy)
+
+    def __post_init__(self):
+        if not self.steps or not all(isinstance(s, KrylovStep) for s in self.steps):
+            raise TypeError("PipelineResult needs the solver's KrylovStep results: no energy "
+                            "without certificate-or-abstention.")
+
+    @property
+    def krylov_dim(self) -> int:
+        return self.steps[-1].dim
+
+    @property
+    def rank(self) -> int:
+        return self.steps[-1].rank
+
+    @property
+    def certificate(self) -> Verdict:
+        """The checker's word on the final energy."""
+        return self.steps[-1].certificate
+
+    @property
+    def certificates(self) -> List[Verdict]:
+        """One verdict per step, in order; [-1] covers the final energy."""
+        return [s.certificate for s in self.steps]
+
+    @property
+    def unverified_energy(self) -> float:
+        """The final Krylov estimate, total Ha. NOT a claim: read ``computed_energy``."""
+        return self.steps[-1].unverified_energy
+
+    @property
+    def computed_energy(self) -> float:
+        """The final energy, certified; raises ``EnergyAbstained`` if the checker abstained."""
+        return self.steps[-1].energy
+
+    @property
+    def error_vs_reference(self) -> Optional[float]:
+        """|computed_energy - reference_energy| (gated like ``computed_energy``), or None."""
+        if self.reference_energy is None:
+            return None
+        return abs(self.computed_energy - self.reference_energy)
+
+    @property
+    def convergence(self) -> List[Tuple[int, int, float]]:
+        """(M, rank, certified energy) per step; raises ``EnergyAbstained`` if any abstained."""
+        return [(s.dim, s.rank, s.energy) for s in self.steps]
 
     def summary(self) -> str:
+        """One line for either state: the certified energy, or the estimate marked as such."""
+        final = self.steps[-1]
         ref = "n/a" if self.reference_energy is None else f"{self.reference_energy:.6f}"
-        err = "n/a" if self.error_vs_reference is None else f"{self.error_vs_reference:.2e}"
+        err = ("n/a" if self.reference_energy is None
+               else f"{abs(final.unverified_energy - self.reference_energy):.2e}")
+        label = (f"E={final.unverified_energy:.6f} Ha [VERIFIED via {final.certificate.rule}]"
+                 if final.certificate.ok else
+                 f"UNVERIFIED estimate {final.unverified_energy:.6f} Ha "
+                 f"[{final.certificate.line}]")
         return (
-            f"E={self.computed_energy:.6f} Ha  (HF={self.hf_energy:.6f}, ref={ref}, "
-            f"|err|={err} Ha)  M={self.krylov_dim} rank={self.rank} "
+            f"{label}  (HF={self.hf_energy:.6f}, ref={ref}, |err|={err} Ha)  "
+            f"M={final.dim} rank={final.rank} "
             f"qubits={self.n_qubits} dt={self.dt:.4f} shots={self.shots}"
         )
 
@@ -68,29 +126,27 @@ def _run(
     seed: Optional[int],
     reference_energy: Optional[float],
     track_convergence: bool,
+    certificate_dir: str | Path | None,
+    uncertified_estimates_only: bool,
 ) -> PipelineResult:
     sigma = shot_noise_sigma(shots) if shots else 0.0
     solver = QuantumKrylovSolver(mh, dt=dt, noise_sigma=sigma, seed=seed)
 
-    if track_convergence:
-        steps = solver.convergence(krylov_dim)
+    if uncertified_estimates_only:
+        # The solver's uncertified door, one dimension at a time: every step is an abstention.
+        steps = []
+        for m in (range(1, krylov_dim + 1) if track_convergence else [krylov_dim]):
+            spectrum, _ = solver.uncertified_eigenstates(m, n_states=1)
+            steps.append(KrylovStep(dim=m, rank=spectrum.rank, certificate=spectrum.certificate,
+                                    unverified_energy=spectrum.unverified_energies[0]))
+    elif track_convergence:
+        steps = solver.convergence(krylov_dim, certificate_dir)
     else:
-        steps = [solver.solve(krylov_dim)]
-    final = steps[-1]
-
-    err = None if reference_energy is None else abs(final.energy - reference_energy)
-    return PipelineResult(
-        computed_energy=final.energy,
-        hf_energy=mh.hf_energy,
-        reference_energy=reference_energy,
-        error_vs_reference=err,
-        krylov_dim=final.dim,
-        rank=final.rank,
-        n_qubits=mh.num_qubits,
-        dt=solver.dt,
-        shots=shots,
-        convergence=[(s.dim, s.rank, s.energy) for s in steps],
-    )
+        steps = [solver.solve(krylov_dim, None if certificate_dir is None
+                              else Path(certificate_dir) / f"M{krylov_dim}")]
+    return PipelineResult(steps=steps, hf_energy=mh.hf_energy,
+                          reference_energy=reference_energy, n_qubits=mh.num_qubits,
+                          dt=solver.dt, shots=shots)
 
 
 def run_geometry(
@@ -106,20 +162,32 @@ def run_geometry(
     seed: Optional[int] = None,
     reference: str = "exact",
     track_convergence: bool = True,
+    conv_tol: float = 1e-9,
+    certificate_dir: str | Path | None = None,
+    uncertified_estimates_only: bool = False,
 ) -> PipelineResult:
     """Run the solver from a molecular geometry string (PySCFDriver under the hood).
 
     ``reference="exact"`` adds a dense-diagonalisation reference when the qubit count is small
     enough; otherwise no reference is computed.
+
+    Every returned energy is certified (a certkit certificate, checked out of process; one
+    checker run for the whole convergence trace). ``certificate_dir`` keeps the certificate
+    files. ``uncertified_estimates_only=True`` is the pipeline's one uncertified door, for
+    studies too large or too many for the pure-Python checker: it runs no checker, and what
+    comes back is an ABSTENTION -- ``computed_energy`` raises ``EnergyAbstained`` and the
+    estimate is there only as ``unverified_energy``.
     """
     mh = build_molecular_hamiltonian(
         atom=atom, basis=basis, charge=charge, spin=spin,
         active_electrons=active_electrons, active_orbitals=active_orbitals,
+        conv_tol=conv_tol,
     )
     reference_energy = None
     if reference == "exact" and mh.num_qubits <= _EXACT_REFERENCE_MAX_QUBITS:
         reference_energy = mh.ground_state_energy()
-    return _run(mh, krylov_dim, dt, shots, seed, reference_energy, track_convergence)
+    return _run(mh, krylov_dim, dt, shots, seed, reference_energy, track_convergence,
+                certificate_dir, uncertified_estimates_only)
 
 
 def run_from_integrals(
@@ -133,13 +201,18 @@ def run_from_integrals(
     seed: Optional[int] = None,
     reference_energy: Optional[float] = None,
     track_convergence: bool = True,
+    certificate_dir: str | Path | None = None,
+    uncertified_estimates_only: bool = False,
 ) -> PipelineResult:
     """Run the solver from precomputed CASCI active-space integrals (CIF/materials path).
 
     Pass ``reference_energy = cas.e_tot`` (the active-space CASCI total) as the internal
     convergence target -- in a complete active space the Krylov estimate should approach it.
+    ``certificate_dir`` and ``uncertified_estimates_only`` as in ``run_geometry``; one checker
+    run is about half an hour at 16 qubits, so a large active space may need the latter.
     """
     mh = build_hamiltonian_from_integrals(
         h1, eri, num_particles=num_particles, energy_offset=e_core
     )
-    return _run(mh, krylov_dim, dt, shots, seed, reference_energy, track_convergence)
+    return _run(mh, krylov_dim, dt, shots, seed, reference_energy, track_convergence,
+                certificate_dir, uncertified_estimates_only)

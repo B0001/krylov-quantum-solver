@@ -298,7 +298,7 @@ def test_G7_nb3cl8_strain_sweep_config_is_committed_and_runs():
 
 
 def test_G7_first_real_sweep_artifacts_present_in_results():
-    # Produced by `python run_senseforge_sweep.py senseforge/configs/nb3cl8_strain.yaml`.
+    # Produced by `uv run python run_senseforge_sweep.py senseforge/configs/nb3cl8_strain.yaml`.
     out = Path("results/senseforge/Nb3Cl8_strain")
     assert (out / "candidates.md").exists()
     assert (out / "gap_vs_strain.csv").exists()

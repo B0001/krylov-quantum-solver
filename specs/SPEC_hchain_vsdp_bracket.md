@@ -48,7 +48,10 @@ vsdp_hchain.build(h1, eri, na, nb, t2=False) -> dict      # standard-form SDP da
 vsdp_hchain.solve(prob, solver="CLARABEL", **kw) -> (value, y, status)
 vsdp_hchain.rigorous_lower_bound(prob, y, e_const) -> (bound, per-block λ bounds)
 vsdp_hchain.certify(prob, y, e_const) -> best of the two dual-sign conventions
-uv run python vsdp_hchain.py --ns 2,...,16 [--t2]  -> data/hchain_vsdp[_t2].json
+vsdp_hchain.recertify(n, t2, dual_y, e_nuc) -> certify() on a stored dual, no re-solve (chem-66q)
+uv run python vsdp_hchain.py --ns 2,...,16 [--t2]  -> data/hchain_vsdp[_t2].json, each row with
+                                                       its dual_y and e_nuc saved (chem-66q)
+uv run python vsdp_hchain.py --ns ... --recertify  -> re-run certify() on the stored duals only
 uv run python vsdp_hchain.py --dmrg-upper N        -> data/hchain_vsdp_upper.json (block2 isolated)
 ```
 
@@ -61,6 +64,12 @@ uv run python vsdp_hchain.py --dmrg-upper N        -> data/hchain_vsdp_upper.jso
 - **G3 — valid and tight.** n = 4, 6: certified bound ≤ FCI and within 1e-5 Ha of the solver value.
 - **G4 — rigor under adversarial duals.** Zero, random, perturbed and sign-flipped y all give ≤ E0.
 - **G5 — T2 tightens.** PQG bound < PQG+T2 bound ≤ E0 at n = 4.
+- **G6 — a stored dual recertifies without a re-solve (chem-66q).** `recertify(n, t2, dual_y,
+  e_nuc)` reproduces `certify`'s bound from a plain (JSON-round-trippable) dual vector by rebuilding
+  only `build()`, and that bound is still ≤ FCI.
+- **G7 — a hard solver failure raises clearly (chem-66q).** `require_solved` rejects a `None`/non-
+  finite value or an unrecognized status with a labeled `RuntimeError`, instead of letting it reach
+  `val + e_nuc` as an opaque `TypeError`.
 - **Kill test (the finding, not a gate):** width per atom at n = 12.
 
 ## 6. Results
@@ -128,5 +137,14 @@ n = 12 the premise is unverified.
 ## 9. Deliverables
 
 - `vsdp_hchain.py` — SDP builder, rigorous dual bound, SCS/Clarabel driver, isolated DMRG upper bound.
-- `tests/test_hchain_vsdp_bracket_spec.py` — G1–G5.
+- `tests/test_hchain_vsdp_bracket_spec.py` — G1–G7.
 - `cvxpy` added as a dependency (brings SCS and Clarabel).
+
+**chem-66q (2026-10-15):** every saved row now carries its `dual_y` and `e_nuc`, so re-checking a
+bound (e.g. after a change to `rigorous_lower_bound`'s rounding) no longer needs the 2-4 h SCS
+re-solve that n = 10/12 took — `recertify()` / `--recertify` redo only `build()`. A hard solver
+failure (`None`/non-finite value, or an unrecognized status) now raises a labeled `RuntimeError`
+from `require_solved` at the point of failure, not an opaque `TypeError` at `val + e_nuc` three
+steps later. This does not change any previously tabulated number in §6 — it only affects how
+future rows are saved and re-checked; the existing `data/hchain_vsdp*.json` rows from before this
+change have no `dual_y` and `--recertify` says so rather than guessing.

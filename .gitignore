@@ -69,3 +69,10 @@ certkit_out/
 backend.tf
 *.tfstate
 *.tfstate.*
+
+# Gas City
+.beads/*
+!.beads/identity.toml
+.beads.gate.lock
+.claude/skills/core.*
+.claude/skills/.gc-skill-ownership.json

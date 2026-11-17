@@ -127,6 +127,26 @@ nb3x8_magnetometry (CLI)                                          # family table
   overprediction. What is left open: the cooperative structural transition, in-plane kagome
   exchange, or a direct lattice renormalization of t_s⊥ (candidates, none tested here) — this
   follow-up is closed as a negative result, not merely deferred.
+  **Update (chem-phh, `SPEC_nb3x8_tc_attribution.md`):** the third candidate (a direct lattice
+  renormalization of t_s⊥, within the *same* dimerized structural motif) is now tested and also
+  **killed** — the rescaling needed to match measured Tc (57.7% Cl / 35.8% Br) is 17–600× the
+  largest same-motif |t_s⊥| spread this family's own vendored table shows (bulk vs bilayer, ≤2.04%).
+  **Update (chem-cfl, same spec, §3b/G5–G7):** the cooperative/first-order structural transition is
+  now also tested and **survives** — sourcing elastic/lattice data from a second primary reference
+  (`arXiv:2412.03360`, fetched via `WebFetch` on a direct PDF URL; `WebSearch` alone still does not
+  work in this sandbox) gives a physically-plausible exfoliation-energy bound on `E_lattice`
+  (596.9 meV Cl / 740.1 meV Br) that comfortably covers the `E_lattice` the pre-registered F_phase(T)
+  crossing needs to match measured Tc (9.94 meV Cl / 41.61 meV Br, 1.7%/5.6% of the bound) — not
+  proof the transition IS the mechanism, but not ruled out either.
+  **Update (chem-b0y, `SPEC_nb3x8_tc_attribution.md` G8–G9):** the second candidate (in-plane kagome
+  exchange) is also now tested and **killed**. An in-plane exchange constant was sourced from Zhang,
+  Dai, Wang, Cheng & Ji, `arXiv:2508.17352` Table 1 (Nb3Cl8 J1=+0.12/J2=−0.24 meV, Nb3Br8
+  J1=−2.74/J2=−0.37 meV, verified against the downloaded PDF text) — correcting two premises along
+  the way: the paper's in-plane net is triangular, not kagome, and the coupling is not robustly
+  antiferromagnetic for either halide. The standard RPA self-consistency closure
+  (`J'_eff * chi_dimer(Tc) = 1`) gives the in-plane coupling needed to explain the full Tc miss
+  alone; it exceeds even the most generous reading of the sourced value by 35.5× (Br) / 9156× (Cl),
+  and exceeds `J_interlayer` itself by 5.6× (Br) / 298.7× (Cl). With candidate 1 tested in parallel by chem-cfl (above), all three candidates now have a verdict.
 
 ## 8. Caveats and risks
 

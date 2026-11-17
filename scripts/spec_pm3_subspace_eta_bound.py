@@ -70,7 +70,8 @@ WITNESSES = [
 
 def _ritz_floor(solver, Hs, offset, d, m):
     """Raw self-mode Weinstein floor (electronic frame) + the guard's disjointness check."""
-    energies, states = solver.eigenstates(m, n_states=d + 1)
+    spectrum, states = solver.uncertified_eigenstates(m, n_states=d + 1)
+    energies = spectrum.unverified_energies
     centers = [energies[k] - offset for k in range(d + 1)]
     sigmas = [residual_norm(Hs, states[k], centers[k]) for k in range(d + 1)]
     disjoint = _weinstein_intervals_disjoint(centers, sigmas)

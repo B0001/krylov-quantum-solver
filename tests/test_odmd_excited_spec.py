@@ -20,6 +20,7 @@ import numpy as np
 from hybrid_quantum_solver.molecular_hamiltonian import build_molecular_hamiltonian
 from hybrid_quantum_solver.quantum_krylov_solver import QuantumKrylovSolver
 from odmd import build_odmd_problem, noise_edge, odmd_spectrum, sample_odmd_spectrum
+from reachability import _dense_hf_projection
 
 SYSTEMS = {
     "h4": dict(atom="H 0 0 0; H 0 0 0.9; H 0 0 1.8; H 0 0 2.7"),
@@ -33,9 +34,7 @@ def _case(key):
     if key not in _CACHE:
         mh = build_molecular_hamiltonian(**SYSTEMS[key])
         prob = build_odmd_problem(mh, n=48)
-        w_eig, V = np.linalg.eigh(mh.qubit_hamiltonian.to_matrix())
-        psi0 = np.asarray(mh.hf_state().data, dtype=complex)
-        pops = np.abs(V.conj().T @ psi0) ** 2
+        w_eig, _, pops = _dense_hf_projection(mh)   # shared eigh: macOS ZHEEVD fallback
         _CACHE[key] = (mh, prob, w_eig[pops > 1e-8].real - prob.mu)
     return _CACHE[key]
 
@@ -84,7 +83,9 @@ def test_G3_noisy_gap_beats_qksd_at_matched_noise():
         solver = QuantumKrylovSolver(mh, noise_sigma=sigma, seed=1)
         kerrs = []
         for _ in range(100):
-            es = solver.solve_excited(M, n_states=2).energies
+            # Raw noisy Ritz values, 200 of them at 8 qubits: an estimator study, not an
+            # energy claim, so it takes the solver's uncertified door.
+            es = solver.uncertified_eigenstates(M, n_states=2)[0].unverified_energies
             kerrs.append(abs((es[1] - es[0]) - gap_fci) if len(es) > 1 else np.inf)
         m_kqd = float(np.median(kerrs))
         assert m_kqd / m_odmd > 10.0, (M, m_kqd, m_odmd)

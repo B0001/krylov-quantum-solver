@@ -97,13 +97,13 @@ TIERS: dict[str, Tier] = {
 }
 
 
-def build_tier_hamiltonian(tier: Tier):
+def build_tier_hamiltonian(tier: Tier, conv_tol: float = 1e-9):
     """Build the tier's MolecularHamiltonian (lazy solver import). Raises on aspirational tiers."""
     if tier.aspirational:
         raise ValueError(f"tier {tier.name} is aspirational — no Hamiltonian defined yet")
     from hybrid_quantum_solver import build_molecular_hamiltonian
 
-    kwargs: dict[str, Any] = dict(atom=tier.atom, basis=tier.basis)
+    kwargs: dict[str, Any] = dict(atom=tier.atom, basis=tier.basis, conv_tol=conv_tol)
     if tier.active_electrons is not None and tier.active_orbitals is not None:
         kwargs["active_electrons"] = tier.active_electrons
         kwargs["active_orbitals"] = tier.active_orbitals

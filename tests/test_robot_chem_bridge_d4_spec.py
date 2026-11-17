@@ -7,7 +7,7 @@ TwoSidedClaim contract and drives the existing, unmodified D1/D2/D3 chain
 (robot.planner -> robot.workspace -> robot.failclosed) to a real outcome. This closes
 CADE epic chem-cjl's stated acceptance criterion at the actuation leg.
 
-Needs the pinned checker (`uv pip install -e ".[certkit]"`); runs a real H2 computation
+Needs the pinned checker (`uv sync --inexact --extra certkit`); runs a real H2 computation
 through certkit_bridge.run_case once (module-level cache). make gates runs this in its
 own process, same isolation as test_certkit_regression_gate_spec.py.
 """
@@ -21,9 +21,9 @@ if importlib.util.find_spec("certkit") is None:
     if os.environ.get("CI"):
         raise RuntimeError(
             "certkit is not installed: the chem-bridge gate cannot run. "
-            'Install the pinned checker with `uv pip install -e ".[certkit]"`.'
+            'Install the pinned checker with `uv sync --inexact --extra certkit`.'
         )
-    pytest.skip('certkit extra not installed (uv pip install -e ".[certkit]")',
+    pytest.skip('certkit extra not installed (uv sync --inexact --extra certkit)',
                 allow_module_level=True)
 
 from certkit.interval import Iv

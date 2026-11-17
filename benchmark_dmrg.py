@@ -23,8 +23,8 @@ active spaces where DMRG matters -- that gap (Trotter/qubitization for shallower
 circuits, and measurement rather than statevector inner products) is the remaining work in
 REFACTOR_PLAN.md, not something this script hides.
 
-Run:  python benchmark_dmrg.py   ->  prints a table and writes data/dmrg_ladder.csv
-Requires: block2 (pip install block2).  Falls back to FCI-only with a warning if absent.
+Run:  uv run python benchmark_dmrg.py   ->  prints a table and writes data/dmrg_ladder.csv
+Requires: block2 (uv sync --inexact --extra dmrg).  Falls back to FCI-only with a warning if absent.
 """
 import csv
 import math
@@ -74,15 +74,20 @@ def krylov_energy(h1, eri, nelecas, e_core, reference, n_qubits):
     if n_qubits > KRYLOV_QUBIT_CAP:
         return None, None
     mh = build_hamiltonian_from_integrals(h1, eri, num_particles=nelecas, energy_offset=e_core)
-    steps = QuantumKrylovSolver(mh).convergence(KRYLOV_DIM)
-    best = min(steps, key=lambda s: abs(s.energy - reference))
-    return best.energy, best.rank
+    # The uncertified door, on purpose: "the step closest to the reference" is picked by an
+    # oracle, so it is a comparison number and not an energy claim, and at 16 qubits every
+    # checker run is about half an hour. Certified energies come from solve() and
+    # convergence().
+    solver = QuantumKrylovSolver(mh)
+    steps = [solver.uncertified_eigenstates(m, n_states=1)[0] for m in range(1, KRYLOV_DIM + 1)]
+    best = min(steps, key=lambda s: abs(s.unverified_energies[0] - reference))
+    return best.unverified_energies[0], best.rank
 
 
 def main():
     if not dmrg_available():
         print("[WARN] block2 not importable -- DMRG column unavailable; install with "
-              "`pip install block2`. Falling back to FCI only where tractable.\n")
+              "`uv sync --inexact --extra dmrg`. Falling back to FCI only where tractable.\n")
 
     print(f"DMRG-backed ladder | N2 @ R={GEOMETRY_R} A | basis {BASIS} | quantum Krylov M={KRYLOV_DIM}")
     mol = gto.M(atom=f"N 0 0 0; N 0 0 {GEOMETRY_R}", basis=BASIS, verbose=0)

@@ -2,7 +2,7 @@
 """
 run_senseforge_sweep.py -- SenseForge M1-M2 CLI: one YAML config -> one candidates.md.
 
-    python run_senseforge_sweep.py senseforge/configs/nb3cl8_strain.yaml
+    uv run python run_senseforge_sweep.py senseforge/configs/nb3cl8_strain.yaml
 
 See senseforge/hamiltonian.py for the two documented deviations from the literal task spec
 (no ab-initio CIF-strain path; gaps are exact, not certified_gaps.py Krylov brackets) and

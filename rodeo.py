@@ -49,26 +49,29 @@ def rodeo_survival(eigvals: np.ndarray, overlaps: np.ndarray, e_target: float,
 def reference_spectrum(mh: MolecularHamiltonian, overlap_tol: float = 1e-8):
     """Eigenvalues (electronic frame), reference overlaps |<E_i|HF>|^2, and the energy offset.
 
-    Only the HF-reachable eigenvalues (overlap above ``overlap_tol``) carry rodeo signal; the full
-    arrays are returned (overlaps are ~0 for unreachable states, so they do not contribute).
+    Only the HF-reachable eigenvalues (overlap above ``overlap_tol``) carry rodeo signal, so
+    overlaps at or below ``overlap_tol`` are clamped to exactly 0 -- the single place that decides
+    reachability, so callers threshold with ``overlaps > 0`` instead of re-guessing the cutoff.
     """
     w, V = np.linalg.eigh(mh.qubit_hamiltonian.to_matrix())
     hf = np.asarray(mh.hf_state().data, dtype=complex)
     overlaps = np.abs(V.conj().T @ hf) ** 2
+    overlaps = np.where(overlaps > overlap_tol, overlaps, 0.0)
     return w.real, overlaps, float(mh.energy_offset)
 
 
 def rodeo_ground_energy(mh: MolecularHamiltonian, sigma: float = 2.0, n_cycles: int = 12,
-                        n_grid: int = 4000, window=(-0.5, 1.5)) -> float:
+                        n_grid: int = 4000, window=(-0.5, 1.5), overlap_tol: float = 1e-8) -> float:
     """Total ground-state energy from the lowest (here: dominant) rodeo peak.
 
     Scans ``e_target`` over a grid around the lowest reachable eigenvalue and returns the peak
     location plus the offset. For a Hartree-Fock reference near equilibrium the ground state carries
     the largest overlap, so the global maximum of ``P_bar`` over the low-energy window is the ground
-    peak.
+    peak. ``overlap_tol`` is forwarded to :func:`reference_spectrum`, which is the sole place that
+    decides HF-reachability.
     """
-    w, overlaps, offset = reference_spectrum(mh)
-    e0 = w[overlaps > 1e-8].min()
+    w, overlaps, offset = reference_spectrum(mh, overlap_tol=overlap_tol)
+    e0 = w[overlaps > 0].min()
     grid = np.linspace(e0 + window[0], e0 + window[1], n_grid)
     p = np.array([rodeo_survival(w, overlaps, e, sigma, n_cycles) for e in grid])
     return float(grid[p.argmax()]) + offset
@@ -84,7 +87,7 @@ if __name__ == "__main__":
         mh = build_molecular_hamiltonian(**kw)
         fci = mh.ground_state_energy()
         w, ov, off = reference_spectrum(mh)
-        e0 = w[ov > 1e-8].min()
+        e0 = w[ov > 0].min()
         print(f"{name}: FCI={fci:.6f}  ground overlap |<HF|E0>|^2={ov[w.argmin()]:.3f}")
         for K in (3, 6, 12):
             e = rodeo_ground_energy(mh, n_cycles=K)
