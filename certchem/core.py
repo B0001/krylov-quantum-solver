@@ -19,6 +19,7 @@ from .contract import (
     Bracket,
     Certificate,
     CertifiedResult,
+    Estimate,
     ConvergenceError,
     FloorViolationError,
     Mode,
@@ -130,12 +131,12 @@ def certified_energy(
     krylov_dim: int = DEFAULT_KRYLOV_DIM,
     eps: float | None = None,
     conv_tol: float = 1e-9,
-) -> CertifiedResult | float:
+) -> CertifiedResult | Estimate:
     """Certified ground-state energy for ``molecule`` in ``basis`` over active space ``cas``.
 
-    ``Mode.CERTIFIED`` returns a floor-checked :class:`CertifiedResult`; ``Mode.FAST`` returns a
-    bare ``float`` point estimate with no guarantee (the return type makes the two impossible to
-    confuse, ADR-0004). Raises :class:`CapExceededError` outside the validated envelope,
+    ``Mode.CERTIFIED`` returns a floor-checked :class:`CertifiedResult`; ``Mode.FAST`` returns an
+    :class:`Estimate`, a point estimate with no guarantee read as ``unverified_hartree`` (the
+    return type makes the two impossible to confuse, ADR-0004). Raises :class:`CapExceededError` outside the validated envelope,
     :class:`FloorViolationError` on a sub-floor estimate, :class:`ConvergenceError` if no finite
     lower bound could be certified.
     """
@@ -149,7 +150,7 @@ def certified_energy(
         # solver's uncertified door and says so: no checker runs and no certificate exists.
         # TOTAL energy (offset included).
         spectrum, _ = QuantumKrylovSolver(mh).uncertified_eigenstates(krylov_dim, n_states=1)
-        return float(spectrum.unverified_energies[0])
+        return Estimate(float(spectrum.unverified_energies[0]))
 
     best, lower, upper, variance = _estimate(mh, krylov_dim, eps)
 
@@ -194,12 +195,12 @@ def certified_gap(
     krylov_dim: int = DEFAULT_KRYLOV_DIM,
     e1: float | None = None,
     conv_tol: float = 1e-9,
-) -> CertifiedResult | float:
+) -> CertifiedResult | Estimate:
     """Certified bracket on a spectral gap (excitation energy) of ``molecule``.
 
     ``gap_type="fundamental"`` is Δ = E₁ − E₀ of the HF-reachable sector (the only gap M1
     certifies). ``Mode.CERTIFIED`` returns a floor-checked bracket built from interlacing +
-    Temple + Weinstein (``certified_gaps.gap_bracket``); ``Mode.FAST`` returns the bare Ritz gap.
+    Temple + Weinstein (``certified_gaps.gap_bracket``); ``Mode.FAST`` returns the Ritz gap as an :class:`Estimate`.
     The lower certificate's premise is only valid for ``krylov_dim >= 6`` (see certified_gaps.py).
     """
     if gap_type not in _SUPPORTED_GAP_TYPES:
@@ -212,7 +213,7 @@ def certified_gap(
     best, lower, upper = _estimate_gap(mh, krylov_dim, e1)
 
     if mode is Mode.FAST:
-        return float(best)
+        return Estimate(float(best))
 
     if lower == float("-inf") or upper == float("inf"):
         raise ConvergenceError(

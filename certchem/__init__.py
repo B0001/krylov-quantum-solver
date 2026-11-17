@@ -15,6 +15,7 @@ from .contract import (
     Certificate,
     CertifiedResult,
     ConvergenceError,
+    Estimate,
     FloorViolationError,
     Mode,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "Bracket",
     "Certificate",
     "CertifiedResult",
+    "Estimate",
     "FloorViolationError",
     "CapExceededError",
     "ConvergenceError",

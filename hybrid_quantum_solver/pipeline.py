@@ -44,9 +44,10 @@ class PipelineResult:
     """What the pipeline returns: the solved steps, each carrying the checker's verdict.
 
     Certificate-or-abstention (specs/SPEC_certificate_or_abstention.md): the Krylov energies
-    live in ``steps``. ``computed_energy``, ``error_vs_reference`` and ``convergence`` are the
-    certified readings and raise ``EnergyAbstained`` unless the checker VERIFIED the energies
-    they return; ``unverified_energy`` is the raw estimate. ``summary()`` prints either state.
+    live in ``steps``. ``computed_energy`` and ``error_vs_reference`` are the certified readings
+    and raise ``EnergyAbstained`` unless the checker VERIFIED the final energy;
+    ``unverified_energy`` is the raw estimate. ``convergence`` returns every step with its own
+    verdict, so one abstained step does not hide the rest of the sweep. ``summary()`` prints either state.
     ``hf_energy`` and ``reference_energy`` are classical references, not solver output.
     """
     steps: List[KrylovStep]                      # every solved dimension; [-1] is the answer
@@ -97,9 +98,10 @@ class PipelineResult:
         return abs(self.computed_energy - self.reference_energy)
 
     @property
-    def convergence(self) -> List[Tuple[int, int, float]]:
-        """(M, rank, certified energy) per step; raises ``EnergyAbstained`` if any abstained."""
-        return [(s.dim, s.rank, s.energy) for s in self.steps]
+    def convergence(self) -> List[KrylovStep]:
+        """Every step with its own verdict (portfolio-dry7). Never raises: read each step's
+        ``.dim``, ``.rank``, ``.certificate``; its ``.energy`` raises only if THAT step abstained."""
+        return list(self.steps)
 
     def summary(self) -> str:
         """One line for either state: the certified energy, or the estimate marked as such."""

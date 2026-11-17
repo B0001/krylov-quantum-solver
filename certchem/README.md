@@ -18,8 +18,9 @@ result = certified_energy("H 0 0 0; H 0 0 0.735", "sto-3g", cas=(2, 2))
 print(result.bracket.lower_hartree, result.bracket.upper_hartree)  # encloses FCI
 print(result.certificate.method)                                   # temple_bound + variational_floor
 
-# FAST: a bare float, no guarantee — the return TYPE makes the two impossible to confuse
+# FAST: an Estimate, no guarantee — the return TYPE makes the two impossible to confuse
 e = certified_energy("H 0 0 0; H 0 0 0.735", "sto-3g", cas=(2, 2), mode=Mode.FAST)
+print(e.unverified_hartree)  # the only way to the number; float(e) raises TypeError
 ```
 
 Guarantees a caller may rely on (architecture ADR-0001/0004):
@@ -30,7 +31,7 @@ Guarantees a caller may rely on (architecture ADR-0001/0004):
    construction).
 3. Same inputs → byte-identical serialized result (energies quantized to 1e-12 Ha; basis of
    content-hash caching).
-4. `Mode.FAST` never yields a `Bracket`.
+4. `Mode.FAST` never yields a `Bracket` or a bare float, only an `Estimate`.
 
 Outside the validated envelope (`MAX_SPIN_ORBITALS = 16`, validated bases) `check_caps` raises
 `CapExceededError` naming the violated cap — before any solve runs.
