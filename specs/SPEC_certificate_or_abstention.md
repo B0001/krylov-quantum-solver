@@ -1,8 +1,9 @@
 # SPEC: Certificate-or-abstention is a non-bypassable invariant on the energy return path
 
-**Status:** DRAFT — gates written first (`tests/test_certificate_or_abstention_spec.py`).
-Bead `portfolio-0pc`. Builds on `SPEC_certkit_return_paths.md` (`portfolio-cir`), which made
-every return path *able* to carry a certificate and left it opt-in.
+**Status:** IMPLEMENTED — gates G1–G5 green (`tests/test_certificate_or_abstention_spec.py`,
+31 tests, 6 s). Bead `portfolio-0pc`. Builds on `SPEC_certkit_return_paths.md`
+(`portfolio-cir`), which made every return path *able* to carry a certificate and left it
+opt-in. The gates were written first; §5 records the one that had to be tightened.
 
 ---
 
@@ -60,8 +61,16 @@ one unlisted public energy path, fails the gate.
      runs out of process but in the producer's own venv.
   7. **Callers outside the package keep their own contracts.** `certchem`'s `Mode.FAST`
      returns a bare float by design (ADR-0004); it now takes that float from the uncertified
-     door, so the choice is visible at its call site. Study scripts that write CSV keep
-     their column names and gain a column with the checker's verdict.
+     door, so the choice is visible at its call site. The 16-qubit comparison tables
+     (`benchmark_dmrg.py`, `benchmark_nbn.py`, `study_be2.py`) and the noisy sweeps
+     (`sweep_hybrid_solver.py`, `run_nbn_stress_test.py`) use the door too. The scripts that
+     write a row per run (`run_hybrid_solver.py`, `run_nbn_stress_test.py`,
+     `sweep_hybrid_solver.py`) keep their column names and gain a `certificate` column.
+  8. **The checker is the pinned one only as far as the interpreter is the caller's.** It
+     runs as `python -m certkit.cli` under the caller's interpreter and environment, as
+     before. A caller who puts another `certkit` on the path has replaced the checker, as
+     they could replace this package. No module on the return path reads the environment
+     (G1); that is a statement about switches, not about a hostile interpreter.
 
 ## 3. Approach
 
@@ -77,6 +86,8 @@ It returns the number when the verdict is VERIFIED and raises `EnergyAbstained`,
 checker's own line, when it is not. So code written against a certified energy cannot run on
 an abstention by accident, and code that wants the raw estimate has to say `unverified`.
 There is no third state: a crash of the checker is an abstention whose line starts `CRASH`.
+An abstention carries no enclosure either. The refused claim's ceiling is the energy plus
+float padding, so `certify_energies` blanks `lo` and `hi` on a verdict that is not VERIFIED.
 
 **(b) Where the producer lives.** `certify_ground_state` and what it needs moved from the
 top-level `certkit_bridge.py` into the package, and certkit moved from the `certkit` extra to
@@ -93,17 +104,29 @@ same operator an upper bound. `certify_energies` therefore submits the lowest en
 call first and, once one verifies, gives every energy at or above it the same verdict.
 Energies below the first verified one each keep their own abstention. `convergence` on every
 solver and the pipeline's convergence trace go through this, so a noiseless sweep costs one
-checker run where `portfolio-cir` paid one per step. Measured cost of one run: 0.06 s at 4
-qubits, 4.4 s at 8 (Temple, an O(n³) interval factorisation), 3.6 s at 12 (Gershgorin). The
-baseline suite makes 11 eight-qubit sweeps returning 352 energies: 25 minutes of checker time
-per energy, under a minute per sweep. A single `solve` still pays one run.
+checker run where `portfolio-cir` paid one per step. A single `solve` still pays one run.
+
+Measured cost of one checker run, producer included:
+
+| system | qubits | Pauli terms | route | one run |
+|---|---|---|---|---|
+| H2 | 4 | 15 | temple_inertia | 0.06 s |
+| H4 chain | 8 | 185 | temple_inertia (an O(n³) interval factorisation) | 4.4 s |
+| N2 CAS(6,6) | 12 | 383 | gershgorin_rayleigh | 3.6 s |
+| H6 chain | 12 | 919 | gershgorin_rayleigh | 8.6 s |
+| H8 chain | 16 | 2,913 | gershgorin_rayleigh | 37 min (machine also running the test suite) |
+
+The baseline suite makes 11 eight-qubit sweeps returning 352 energies. Paying 4.4 s per
+energy would be 26 minutes of checker time; paying it per sweep is 48 seconds.
 
 **(d) The uncertified door, and why it is not a bypass.** Two kinds of caller cannot pay
 for a checker run per call. Analysis code reads the Ritz decomposition, not an energy claim:
 the baseline suite makes 1,857 `eigenstates` calls, 1,635 of them at 8 to 12 qubits, which
 would be about two hours of checker time for numbers nobody reads as certified. And the
-checker is pure Python: one run is minutes at 16 qubits and hours at 20, so a study on a
-large active space cannot certify every point. For both there is
+checker is pure Python: one run is 37 minutes at 16 qubits (table above) and grows with
+states times Pauli terms, so a study on a large active space cannot certify every point.
+A run on real hardware could not either, because its witness cannot be rebuilt
+classically. For both kinds of caller there is
 `QuantumKrylovSolver.uncertified_eigenstates(krylov_dim, n_states)`, and the pipeline's
 `uncertified_estimates_only=True`, which is built on it. It is not a bypass because of what
 it returns: the same result types, already abstained, with a verdict line that reads
@@ -172,13 +195,30 @@ bare energy list.
   name containing `unverified`. The same holds for the door: `uncertified_eigenstates` and
   `uncertified_estimates_only=True` return abstentions that say `not submitted`, and start
   no checker process.
-- **G4 — the checker's own refusal reaches the caller.** A noisy H2 solve whose energy is
-  below `lambda_min` comes back abstained by the real checker, by verdict and not by crash,
-  and reading its `energy` raises.
+- **G4 — the checker's own refusal reaches the caller, and a proof is never shared
+  downward.** A noisy H2 solve whose energy is below `lambda_min` comes back abstained by
+  the real checker, by verdict and not by crash, and reading its `energy` raises. In four
+  noisy sweeps, every step below `lambda_min` is abstained although a higher step of the
+  same call verified, and every verified step's ceiling is at or below its own energy.
 - **G5 — non-vacuity, demonstrated.** The gate's own detector is run on four mutants and
   must reject each: a result with a bare float `energy` and no certificate, an abstained
   result that also exposes the number under an innocent name, a VERIFIED verdict with no
-  certificate file behind it, and a path patched to return the bare Ritz value.
+  certificate file behind it, and a path patched to return the bare Ritz value. The
+  pipeline refuses that last one before the detector sees it: a `PipelineResult` cannot be
+  built from anything but the solver's result type.
+
+**Checked by mutation of the source**, one at a time, the gate red on each and green again
+on the restored tree: `energy` returning the raw number; `certify_energies` skipping the
+checker and making up a VERIFIED verdict; a `certify=` argument on `solve`; an environment
+variable that skips the checker; a sweep's proof shared downward as well as upward; the
+door returning a result that reads as verified; an abstention keeping the refused claim's
+bounds; a result built with no verdict; the pipeline exposing its trace as bare tuples.
+
+> **Revised during implementation.** The seventh mutation survived the gate as first
+> written. G3's leak scan looked for the refused number to within 1e-9 Ha, but a refused
+> claim's ceiling is the number plus `pad_claim`'s padding, which is larger than that, so an
+> abstention that kept its claimed bounds handed the number back to within 2e-9 Ha (H2) and
+> nothing noticed. The scan now uses the padding bound (1e-7 Ha), and that mutation is red.
 
 ## 6. Implementation plan (test-first)
 
@@ -199,12 +239,29 @@ bare energy list.
 - Changing what `certchem`'s `Mode.FAST` returns (ADR-0004).
 - A faster checker, a checker in its own environment, or a shared inertia certificate.
 
-## 8. Caveats and risks
+## 8. Caveats, risks and what the suite showed
 
 - **Cost.** Every single `solve` on 8 or more qubits now takes seconds where it took
-  milliseconds. Sweeps are cheap (§3 c); loops of single solves are not.
+  milliseconds, and half an hour at 16 qubits (§3 c). Sweeps are cheap; loops of single
+  solves are not. `run_hybrid_solver.py` defaults to CAS(8,8), 16 qubits, so it now says
+  so before it starts and offers `--uncertified-estimates-only`.
 - A certified energy is certified as an upper bound with a route-dependent floor. Read
   `certificate.lo` before quoting a bracket.
+- **Energies are unchanged.** The whole test suite was run on `origin/main` and on this
+  branch with every return path instrumented: 4,863 returned energies, compared test by
+  test in call order, differ by at most 8.7e-13 Ha, and none by more than 1e-12 (two solver
+  instances already differ by ~1e-15 through ARPACK's start vector in the default `dt`).
+- **No noiseless energy abstained.** All 519 noiseless energies the suite returns through
+  a certified path were VERIFIED (4 to 12 qubits, sweeps to M = 32, saturated Krylov spaces
+  included). The 11 abstentions outside this gate are shot-noisy energies, which is what
+  an abstention is for. So the conditioning ripples of a saturated Krylov space, which
+  could in principle put a Ritz value below its own witness's Rayleigh quotient, did not
+  cost a single certificate here. That is an observation on this suite, not a guarantee.
+- **R1 — the separator.** `full_space_beta` is now a dense solve. It is only called below
+  certkit's `DENSE_LIMIT`, and the Lanczos call it replaces has a random start vector and
+  can fail to converge, which was tolerable on an opt-in path and is not on every solve.
+- **R2 — the Dockerfile is untested.** certkit is a git dependency, so the builder stage
+  now installs git. No Docker daemon was available to build the image.
 
 ## 9. Deliverables
 

@@ -1066,7 +1066,31 @@ hypothesis whose death is informative is worth more here than a safe one.
   then gets a VERIFIED certificate. Claiming `[floor, E]` instead makes VERIFIED mean "E is a
   proven upper bound". Six of twelve seeded noisy energies fall below λ_min, and all six now
   ABSTAIN. → [`SPEC_certkit_return_paths.md`](SPEC_certkit_return_paths.md) (G1–G4 in
-  `tests/test_certkit_return_paths_spec.py`; opt-in until `portfolio-0pc`).
+  `tests/test_certkit_return_paths_spec.py`; opt-in as built, on every call since
+  `portfolio-0pc`, next entry).
+
+- [x] **portfolio-0pc: can an energy leave the solver without a certificate or an
+  abstention?** *(2026-11-16)* — **DONE: no.** `certify=` is gone. Every energy-returning
+  method of the four solvers and the pipeline certifies on every call, and the result types
+  hold the number as `unverified_energy`: `energy` returns it only if the checker VERIFIED it
+  and raises `EnergyAbstained` otherwise. Four things came out of doing it. **(1) One proof
+  covers a sweep.** A VERIFIED certificate for E proves `lambda_min <= E`, hence every
+  E' >= E too, so the lowest energy of a call is submitted first and the rest share its
+  verdict: one checker run per sweep instead of one per step (352 eight-qubit energies in the
+  suite, 26 minutes down to under one). **(2) A door is unavoidable, and it can be made
+  harmless.** The suite makes 1,857 `eigenstates` calls that read Ritz vectors and claim no
+  energy, and one checker run is **37 minutes at 16 qubits** (measured; the checker is pure
+  Python). `uncertified_eigenstates` and `uncertified_estimates_only=True` run no checker and
+  return abstentions, so nothing they return reads as an energy. **(3) Nothing noiseless
+  abstained.** All 519 noiseless energies the suite returns on certified paths verified; the
+  11 abstentions are shot-noisy ones. All 4,863 energies match `origin/main` to 1e-12 Ha.
+  **(4) The gate had a hole, found by mutation.** An abstention that kept its refused
+  claim's ceiling handed the number back to within the float padding, and the leak scan was
+  tighter than the padding. Nine source mutations now turn the gate red.
+  → [`SPEC_certificate_or_abstention.md`](SPEC_certificate_or_abstention.md) (G1–G5 in
+  `tests/test_certificate_or_abstention_spec.py`; references, `estimate_energy_aer` and the
+  linear-algebra kernels are out of scope and say why; certchem's `Mode.FAST` is still a bare
+  float by ADR-0004).
 
 - [x] **Falsifying my own guard: the self-mode subspace floor is heuristic, not rigorous, for
   d ≥ 2** *(a parallel adversarial falsification sweep auditing PRs #20/#21)* — the self-mode floor
