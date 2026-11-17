@@ -35,6 +35,13 @@ from certkit.operators import DENSE_LIMIT, decode_operator, encode_pauli, operat
 from certkit.producer import pad_claim     # public producer-side padding convention
 from certkit.schema import f2h, seal
 
+# ponytail: one fixed ceiling for every system size. The slowest check measured is 37 min
+# (16 qubits, under load; specs/SPEC_certificate_or_abstention.md section 3), so 2 h fails
+# only a hung checker. A constant, not a setting: G1 pins that nothing outside the call can
+# change the return path. Make it scale with the operator if larger systems need longer
+# honest checks.
+CHECK_TIMEOUT_S = 7200
+
 
 class Verdict(NamedTuple):
     """One certificate, and what the independent checker said about it.
@@ -170,12 +177,19 @@ def check_certificate(cert_path: Path, operator_path: Path, op_ref: str) -> tupl
     and, also since certkit-3zr, an exception inside a rule, which it prints as an ABSTAIN
     whose reason is "internal error: ...". All three come back CRASH-prefixed, never as a
     bare line that a caller matching on "ABSTAIN" would read as the expected refusal.
+
+    A checker still running after ``CHECK_TIMEOUT_S`` is killed and reported the same way,
+    so a hung checker abstains instead of hanging the solver.
     """
-    proc = subprocess.run(
-        [sys.executable, "-m", "certkit.cli", "check", "--require-kind", "lambda_min_enclosure",
-         "--operator-ref", op_ref, str(cert_path), str(operator_path)],
-        capture_output=True, text=True,
-    )
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-m", "certkit.cli", "check", "--require-kind",
+             "lambda_min_enclosure", "--operator-ref", op_ref, str(cert_path),
+             str(operator_path)],
+            capture_output=True, text=True, timeout=CHECK_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired:
+        return False, f"CRASH  timeout: no verdict within {CHECK_TIMEOUT_S} s"
     line = proc.stdout.strip().split("\n", 1)[0]
     internal = line.removeprefix("ABSTAIN").lstrip().startswith("internal error:")
     if line and proc.returncode in (0, 1) and not internal:

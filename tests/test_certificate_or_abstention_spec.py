@@ -425,6 +425,21 @@ def test_G3_the_uncertified_door_returns_abstentions_and_starts_no_checker(monke
     assert states.shape == (2, 1 << _h2().num_qubits)        # the states are still returned
 
 
+def test_G3_a_checker_that_times_out_is_an_abstention_not_a_hang(monkeypatch):
+    """A hung checker is killed at CHECK_TIMEOUT_S and reported as a CRASH abstention, and
+    reading the energy then raises: certificate-or-abstention holds when the checker never
+    answers."""
+    def hung(cmd, **kw):
+        assert kw.get("timeout") == certification.CHECK_TIMEOUT_S, "the checker runs unbounded"
+        raise subprocess.TimeoutExpired(cmd, kw["timeout"])
+    monkeypatch.setattr(subprocess, "run", hung)
+    step = QuantumKrylovSolver(_h2()).solve(M)
+    assert not step.certificate.ok
+    assert step.certificate.line.startswith("CRASH  timeout"), step.certificate.line
+    with pytest.raises(EnergyAbstained):
+        step.energy
+
+
 def test_G3_a_result_cannot_be_built_without_a_verdict():
     """No energy without certificate-or-abstention, enforced where results are made."""
     from hybrid_quantum_solver.quantum_krylov_solver import ExcitedKrylovStep, KrylovStep

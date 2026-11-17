@@ -86,6 +86,8 @@ It returns the number when the verdict is VERIFIED and raises `EnergyAbstained`,
 checker's own line, when it is not. So code written against a certified energy cannot run on
 an abstention by accident, and code that wants the raw estimate has to say `unverified`.
 There is no third state: a crash of the checker is an abstention whose line starts `CRASH`.
+So is a checker still running after `CHECK_TIMEOUT_S` (2 h, about three times the slowest
+check measured): it is killed, and the energy abstains instead of the solver hanging.
 An abstention carries no enclosure either. The refused claim's ceiling is the energy plus
 float padding, so `certify_energies` blanks `lo` and `hi` on a verdict that is not VERIFIED.
 
