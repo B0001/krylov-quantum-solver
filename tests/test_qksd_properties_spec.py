@@ -59,7 +59,7 @@ def test_G1_permanent_dipole_vs_fci():
     heh = _heh_plus()
     mh = build_molecular_hamiltonian(**heh)
     dmats = _dip_matrices(heh)
-    _, states = QuantumKrylovSolver(mh).eigenstates(DEPTH, n_states=1)
+    _, states = QuantumKrylovSolver(mh).uncertified_eigenstates(DEPTH, n_states=1)
     _, ref_states = _reachable_states(mh)
     qksd = transition_dipoles(states, dmats)[:, 0, 0].real
     exact = transition_dipoles(ref_states[:1], dmats)[:, 0, 0].real
@@ -67,7 +67,7 @@ def test_G1_permanent_dipole_vs_fci():
     assert abs(qksd[2]) > 0.5, qksd                  # polar molecule: nonzero z-dipole
 
     mh2 = build_molecular_hamiltonian(**_h2())
-    _, s2 = QuantumKrylovSolver(mh2).eigenstates(DEPTH, n_states=1)
+    _, s2 = QuantumKrylovSolver(mh2).uncertified_eigenstates(DEPTH, n_states=1)
     perm_h2 = transition_dipoles(s2, _dip_matrices(_h2()))[:, 0, 0]
     assert np.max(np.abs(perm_h2)) < 1e-6, perm_h2   # centrosymmetric: zero by symmetry
 
@@ -79,7 +79,7 @@ def test_G2_transition_dipoles_vs_fci():
     dmats = _dip_matrices(heh)
     ref_e, ref_states = _reachable_states(mh)
     k = len(ref_e)
-    _, states = QuantumKrylovSolver(mh).eigenstates(DEPTH, n_states=k)
+    _, states = QuantumKrylovSolver(mh).uncertified_eigenstates(DEPTH, n_states=k)
     qksd = np.linalg.norm(transition_dipoles(states, dmats)[:, 0, :], axis=0)     # |mu_0n|
     exact = np.linalg.norm(transition_dipoles(ref_states, dmats)[:, 0, :], axis=0)
     assert np.allclose(qksd, exact, atol=DIP_TOL), (qksd, exact)
@@ -93,16 +93,16 @@ def test_G3_oscillator_strengths_and_dark_recovery():
     dmats = _dip_matrices(heh)
     ref_e, ref_states = _reachable_states(mh)
     k = len(ref_e)
-    energies, states = QuantumKrylovSolver(mh).eigenstates(DEPTH, n_states=k)
-    f_qksd = oscillator_strengths(energies, states, dmats)
+    spectrum, states = QuantumKrylovSolver(mh).eigenstates(DEPTH, n_states=k)
+    f_qksd = oscillator_strengths(spectrum.energies, states, dmats)
     f_exact = oscillator_strengths(ref_e, ref_states, dmats)
     assert np.allclose(f_qksd, f_exact, atol=1e-3), (f_qksd, f_exact)
     assert f_qksd[1] > 1e-3, f_qksd                   # bright state carries oscillator strength
 
     # H2: the reachable excitation is dipole-forbidden -> dark
     mh2 = build_molecular_hamiltonian(**_h2())
-    e2, s2 = QuantumKrylovSolver(mh2).eigenstates(DEPTH, n_states=2)
-    f_h2 = oscillator_strengths(e2, s2, _dip_matrices(_h2()))
+    spectrum2, s2 = QuantumKrylovSolver(mh2).eigenstates(DEPTH, n_states=2)
+    f_h2 = oscillator_strengths(spectrum2.energies, s2, _dip_matrices(_h2()))
     assert f_h2[1] < 1e-6, f_h2
 
 
@@ -111,7 +111,7 @@ def test_G4_hermiticity_and_normalization():
     for spec in (_heh_plus(), _h2()):
         mh = build_molecular_hamiltonian(**spec)
         dmats = _dip_matrices(spec)
-        _, states = QuantumKrylovSolver(mh).eigenstates(DEPTH, n_states=2)
+        _, states = QuantumKrylovSolver(mh).uncertified_eigenstates(DEPTH, n_states=2)
         norms = np.einsum("mi,mi->m", states.conj(), states).real
         assert np.allclose(norms, 1.0, atol=1e-9), norms
         for op in dmats:

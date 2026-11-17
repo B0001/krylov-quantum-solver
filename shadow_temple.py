@@ -53,7 +53,7 @@ def ritz_state(mh: MolecularHamiltonian, m: int,
     """The M-dimensional Krylov ground Ritz state -- the state the certified arc actually runs on
     (not HF, not FCI)."""
     solver = solver if solver is not None else QuantumKrylovSolver(mh)
-    psi = solver.eigenstates(m, n_states=1)[1][0]
+    psi = solver.uncertified_eigenstates(m, n_states=1)[1][0]
     return psi, solver
 
 

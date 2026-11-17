@@ -15,8 +15,10 @@ Ground truth: the same matrix elements between the exact (dense-diagonalized) ei
 same qubit operators -- the FCI reference for properties, in the same idiom that
 ``MolecularHamiltonian.ground_state_energy`` is the FCI reference for energies.
 
-Inputs are the ``(energies, states)`` from ``QuantumKrylovSolver.eigenstates`` and the dipole
-operators from ``build_dipole_operators`` (as matrices). See specs/SPEC_qksd_properties.md.
+Inputs are the energies and states from ``QuantumKrylovSolver.eigenstates`` (``step, states``;
+pass ``step.energies``, which is released only once the ground-state energy is certified) and
+the dipole operators from ``build_dipole_operators`` (as matrices). See
+specs/SPEC_qksd_properties.md.
 """
 from __future__ import annotations
 

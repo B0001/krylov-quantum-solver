@@ -75,7 +75,7 @@ def dipole_noise_coverage(mh: MolecularHamiltonian, a_op: SparsePauliOp, m: int,
     a_sparse = a_op.to_matrix(sparse=True)
     W = spectral_width(a_sparse)
 
-    _, states = solver.eigenstates(m, n_states=2)
+    _, states = solver.uncertified_eigenstates(m, n_states=2)
     psi0, psi1 = states[0], states[1]
     th0, var0 = mean_and_variance(H, psi0)
     th1, var1 = mean_and_variance(H, psi1)

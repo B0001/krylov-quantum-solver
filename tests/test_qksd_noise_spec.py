@@ -35,7 +35,9 @@ def _excited_errors(mh, ref0, ref1, shots, seeds=SEEDS):
     sigma = shot_noise_sigma(shots)
     e0, e1, gap, emin = [], [], [], np.inf
     for s in range(seeds):
-        en = np.sort(QuantumKrylovSolver(mh, noise_sigma=sigma, seed=s).solve_excited(KDIM, 2).energies)
+        # Raw noisy Ritz values (an estimator study, not an energy claim): the uncertified door.
+        solver = QuantumKrylovSolver(mh, noise_sigma=sigma, seed=s)
+        en = np.sort(solver.uncertified_eigenstates(KDIM, 2)[0].unverified_energies)
         e0.append(abs(en[0] - ref0))
         if len(en) >= 2:                              # excited state resolved this seed
             e1.append(abs(en[1] - ref1))

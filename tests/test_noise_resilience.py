@@ -32,7 +32,9 @@ H2 = dict(atom="H 0 0 0; H 0 0 0.74")
 
 def _energies(mh, shots, krylov_dim=6, seeds=6):
     sigma = 0.0 if shots is None else shot_noise_sigma(shots)
-    return [QuantumKrylovSolver(mh, noise_sigma=sigma, seed=s).solve(krylov_dim).energy
+    # The raw estimates: under shot noise some of them dip below the ground state, and the
+    # checker rightly abstains on those, so ``.energy`` would raise.
+    return [QuantumKrylovSolver(mh, noise_sigma=sigma, seed=s).solve(krylov_dim).unverified_energy
             for s in range(seeds)]
 
 

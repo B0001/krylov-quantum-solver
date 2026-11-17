@@ -46,12 +46,11 @@ def main():
         hf_err_mha = (r.hf_energy - fci) * 1e3
         kr_err_mha = (r.computed_energy - fci) * 1e3
         respects_floor = r.computed_energy >= fci - 1e-7
-        r.reference_energy = fci
         print(f"{name:26s} {r.n_qubits:6d} {r.krylov_dim:3d} "
               f"{hf_err_mha:9.3f}m {kr_err_mha:10.4f}m {str(respects_floor):>7}")
         rows.append({
             "system": name, "qubits": r.n_qubits, "krylov_dim": r.krylov_dim,
-            "fci_energy": r.reference_energy, "hf_energy": r.hf_energy,
+            "fci_energy": fci, "hf_energy": r.hf_energy,
             "krylov_energy": r.computed_energy,
             "hf_error_mHa": hf_err_mha, "krylov_error_mHa": kr_err_mha,
             "respects_variational_floor": respects_floor,

@@ -220,7 +220,7 @@ def lehmann_excited_brackets(mh: MolecularHamiltonian, krylov_dim: int,
     """
     solver = solver if solver is not None else QuantumKrylovSolver(mh)
     H = mh.qubit_hamiltonian.to_matrix(sparse=True).tocsc()
-    _, states = solver.eigenstates(krylov_dim, n_states=3)
+    _, states = solver.uncertified_eigenstates(krylov_dim, n_states=3)
     beta = None if beta_oracle is None else float(beta_oracle) - mh.energy_offset
     return bracket_from_states(H, states, beta=beta, m=krylov_dim, offset=mh.energy_offset)
 

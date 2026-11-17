@@ -121,11 +121,15 @@ def run_one(cas_elec, cas_orb, krylov_dim, shots, seed, integral_cache, ham_cach
     sigma = shot_noise_sigma(shots) if shots else 0.0
     solver = QuantumKrylovSolver(mh, dt=None, noise_sigma=sigma, seed=seed)
 
+    # A parameter sweep of the raw estimator, noisy points included, up to 20 qubits and
+    # under a per-point time limit: the solver's uncertified door. ``computed_energy`` is an
+    # UNVERIFIED estimate on every row, and the ``certificate`` column says so.
     start = time.time()
-    step = _run_with_timeout(solver.solve, MAX_RUNTIME_PER_POINT_S, krylov_dim)
+    step, _ = _run_with_timeout(solver.uncertified_eigenstates, MAX_RUNTIME_PER_POINT_S,
+                                krylov_dim, n_states=1)
     elapsed = time.time() - start
 
-    computed_energy = step.energy
+    computed_energy = step.unverified_energies[0]
     error_vs_casci = abs(computed_energy - casci_total)
 
     return {
@@ -142,6 +146,7 @@ def run_one(cas_elec, cas_orb, krylov_dim, shots, seed, integral_cache, ham_cach
         "error_vs_casci": error_vs_casci,
         "time_s": round(elapsed, 4),
         "audit_state": "OK",
+        "certificate": step.certificate.line,
     }
 
 
@@ -163,6 +168,7 @@ def _timeout_row(cas_elec, cas_orb, krylov_dim, shots, seed):
         "dt": float("nan"), "computed_energy": float("nan"), "casci_total": float("nan"),
         "error_vs_casci": float("nan"), "time_s": MAX_RUNTIME_PER_POINT_S,
         "audit_state": "TIMEOUT",
+        "certificate": "",
     }
 
 

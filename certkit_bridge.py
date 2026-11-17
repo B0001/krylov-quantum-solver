@@ -9,28 +9,39 @@ not imported: nothing here may call check() in-process.
 Nothing in this file is trusted: it is a producer. The only question it answers is
 whether the solver's bound survives an independent re-derivation.
 
-Run:  uv sync --inexact --extra certkit  then  uv run python certkit_bridge.py [H2|H4|H4-stretched|N2]
+Run:  uv run python certkit_bridge.py [H2|H4|H4-stretched|N2]
+
+Since portfolio-0pc the producer itself lives in ``hybrid_quantum_solver.certification``,
+because every energy the solver returns is certified through it; the names this file used to
+define are re-exported below. What stays here is the fixed regression cases and their CLI.
 
 The gate over what this emits is tests/test_certkit_regression_gate_spec.py, which pins, per
 case, the solver's own return-path certificate too (run_case's solve/ entry). Every return
-path certifies through certify_ground_state (``certify=``); all of them are gated on H2 by
-tests/test_certkit_return_paths_spec.py.
+path certifies through certification.certify_energies; all of them are gated on H2 by
+tests/test_certkit_return_paths_spec.py and tests/test_certificate_or_abstention_spec.py.
 """
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 from pathlib import Path
-from typing import NamedTuple
 
 import numpy as np
 
-from certkit.interval import Iv
-from certkit.operators import DENSE_LIMIT, decode_operator, encode_pauli, operator_ref
+from certkit.operators import DENSE_LIMIT
 from certkit.producer import pad_claim     # public producer-side padding convention
-from certkit.schema import f2h, seal
 
+from hybrid_quantum_solver.certification import (  # noqa: F401  -- re-exported producer names
+    Verdict,
+    build_certificate,
+    certify_ground_state,
+    check_certificate,
+    emit,
+    encode_hamiltonian,
+    full_space_beta,
+    gershgorin_lower,
+    real_witness,
+)
 from hybrid_quantum_solver.molecular_hamiltonian import build_molecular_hamiltonian
 from hybrid_quantum_solver.quantum_krylov_solver import QuantumKrylovSolver
 from temple_bounds import mean_and_variance
@@ -44,45 +55,6 @@ CASES = {
 KRYLOV_DIM = 8
 
 
-class Verdict(NamedTuple):
-    """One certificate, and what the independent checker said about it.
-
-    ``line`` is the checker's first stdout line, verbatim, or a ``CRASH``-prefixed
-    diagnostic if it gave no verdict at all (see ``check_certificate``). A crash can exit 1
-    just as an ABSTAIN does, so the line is the only thing that tells them apart.
-    """
-
-    name: str
-    rule: str
-    ok: bool
-    line: str
-    lo: float
-    hi: float
-
-
-def encode_hamiltonian(mh) -> dict:
-    """The qubit Hamiltonian as a certkit Pauli-sum operator.
-
-    NOT as CSR. Materialising the matrix sums each Pauli term in floating point, and
-    the (i,j) and (j,i) entries accumulate in different orders -- H4 comes out
-    asymmetric by 8.3e-17, which certkit refuses (correctly: it is a different
-    operator than the symmetric one you meant). The Pauli encoding carries the terms
-    themselves, so symmetry holds by construction rather than by luck.
-
-    certkit's Pauli strings are LSB-first; qiskit's labels are MSB-first.
-    """
-    op = mh.qubit_hamiltonian
-    terms = []
-    for label, coeff in op.to_list():
-        c = complex(coeff)
-        if c.imag != 0.0:
-            raise ValueError(f"complex coefficient on {label}: {c}")
-        if label.count("Y") % 2:
-            raise ValueError(f"odd number of Y factors in {label} -- operator is not real")
-        terms.append((c.real, label[::-1]))
-    return encode_pauli(op.num_qubits, terms)
-
-
 def krylov_witness(H, mh, m: int):
     """The solver's own numbers: trial vector and its mean/variance.
 
@@ -90,7 +62,10 @@ def krylov_witness(H, mh, m: int):
     a trusted addition that happens outside it.
     """
     solver = QuantumKrylovSolver(mh)
-    energies, states = solver.eigenstates(m, n_states=2)
+    # The Ritz decomposition only: the energies are diagnostics here, and the certificates
+    # run_case builds from these states are checked one by one below.
+    spectrum, states = solver.uncertified_eigenstates(m, n_states=2)
+    energies = spectrum.unverified_energies
     psi0 = states[0]
 
     # The real-time Krylov basis is complex; H is real symmetric, so its ground
@@ -105,138 +80,6 @@ def krylov_witness(H, mh, m: int):
     th1, var1 = mean_and_variance(H, states[1])
     sector_eps = th1 - np.sqrt(var1)                # self mode: unverifiable premise
     return x, th0, var0, sector_eps, dict(imag_weight=weight, energies=energies)
-
-
-def full_space_beta(H):
-    """A separator for the WHOLE matrix, not the reachable Krylov sector.
-
-    Untrusted like every producer number: the checker discharges beta by inertia
-    count, so a wrong guess costs coverage and never soundness.
-    """
-    from scipy.sparse.linalg import eigsh
-
-    vals = np.sort(eigsh(H.real.astype(float), k=2, which="SA", return_eigenvectors=False))
-    return 0.5 * (vals[0] + vals[1]), vals
-
-
-def gershgorin_lower(enc: dict) -> float:
-    """A floor on every eigenvalue, read straight off the rows. No gap needed."""
-    op = decode_operator(enc)
-    lower = float("inf")
-    for i in range(op.n):
-        entries = op.row(i)
-        diag = entries.get(i, Iv.exact(0.0)).lo
-        radius = sum(v.mag_ub for j, v in entries.items() if j != i)
-        lower = min(lower, diag - radius)
-    return lower
-
-
-def build_certificate(enc: dict, rule: str, x, lo: float, hi: float,
-                      beta: float | None = None) -> dict:
-    """The solver's claim in the certificate format. No certkit producer involved."""
-    witness = {"rule": rule, "vector": [f2h(float(v)) for v in x]}
-    if beta is not None:
-        witness["beta"] = f2h(float(beta))
-    cert = {
-        "schema": "certkit/1",
-        "claim": {
-            "operator_ref": operator_ref(enc),
-            "kind": "lambda_min_enclosure",
-            "enclosure": {"lo": f2h(float(lo)), "hi": f2h(float(hi))},
-        },
-        "witness": witness,
-        "producer": {"name": "hybrid_quantum_solver.QuantumKrylovSolver", "backend": "numpy"},
-    }
-    return seal(cert)
-
-
-def check_certificate(cert_path: Path, operator_path: Path, op_ref: str) -> tuple[bool, str]:
-    """Run the checker as a separate process over the files, and report what it said.
-
-    The verdict is the checker's exit status, on the question certkit's INTEGRATION.md says
-    to ask: is this a lambda_min_enclosure (--require-kind) of the operator the producer
-    encoded, ``op_ref`` (--operator-ref)? A true claim of another kind, or a swapped operator
-    file, then abstains instead of verifying. This file is a producer and is untrusted; it
-    must not adjudicate its own claims in its own process.
-
-    A crash must never pass for an expected abstention, and the checker can crash three
-    ways: exit 2 (no verdict, certkit-3zr); dying before it prints, which still exits 1;
-    and, also since certkit-3zr, an exception inside a rule, which it prints as an ABSTAIN
-    whose reason is "internal error: ...". All three come back CRASH-prefixed, never as a
-    bare line that a caller matching on "ABSTAIN" would read as the expected refusal.
-    """
-    proc = subprocess.run(
-        [sys.executable, "-m", "certkit.cli", "check", "--require-kind", "lambda_min_enclosure",
-         "--operator-ref", op_ref, str(cert_path), str(operator_path)],
-        capture_output=True, text=True,
-    )
-    line = proc.stdout.strip().split("\n", 1)[0]
-    internal = line.removeprefix("ABSTAIN").lstrip().startswith("internal error:")
-    if line and proc.returncode in (0, 1) and not internal:
-        return proc.returncode == 0, line
-    err = proc.stderr.strip().splitlines()
-    why = line or (err[-1] if err else "(no output at all)")
-    return False, f"CRASH  exit {proc.returncode}: {why}"
-
-
-def emit(enc: dict, rule: str, x, lo: float, hi: float, out: Path, name: str,
-         beta: float | None = None) -> Verdict:
-    """Write one certificate, then have it checked independently over the files."""
-    cert = build_certificate(enc, rule, x, lo, hi, beta)
-    cert_path = out / f"{name}.json"
-    cert_path.write_text(json.dumps(cert, indent=2))
-    ok, line = check_certificate(cert_path, out / "operator.json", operator_ref(enc))
-    print(f"  [{name:23s}] {line or '(no checker output)'}")
-    return Verdict(name, rule, ok, line, float(lo), float(hi))
-
-
-def real_witness(H, psi):
-    """The real unit vector a certificate can carry, from a complex solver state.
-
-    H is real symmetric, so <psi|H|psi> is the norm-weighted mean of the Rayleigh quotients
-    of Re(psi) and Im(psi): the lower of the two is never above psi's own. krylov_witness
-    picks by weight instead, which can land above the energy the solver returned.
-    """
-    parts = [p / np.linalg.norm(p) for p in (psi.real, psi.imag) if np.linalg.norm(p) > 0]
-    return min(parts, key=lambda p: float(p @ (H @ p)))
-
-
-def certify_ground_state(mh, psi, energy: float, out: Path) -> Verdict:
-    """Certificate for one ground-state energy a solver returned, checked out of process.
-
-    ``energy`` is the returned value in the ELECTRONIC frame and ``psi`` the state it is the
-    Ritz value of (portfolio-cir). The claim is lambda_min in [floor, energy]: the certified
-    ceiling is the returned number itself, padded, so VERIFIED means that number is a proven
-    upper bound on the ground state -- not merely that some vector has a low Rayleigh
-    quotient (G5 of the regression gate shows how little that is worth). A noisy energy
-    below its own witness's Rayleigh quotient therefore ABSTAINs, as does one below the
-    floor (an inverted enclosure).
-
-    Routes, tightest first: temple_inertia when certkit will materialise the matrix and
-    Temple's bound is finite, then gershgorin_rayleigh. The first VERIFIED wins; otherwise
-    the last abstention is returned. Writes ``out/operator.json`` plus one file per route
-    tried.
-    """
-    out = Path(out)
-    out.mkdir(parents=True, exist_ok=True)
-    enc = encode_hamiltonian(mh)
-    (out / "operator.json").write_text(json.dumps(enc, indent=2))
-    H = mh.qubit_hamiltonian.to_matrix(sparse=True).real.tocsc()
-    x = real_witness(H, np.asarray(psi))
-    th, var = mean_and_variance(H, x)
-
-    routes = []
-    if len(x) <= DENSE_LIMIT:
-        beta, _ = full_space_beta(H)
-        if th < beta:
-            routes.append(("temple_inertia", th - var / (beta - th), beta, "certificate_temple"))
-    routes.append(("gershgorin_rayleigh", gershgorin_lower(enc), None, "certificate_gershgorin"))
-    for rule, lo, beta, name in routes:
-        pad = pad_claim(energy, 1e-9, len(x), energy - lo)
-        v = emit(enc, rule, x, lo - pad, energy + pad, out, name, beta=beta)
-        if v.ok:
-            break
-    return v
 
 
 def run_case(case: str, out: Path, conv_tol: float = 1e-9) -> tuple[float, list[Verdict]]:
@@ -262,6 +105,12 @@ def run_case(case: str, out: Path, conv_tol: float = 1e-9) -> tuple[float, list[
     out.mkdir(parents=True, exist_ok=True)
     (out / "operator.json").write_text(json.dumps(enc, indent=2))
 
+    def emit_and_report(*args, **kwargs) -> Verdict:
+        """emit, plus the checker's line on stdout: this is the report, not the library."""
+        v = emit(*args, **kwargs)
+        print(f"  [{v.name:23s}] {v.line or '(no checker output)'}")
+        return v
+
     verdicts: list[Verdict] = []
     if n <= DENSE_LIMIT:
         beta, vals = full_space_beta(H)
@@ -274,30 +123,31 @@ def run_case(case: str, out: Path, conv_tol: float = 1e-9) -> tuple[float, list[
         # vacuous" in temple_bounds' vocabulary, and certkit refuses non-finite floats.
         if sector_eps > th0:
             lo = th0 - var0 / (sector_eps - th0)
-            verdicts.append(emit(enc, "temple_inertia", x, lo, th0, out,
-                                 "certificate_sector", beta=sector_eps))
+            verdicts.append(emit_and_report(enc, "temple_inertia", x, lo, th0, out,
+                                            "certificate_sector", beta=sector_eps))
         else:
             print(f"  [{'certificate_sector':23s}] not emitted: sector eps {sector_eps:.6f}"
                   f" <= theta {th0:.6f}, so Temple gives no finite bound")
         # (2) same witness, separator taken over the whole matrix
         lo = th0 - var0 / (beta - th0)
         pad = pad_claim(th0, 1e-9, len(x), th0 - lo)
-        verdicts.append(emit(enc, "temple_inertia", x, lo - pad, th0 + pad, out,
-                             "certificate_temple", beta=beta))
+        verdicts.append(emit_and_report(enc, "temple_inertia", x, lo - pad, th0 + pad, out,
+                                        "certificate_temple", beta=beta))
     else:
         print(f"  n > DENSE_LIMIT ({DENSE_LIMIT}): no inertia route, so no gap discharge")
 
     # The loose route needs no gap and no factorisation, and always applies.
     lo = gershgorin_lower(enc)
     pad = pad_claim(th0, 1e-9, len(x), th0 - lo)
-    verdicts.append(emit(enc, "gershgorin_rayleigh", x, lo - pad, th0 + pad, out,
-                         "certificate_gershgorin"))
+    verdicts.append(emit_and_report(enc, "gershgorin_rayleigh", x, lo - pad, th0 + pad, out,
+                                    "certificate_gershgorin"))
 
-    # What the solver's own return path emits for the energy it returns (portfolio-cir),
-    # through the public certify= argument: certify_ground_state, whose ceiling is the
-    # returned number rather than a witness's Rayleigh quotient. One verdict, from the route
-    # that won. It writes its own operator.json and reuses the route filenames, hence solve/.
-    v = QuantumKrylovSolver(mh).solve(KRYLOV_DIM, certify=out / "solve").certificate
+    # What the solver's own return path emits for the energy it returns (portfolio-cir; on
+    # every call since portfolio-0pc): certify_ground_state, whose ceiling is the returned
+    # number rather than a witness's Rayleigh quotient. One verdict, from the route that won.
+    # It writes its own operator.json and reuses the route filenames, hence solve/.
+    v = QuantumKrylovSolver(mh).solve(KRYLOV_DIM, certificate_dir=out / "solve").certificate
+    print(f"  [{'solve/' + v.name:23s}] {v.line or '(no checker output)'}")
     verdicts.append(v._replace(name=f"solve/{v.name}"))
 
     for v in verdicts:

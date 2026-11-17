@@ -20,33 +20,20 @@ Electronic frame throughout: certificates are about the qubit matrix, and mh.ene
 a trusted addition made outside it. The references below are therefore NOT the total energies
 the rest of the suite asserts.
 
-Needs the pinned checker (`uv sync --inexact --extra certkit`). PySCF/qiskit, no block2;
-`make gates` runs it in its own process.
+The pinned checker is a core dependency since portfolio-0pc, so there is no skip guard: a
+missing certkit is an import error, never a gate that quietly did not run. PySCF/qiskit, no
+block2; `make gates` runs it in its own process.
 """
-import importlib.util
 import json
 import os
 from pathlib import Path
 
 import numpy as np
-import pytest
+from certkit.producer import pad_claim
 
-if importlib.util.find_spec("certkit") is None:
-    # Locally the extra is optional, and skipping says so. In CI its absence is the gate not
-    # running at all, which must never be reported as a pass. GitHub Actions sets CI=true.
-    if os.environ.get("CI"):
-        raise RuntimeError(
-            "certkit is not installed: the regression-certificate gate cannot run. "
-            'Install the pinned checker with `uv sync --inexact --extra certkit`.'
-        )
-    pytest.skip('certkit extra not installed (uv sync --inexact --extra certkit)',
-                allow_module_level=True)
-
-from certkit.producer import pad_claim  # noqa: E402  -- only once the checker is present
-
-import certkit_bridge  # noqa: E402
-from hybrid_quantum_solver.molecular_hamiltonian import build_molecular_hamiltonian  # noqa: E402
-from temple_bounds import mean_and_variance  # noqa: E402
+import certkit_bridge
+from hybrid_quantum_solver.molecular_hamiltonian import build_molecular_hamiltonian
+from temple_bounds import mean_and_variance
 
 # Ha. The threshold this repo measures energy claims against; ~1.6 mHa.
 CHEMICAL_ACCURACY = 1.6e-3
@@ -74,7 +61,7 @@ OUT = Path(__file__).resolve().parent.parent / "certkit_out"
 # perfectly useless. Values are ~2x what the producer emits today.
 #
 # solve/<route> is what the solver's own return path emits for the energy it returns
-# (QuantumKrylovSolver.solve(certify=), portfolio-cir): certify_ground_state, whose ceiling is
+# (QuantumKrylovSolver.solve, portfolio-cir): certify_ground_state, whose ceiling is
 # the returned energy itself, so G4's upper end gates the solver's answer and not a witness.
 # It returns the first route that verifies, so pinning the name pins which route won. Its
 # floors are the same numbers as run_case's for that route, and so are the pins.

@@ -38,14 +38,20 @@ def main():
                 h1, eri, num_particles=nelecas, e_core=float(e_core),
                 krylov_dim=m, shots=shots, seed=0,
                 reference_energy=float(casci_total), track_convergence=False,
+                # A scaling study of the raw estimator, noisy points included, at 16 qubits
+                # where each checker run is about half an hour: the pipeline's uncertified
+                # door. Every number below is an UNVERIFIED estimate, and the CSV says so.
+                uncertified_estimates_only=True,
             )
             dt = time.time() - t0
-            print(f"  M={m:<3} shots={str(shots):<6}  E={r.computed_energy:.6f}  "
-                  f"|err|={r.error_vs_reference:.2e} Ha  ({dt:.1f}s)")
+            err = abs(r.unverified_energy - casci_total)
+            print(f"  M={m:<3} shots={str(shots):<6}  E(unverified)={r.unverified_energy:.6f}  "
+                  f"|err|={err:.2e} Ha  ({dt:.1f}s)")
             rows.append({
                 "krylov_dim": m, "shots": shots, "qubits": r.n_qubits, "rank": r.rank,
-                "computed_energy": r.computed_energy, "casci_total": casci_total,
-                "error_vs_casci": r.error_vs_reference, "time_s": round(dt, 2),
+                "computed_energy": r.unverified_energy, "casci_total": casci_total,
+                "error_vs_casci": err, "time_s": round(dt, 2),
+                "certificate": r.certificate.line,
             })
 
     pl.DataFrame(rows).write_csv("data/nbn_krylov_scaling.csv")

@@ -77,7 +77,7 @@ def _setup(atom, conv_tol=None, mh=None):
 
 
 def _ritz(mh, m, solver):
-    v = np.asarray(solver.eigenstates(m, n_states=1)[1][0], dtype=complex)
+    v = np.asarray(solver.uncertified_eigenstates(m, n_states=1)[1][0], dtype=complex)
     return v / np.linalg.norm(v)
 
 
