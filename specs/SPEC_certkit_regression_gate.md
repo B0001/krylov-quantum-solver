@@ -1,6 +1,6 @@
 # SPEC: Every emitted certificate must pass the independent checker, in CI
 
-**Status:** IMPLEMENTED — gates G1–G5 green (`tests/test_certkit_regression_gate_spec.py`,
+**Status:** IMPLEMENTED — gates G1–G6 green (`tests/test_certkit_regression_gate_spec.py`,
 `.github/workflows/certkit-regression.yml`). Since `chem-cgb` the table also pins the solver's
 own return-path certificate per case, and the pin is certkit `c2582aa` (§8, "Pin history").
 
@@ -136,6 +136,14 @@ cannot be pinned by a gate and is gone. The return-path certificate lives in `<c
   noise witness is VERIFIED by the checker *and* is caught by G4's criterion. If the checker
   ever gets strong enough to reject it, this gate fails and says so — that is a finding about
   certkit, not a regression here.
+- **G6 — the checked operator is the reference matrix** (`portfolio-cpz`). Every
+  `operator.json` the checker read for a case (`run_case`'s and `solve/`'s) is decoded by
+  certkit's own `decode_operator` and applied to one random vector, next to
+  `mh.qubit_hamiltonian.to_matrix()`, the matrix G3's reference diagonalises. They must agree
+  to 1e-9 (measured: ~1e-13). Two different linear operators agree on a random vector with
+  probability zero, so this pins the encoding on every case, Gershgorin-only ones included,
+  instead of relying on the Temple route to catch it. It also shows it is not vacuous: a 0.999
+  coefficient scale, a sign flip and a dropped LSB/MSB reversal each fail it.
 
 Not a gate: certificate *width* as such. H2's certified width is 3.7e-9 Ha, which is entirely
 `pad_claim`'s floating-point padding at the hardcoded `rel=1e-9`; a width threshold there would
@@ -144,7 +152,7 @@ information where it means something and avoids the pad where it does not.
 
 ## 6. Implementation plan (test-first)
 
-1. `tests/test_certkit_regression_gate_spec.py` encoding G1–G5.
+1. `tests/test_certkit_regression_gate_spec.py` encoding G1–G6.
 2. Minimum producer changes to make them expressible: per-route certificate filenames,
    `run_case` returning verdicts instead of printing them and returning a disjunction, and no
    certificate at all where Temple has no finite bound (`-inf` is not representable, and the
@@ -161,14 +169,6 @@ information where it means something and avoids the pad where it does not.
   dependencies, so it is cheap — would be strictly stronger and is a good follow-up.
 - Claim kinds certkit does not have: gaps, dipoles, relative energies, overlaps. The
   `certified_*` gates assert quantities no single certificate can express.
-- Tying the encoded operator to the matrix the reference comes from. `encode_hamiltonian` is
-  a second, independent translation of `mh.qubit_hamiltonian`, and the checker re-derives
-  everything from that encoding — so a broken encoding is checked against itself. On the dense
-  cases the Temple route pins it tightly by accident (a sign flip, a 0.999 coefficient scale
-  and dropping the LSB/MSB reversal all turn G1 red), and G4's pinned floor catches a shifted
-  encoding on the Gershgorin-only cases. Making it airtight means having `run_case` return
-  `<x|decode_operator(enc)|x>` and asserting it equals the certified `hi`; worth doing when a
-  second Gershgorin-only case appears.
 - Byte-reproducible certificates. The producer's Pauli term ordering varies with
   `PYTHONHASHSEED`, so certificate and operator are only valid as a same-run pair. The gate
   regenerates both together, which sidesteps it; committing golden certificates would not.
@@ -217,7 +217,7 @@ information where it means something and avoids the pad where it does not.
 ## 9. Deliverables
 
 - `certkit_bridge.py` — `Verdict`, `check_certificate`, `emit`, `run_case` (+ `__main__`).
-- `tests/test_certkit_regression_gate_spec.py` — gates G1–G5, plus G1's crash guard.
+- `tests/test_certkit_regression_gate_spec.py` — gates G1–G6, plus G1's crash guard.
 - `.github/workflows/certkit-regression.yml` — the CI job.
 - `scripts/run_gates.sh` — exit 5 (nothing collected) reported as SKIP, not FAIL; covered by
   `tests/test_gate_runner.py`.

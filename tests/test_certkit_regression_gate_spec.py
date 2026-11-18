@@ -1,5 +1,5 @@
 """
-Acceptance gates G1-G5 for specs/SPEC_certkit_regression_gate.md (the regression-certificate
+Acceptance gates G1-G6 for specs/SPEC_certkit_regression_gate.md (the regression-certificate
 CI gate).
 
 Claim: every certificate this repo's producer emits still verifies under the exact certkit
@@ -222,3 +222,47 @@ def test_G5_a_noise_witness_is_verified_by_the_checker_and_caught_by_G4():
     assert v.hi - lam > CHEMICAL_ACCURACY, (
         f"G4 would not have caught a noise witness: its certified upper bound {v.hi!r} is "
         f"only {v.hi - lam:.3e} Ha above exact {lam!r}")
+
+
+def _encoding_deviation(enc, H, x):
+    """max |decode_operator(enc) x - H x|, with certkit's own decoder doing the left side."""
+    from certkit.operators import Iv, decode_operator
+    y = decode_operator(enc).apply([Iv.exact(float(v)) for v in x])
+    mid = np.array([(v.lo + v.hi) / 2 for v in y])
+    return float(np.abs(mid - (H @ x).real).max())
+
+
+def test_G6_the_operator_the_checker_reads_is_the_matrix_the_reference_comes_from():
+    """portfolio-cpz: the encoding is a second translation of mh.qubit_hamiltonian, and the
+    checker re-derives everything from it, so a broken encoding is checked against itself.
+
+    Ties every operator.json the checker read (run_case's and solve/'s) to the matrix
+    G3's reference diagonalises, by applying both to one random vector: two different linear
+    operators agree on a random vector with probability zero. Dense cases were pinned by the
+    Temple route only by accident; Gershgorin-only cases (N2) not at all.
+    """
+    x = np.random.default_rng(0).standard_normal
+    for case in EXPECTED:
+        _case(case)
+        mh = build_molecular_hamiltonian(**certkit_bridge.CASES[case])
+        H = mh.qubit_hamiltonian.to_matrix(sparse=True)
+        v = x(H.shape[0])
+        files = sorted((OUT / case).glob("**/operator.json"))
+        assert files, f"{case}: no operator.json written under {OUT / case}"
+        for f in files:
+            dev = _encoding_deviation(json.loads(f.read_text()), H, v)
+            assert dev < 1e-9, f"{case}: {f.relative_to(OUT)} differs from the matrix by {dev:.3e}"
+
+    # Non-vacuity: the mutations G1 catches only on Temple cases are caught here on any case.
+    mh = build_molecular_hamiltonian(**certkit_bridge.CASES["H2"])
+    H = mh.qubit_hamiltonian.to_matrix(sparse=True)
+    v = x(H.shape[0])
+    enc = certkit_bridge.encode_hamiltonian(mh)
+    from certkit.schema import f2h, h2f
+    for name, mutate in {
+        "0.999 coefficient scale": lambda t: dict(t, coeff=f2h(0.999 * h2f(t["coeff"]))),
+        "sign flip": lambda t: dict(t, coeff=f2h(-h2f(t["coeff"]))),
+        "LSB/MSB reversal dropped": lambda t: dict(t, string=t["string"][::-1]),
+    }.items():
+        bad = dict(enc, terms=[mutate(t) for t in enc["terms"]])
+        assert _encoding_deviation(bad, H, v) > 1e-6, f"G6 misses a {name}"
