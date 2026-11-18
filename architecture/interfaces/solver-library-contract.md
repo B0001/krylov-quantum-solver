@@ -34,10 +34,14 @@ class CertifiedResult:
     bracket: Bracket
     certificate: Certificate
 
+@dataclass(frozen=True)
+class Estimate:                # Mode.FAST only; not a float (float(e) raises TypeError)
+    unverified_hartree: float
+
 def certified_energy(molecule, basis: str, cas: tuple[int, int],
-                     mode: Mode = Mode.CERTIFIED) -> CertifiedResult | float: ...
+                     mode: Mode = Mode.CERTIFIED) -> CertifiedResult | Estimate: ...
 def certified_gap(molecule, basis: str, cas: tuple[int, int],
-                  gap_type: str, mode: Mode = Mode.CERTIFIED) -> CertifiedResult | float: ...
+                  gap_type: str, mode: Mode = Mode.CERTIFIED) -> CertifiedResult | Estimate: ...
 def certified_reaction(species: list[tuple[float, "Molecule", tuple[int, int]]],
                        basis: str) -> CertifiedResult: ...
 ```
@@ -54,4 +58,5 @@ def certified_reaction(species: list[tuple[float, "Molecule", tuple[int, int]]],
 2. `bracket.lower <= best_estimate <= bracket.upper`, always.
 3. Same inputs + same `solver_version` → byte-identical result (determinism; basis
    of content-hash caching).
-4. `Mode.FAST` never returns a `Bracket` — the types make blurring impossible (ADR-0004).
+4. `Mode.FAST` never returns a `Bracket` or a bare float, only an `Estimate` — the types make
+   blurring impossible (ADR-0004).

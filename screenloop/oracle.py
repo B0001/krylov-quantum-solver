@@ -102,9 +102,9 @@ class CertchemEnergyOracle:
         from certchem import Mode, certified_energy
 
         molecule, basis, cas = candidate
-        return float(
-            certified_energy(molecule, basis, cas, Mode.FAST, krylov_dim=self._krylov_dim(precision))
-        )
+        return certified_energy(
+            molecule, basis, cas, Mode.FAST, krylov_dim=self._krylov_dim(precision)
+        ).unverified_hartree
 
     def cost(self, precision: int) -> float:
         return float(self._krylov_dim(precision))

@@ -7,7 +7,7 @@ Encodes specs/tasks/01-certchem-m1.md:
   Task 5 — determinism: same inputs twice -> byte-identical serialized result.
   Task 6 — golden regression: H2, H4, LiH each (a) bracket contains FCI,
            (b) |estimate-FCI| <= tol, (c) floor passes.
-  Task 7 — Mode.FAST returns a bare float, never a CertifiedResult.
+  Task 7 — Mode.FAST returns an Estimate (never a float or a CertifiedResult).
 
 Heavy (imports pyscf/qiskit); runs in the isolated spec process (Makefile test_*_spec glob).
 """
@@ -20,6 +20,7 @@ import certchem.core as core
 from certchem import (
     CapExceededError,
     CertifiedResult,
+    Estimate,
     FloorViolationError,
     Mode,
     certified_energy,
@@ -103,13 +104,18 @@ def test_h2_estimate_respects_variational_floor():
 # --- Task 7: Mode.FAST ------------------------------------------------------------------
 
 
-def test_fast_mode_returns_bare_float():
+def test_fast_mode_returns_an_estimate_that_is_not_a_number():
     mol, cas, _ = GOLDEN["H2"]
     out = certified_energy(mol, "sto-3g", cas, Mode.FAST)
-    assert isinstance(out, float)
-    assert not isinstance(out, CertifiedResult)
+    assert isinstance(out, Estimate)
+    assert not isinstance(out, (float, CertifiedResult))
+    # v12j: the FAST number cannot pass for a certified one -- only read by name.
+    with pytest.raises(TypeError):
+        float(out)
+    with pytest.raises(TypeError):
+        out - 0.0
     # sanity: near FCI, not the double-offset garbage a wrong wiring would give
-    assert abs(out - _fci(mol, cas)) < 1e-3
+    assert abs(out.unverified_hartree - _fci(mol, cas)) < 1e-3
 
 
 # --- Task 4: floor guard chokepoint -----------------------------------------------------
@@ -193,11 +199,11 @@ def test_certified_gap_bracket_wraps_primitive_and_holds_invariant():
     assert b.upper_hartree == pytest.approx(gb.gap_upper, abs=1e-5)
 
 
-def test_certified_gap_fast_returns_positive_float():
+def test_certified_gap_fast_returns_positive_estimate():
     mol = GOLDEN["H4"][0]
     g = certified_gap(mol, "sto-3g", (4, 4), "fundamental", mode=Mode.FAST, krylov_dim=8)
-    assert isinstance(g, float)
-    assert g > 0.0
+    assert isinstance(g, Estimate)
+    assert g.unverified_hartree > 0.0
 
 
 def test_certified_gap_rejects_unknown_gap_type():

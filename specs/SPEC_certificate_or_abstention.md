@@ -60,8 +60,8 @@ one unlisted public energy path, fails the gate.
      only as good as the route, the hardware witness is rebuilt classically, and the checker
      runs out of process but in the producer's own venv.
   7. **Callers outside the package keep their own contracts.** `certchem`'s `Mode.FAST`
-     returns a bare float by design (ADR-0004); it now takes that float from the uncertified
-     door, so the choice is visible at its call site. The 16-qubit comparison tables
+     stays uncertified by design (ADR-0004); it takes its number from the uncertified door
+     and returns it as an `Estimate`, readable only as `unverified_hartree` (portfolio-v12j). The 16-qubit comparison tables
      (`benchmark_dmrg.py`, `benchmark_nbn.py`, `study_be2.py`) and the noisy sweeps
      (`sweep_hybrid_solver.py`, `run_nbn_stress_test.py`) use the door too. The scripts that
      write a row per run (`run_hybrid_solver.py`, `run_nbn_stress_test.py`,
@@ -170,7 +170,8 @@ run_geometry / run_from_integrals(..., certificate_dir=None, uncertified_estimat
 KrylovStep / SKQDStep        .unverified_energy  .certificate  .energy (gated)
 ExcitedKrylovStep            .unverified_energies  .certificate  .energies (gated)
 PipelineResult               .steps  .unverified_energy  .certificate  .certificates
-                             .computed_energy  .error_vs_reference  .convergence (all gated)
+                             .computed_energy  .error_vs_reference (gated)
+                             .convergence (the steps, each gated on its own verdict)
 ```
 
 `certificate_dir` replaces `certify`. It only says where the certificate files are kept;
@@ -238,7 +239,6 @@ bounds; a result built with no verdict; the pipeline exposing its trace as bare 
 - An uncertified door on `TrotterKrylovSolver`, `HardwareKrylovSolver` and
   `SampleKrylovSolver`. No caller needs one today. A run on real hardware will: its witness
   cannot be rebuilt classically (`SPEC_certkit_return_paths.md` §2, item 5).
-- Changing what `certchem`'s `Mode.FAST` returns (ADR-0004).
 - A faster checker, a checker in its own environment, or a shared inertia certificate.
 
 ## 8. Caveats, risks and what the suite showed

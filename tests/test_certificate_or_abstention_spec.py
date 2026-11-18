@@ -534,3 +534,22 @@ def test_G5_the_detector_rejects_a_bare_energy_and_three_other_mutants(tmp_path,
     # The pipeline does not wait for the detector: it refuses to wrap the bare number.
     with pytest.raises(TypeError, match="certificate-or-abstention"):
         run_geometry(H2, krylov_dim=M, reference="none", track_convergence=False)
+
+
+def test_G3_a_sweep_with_an_abstained_step_still_returns_every_step():
+    # portfolio-dry7: one abstained step must not hide the rest of the sweep. Each step is
+    # gated on its own verdict; only reading the abstained step's energy raises.
+    from hybrid_quantum_solver.certification import not_submitted
+    from hybrid_quantum_solver.pipeline import PipelineResult
+    from hybrid_quantum_solver.quantum_krylov_solver import KrylovStep
+
+    ok = Verdict("v", "temple_inertia", True, "VERIFIED  stub", -2.0, -1.1)
+    steps = [KrylovStep(1, 1, -1.10, not_submitted("stub abstention")),
+             KrylovStep(2, 2, -1.13, ok)]
+    result = PipelineResult(steps=steps, hf_energy=-1.1, reference_energy=None,
+                            n_qubits=4, dt=0.1, shots=None)
+    conv = result.convergence
+    assert [(s.dim, s.rank, s.certificate.ok) for s in conv] == [(1, 1, False), (2, 2, True)]
+    assert conv[1].energy == -1.13
+    with pytest.raises(EnergyAbstained):
+        conv[0].energy

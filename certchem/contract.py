@@ -9,8 +9,9 @@ Invariants the types enforce (architecture ADR-0001/0004):
     never construct one otherwise (enforced by the pipeline, not this module).
   * ``bracket.lower_hartree <= best_estimate_hartree <= upper_hartree`` — enforced here at
     construction time, so an out-of-order bracket is impossible to hold.
-  * ``Mode.FAST`` never yields a ``Bracket`` — the return type union makes blurring a
-    point estimate and a certified result a type error.
+  * ``Mode.FAST`` never yields a ``Bracket`` or a bare float, only an ``Estimate``, whose
+    number is reachable solely as ``unverified_hartree`` — the return type union makes
+    blurring a point estimate and a certified result a type error.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from typing import Any
 
 
 class Mode(Enum):
-    """Estimation mode. ``FAST`` returns a bare float; ``CERTIFIED`` a floor-checked bracket."""
+    """Estimation mode. ``FAST`` returns an ``Estimate``; ``CERTIFIED`` a floor-checked bracket."""
 
     FAST = "fast"
     CERTIFIED = "certified"
@@ -69,6 +70,17 @@ class CertifiedResult:
 
     bracket: Bracket
     certificate: Certificate
+
+
+@dataclass(frozen=True)
+class Estimate:
+    """``Mode.FAST``'s result: a point estimate with NO guarantee (ADR-0004).
+
+    Deliberately not a float: ``float(e)`` and arithmetic raise ``TypeError``, so a FAST number
+    cannot pass for a certified one by accident. Read it by name, as ``unverified_hartree``.
+    """
+
+    unverified_hartree: float
 
 
 class FloorViolationError(Exception):

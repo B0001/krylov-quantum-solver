@@ -18,6 +18,10 @@ answer ends trust in the whole service.
 - The guarantee is always stated relative to the requested (active space, basis) —
   never the exact non-relativistic limit. This sentence appears verbatim in API docs.
 - Bounds are never tightened heuristically. Wide-but-true beats tight-but-hopeful.
+- In the Python API, `Mode.FAST` returns an `Estimate`, not a bare float: its number is
+  reachable only as `unverified_hartree`, and `float(e)` raises `TypeError`. FAST stays
+  uncertified for speed; the type keeps it from passing for a certified energy
+  (amended 2026-11-17, portfolio-v12j).
 
 ## Consequences
 - (+) The certificate is auditable and reproducible; disputes are resolvable from

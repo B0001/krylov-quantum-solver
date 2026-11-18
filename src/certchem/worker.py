@@ -113,10 +113,10 @@ def process_job(job_id: str):
                 }
             }
         else:
-            # Mode.FAST returns a bare float
+            # Mode.FAST returns an Estimate: a number with no guarantee
             serialized_result = {
                 "provenance": provenance,
-                "best_estimate_hartree": float(result),
+                "best_estimate_hartree": result.unverified_hartree,
                 "certificate": {
                     "method": "fast_point_estimate",
                     "floor_check": "skipped",

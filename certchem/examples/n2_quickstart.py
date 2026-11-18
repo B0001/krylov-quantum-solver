@@ -21,7 +21,7 @@ def main() -> None:
     )
     hf = mh.hf_energy
 
-    fast = certified_energy(N2, BASIS, CAS, Mode.FAST)
+    fast = certified_energy(N2, BASIS, CAS, Mode.FAST).unverified_hartree
     result = certified_energy(N2, BASIS, CAS)  # Mode.CERTIFIED
     b = result.bracket
 
