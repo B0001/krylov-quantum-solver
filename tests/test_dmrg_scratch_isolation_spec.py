@@ -62,6 +62,17 @@ def test_G2_explicit_scratch_is_passed_through_and_never_cleaned_up():
         shutil.rmtree(explicit, ignore_errors=True)
 
 
+def test_G2b_explicit_nested_scratch_is_created_with_missing_parents(tmp_path):
+    """chem-qqu: block2 only creates the leaf scratch directory, so an explicit nested path whose
+    parent does not exist yet (``./.dmrg_tmp/g8_free`` in a fresh checkout) made the first MPS save
+    fail. ``_scratch_dir`` must create the whole path before handing it to the driver."""
+    nested = str(tmp_path / "missing_parent" / "leaf")
+    with _scratch_dir(nested) as d:
+        assert d == nested
+        assert os.path.isdir(d)
+    assert os.path.isdir(nested), "explicit scratch must survive the call"
+
+
 _CHILD_TEMPLATE = """
 import contextlib
 import sys
