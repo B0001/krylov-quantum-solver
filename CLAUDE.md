@@ -76,6 +76,10 @@ New capabilities are added through the loop in `specs/README.md`, not ad hoc:
 Conventions: specs are `specs/SPEC_<slug>.md`, gate tests are `tests/test_<slug>_spec.py`. Every
 result is checked against a reference; no reference → not yet a spec.
 
+**`architecture/` is frozen** (portfolio-erq): add no new ADRs, C4 views, interface or
+deployment docs until a second consumer of the package needs them. Amending an existing ADR or
+interface doc when a change alters what it states is still required.
+
 ## Architecture
 
 ### `hybrid_quantum_solver/` — the package (validated live path)
